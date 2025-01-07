@@ -1,0 +1,3 @@
+[submodule "scripts/py4dbupload"]
+	path = scripts/py4dbupload
+	url = https://gitlab.cern.ch/cms-ph2-database/py4dbupload
