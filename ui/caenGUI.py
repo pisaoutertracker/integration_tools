@@ -2,7 +2,7 @@
 #create QT GUI with one button to send message to TCP server
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QTextEdit, QHBoxLayout, QFrame, QLabel
-from PyQt5.QtCore import pyqtSlot, QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import pyqtSlot, QTimer, QThread, pyqtSignal, QObject
 import socket
 import json
 BUFFER_SIZE = 100000
@@ -98,67 +98,40 @@ class tcp_util():
 
 from argparse import Namespace
 
-class caenGUI(QWidget):
-    def __init__(self):
+class CAENControl(QObject):
+    """CAEN control logic without UI elements"""
+    def __init__(self, ui):
         super().__init__()
-        self.initUI()
+        self.ui = ui
+        self.channels = ["BLV12", "HV012"]
+        self.led = {
+            'BLV12': self.ui.lvLed,
+            'HV012': self.ui.hvLed
+        }
+        self.label = {
+            'BLV12': self.ui.lvLabel,
+            'HV012': self.ui.hvLabel
+        }
         
         # Create query thread
         self.queryThread = CAENQueryThread()
         self.queryThread.dataReady.connect(self.handle_query_response)
         self.queryThread.error.connect(self.handle_query_error)
 
+        # Connect buttons
+        self.ui.lvOnButton.clicked.connect(lambda: self.on('BLV12'))
+        self.ui.lvOffButton.clicked.connect(lambda: self.off('BLV12'))
+        self.ui.hvOnButton.clicked.connect(lambda: self.on('HV012'))
+        self.ui.hvOffButton.clicked.connect(lambda: self.off('HV012'))
+
+        # Create timer for periodic update
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update)
+        self.timer.start(2000)
+
     def __del__(self):
         """Cleanup when widget is destroyed"""
         self.queryThread.stop()
-
-    def initUI(self):
-        self.setWindowTitle('CAEN GUI')
-#        self.setGeometry(100, 100, 300, 400)
-
-        self.layout = QHBoxLayout()
-        self.setLayout(self.layout)
-#        self.channels = ['HV011','CR01','CR02','CR03','CR04']+["BLV%02d"%x for x in range(1,11)] + ['INT%02d'%x for x in range(1,5)]
-#       self.channels = ['CR01','CR02','CR03','CR04','BLV07','BLV08','BLV09','BLV10']
-        self.channels=["BLV12","HV012"]
-#        for s in [8,9,10,11]:
-#            self.channels +=['LV%d_%d'%(s,x) for x in range(8)]
-
-        self.led={}
-        self.label={}
-        #add buttons for On and Off, a status led and a voltage value for each channel in a new horizontal layour
-        #object then add the horizontal layout to the main vertical layout
-        for i,channel in enumerate(self.channels):
-            if i%12 ==0 :
-                vlayout=QVBoxLayout()
-                self.layout.addLayout(vlayout)
-            hlayout=QHBoxLayout()
-            vlayout.addLayout(hlayout)
-            self.button = QPushButton('Channel '+channel+' ON', self)
-            self.button.clicked.connect(lambda checked,channel=channel: self.on(channel))
-            hlayout.addWidget(self.button)
-            self.button = QPushButton('Channel '+channel+' OFF', self)
-            self.button.clicked.connect(lambda checked,channel=channel: self.off(channel))
-            hlayout.addWidget(self.button)
-            #use QFrame as a led
-            self.led[channel] = QFrame(self)
-            self.led[channel].setFrameShape(QFrame.Box)
-            self.led[channel].setFixedSize(30,30)
-
-            self.led[channel].setStyleSheet("background-color: red")
-
-            hlayout.addWidget(self.led[channel])
-            self.label[channel] = QLabel('0.0')
-            hlayout.addWidget(self.label[channel])
-
-
-
-        #create timer for periodic update of the GUI with info from caen
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update)
-        self.timer.start(2000)
-        
-        self.show()
 
     @pyqtSlot()
     def update(self):

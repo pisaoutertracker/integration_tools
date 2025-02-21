@@ -15,7 +15,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import paho.mqtt.client as mqtt
 import struct
 import numpy as np
-from caenGUI import caenGUI
+from caenGUI import CAENControl
 
 #MQTT_SERVER = "192.168.0.45"
 MQTT_SERVER = "test.mosquitto.org"
@@ -35,8 +35,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Setup thermal camera plotting
         self.setup_thermal_plot()
         
-        # Setup CAEN GUI
-        self.setup_caen_gui()
+        # Setup CAEN control
+        self.caen = CAENControl(self)
         
         # Setup MQTT client
         self.setup_mqtt()
@@ -65,11 +65,6 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.canvas = FigureCanvas(self.fig)
         layout = QVBoxLayout(self.plotWidget)
         layout.addWidget(self.canvas)
-
-    def setup_caen_gui(self):
-        self.caen = caenGUI()
-        layout = QVBoxLayout(self.caenWidget)
-        layout.addWidget(self.caen)
 
     def setup_mqtt(self):
         self.client = mqtt.Client()

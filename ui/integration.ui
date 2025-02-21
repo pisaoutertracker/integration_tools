@@ -357,6 +357,94 @@
               <height>100</height>
              </size>
             </property>
+            <layout class="QHBoxLayout" name="caenLayout">
+             <item>
+              <layout class="QVBoxLayout" name="caenChannelLayout">
+               <item>
+                <layout class="QHBoxLayout" name="channelLayout">
+                 <item>
+                  <widget class="QPushButton" name="lvOnButton">
+                   <property name="text">
+                    <string>LV ON</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="lvOffButton">
+                   <property name="text">
+                    <string>LV OFF</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QFrame" name="lvLed">
+                   <property name="minimumSize">
+                    <size>
+                     <width>30</width>
+                     <height>30</height>
+                    </size>
+                   </property>
+                   <property name="frameShape">
+                    <enum>QFrame::Box</enum>
+                   </property>
+                   <property name="styleSheet">
+                    <string>background-color: red;</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="lvLabel">
+                   <property name="text">
+                    <string>0.0</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="channelLayout2">
+                 <item>
+                  <widget class="QPushButton" name="hvOnButton">
+                   <property name="text">
+                    <string>HV ON</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="hvOffButton">
+                   <property name="text">
+                    <string>HV OFF</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QFrame" name="hvLed">
+                   <property name="minimumSize">
+                    <size>
+                     <width>30</width>
+                     <height>30</height>
+                    </size>
+                   </property>
+                   <property name="frameShape">
+                    <enum>QFrame::Box</enum>
+                   </property>
+                   <property name="styleSheet">
+                    <string>background-color: red;</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="hvLabel">
+                   <property name="text">
+                    <string>0.0</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </item>
+            </layout>
            </widget>
           </item>
           <item>
