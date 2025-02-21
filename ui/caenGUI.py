@@ -2,11 +2,57 @@
 #create QT GUI with one button to send message to TCP server
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QTextEdit, QHBoxLayout, QFrame, QLabel
-from PyQt5.QtCore import pyqtSlot
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import pyqtSlot, QTimer, QThread, pyqtSignal
 import socket
 import json
 BUFFER_SIZE = 100000
+
+class CAENQueryThread(QThread):
+    """Thread class for handling CAEN queries"""
+    dataReady = pyqtSignal(dict)  # Signal to emit when data is received
+    error = pyqtSignal(str)  # Signal to emit when error occurs
+
+    def __init__(self, ip='192.168.0.45', port=7000):
+        super().__init__()
+        self.ip = ip
+        self.port = port
+        self.message = None
+        self.receive = False
+        self.running = True
+
+    def setup_query(self, message, receive=False):
+        """Setup the query to be executed"""
+        self.message = message
+        self.receive = receive
+        
+    def stop(self):
+        """Stop the thread"""
+        self.running = False
+        self.wait()
+
+    def run(self):
+        """Thread's main method"""
+        if not self.message:
+            return
+
+        try:
+            tcpClass = tcp_util(ip=self.ip, port=self.port)
+            tcpClass.sendMessage(self.message)
+            
+            if self.receive:
+                data = tcpClass.socket.recv(BUFFER_SIZE)[8:].decode("utf-8")
+                parsedData = {}
+                for token in data.split(','):
+                    if token.startswith('caen'):
+                        key, value = token.split(":")
+                        value = float(value)
+                        parsedData[key] = value
+                self.dataReady.emit(parsedData)
+            
+            tcpClass.closeSocket()
+            
+        except Exception as e:
+            self.error.emit(str(e))
 
 class tcp_util():
     """Utility class for tcp
@@ -56,6 +102,15 @@ class caenGUI(QWidget):
     def __init__(self):
         super().__init__()
         self.initUI()
+        
+        # Create query thread
+        self.queryThread = CAENQueryThread()
+        self.queryThread.dataReady.connect(self.handle_query_response)
+        self.queryThread.error.connect(self.handle_query_error)
+
+    def __del__(self):
+        """Cleanup when widget is destroyed"""
+        self.queryThread.stop()
 
     def initUI(self):
         self.setWindowTitle('CAEN GUI')
@@ -107,45 +162,40 @@ class caenGUI(QWidget):
 
     @pyqtSlot()
     def update(self):
-      try:
-        ret=self.send('GetStatus,PowerSupplyId:caen',True)
-        for channel in self.channels:
-            #self.led[channel].setOn(ret['caen_'+channel+'_IsOn']>0.5)
-            if ret['caen_'+channel+'_IsOn']>0.5:
-                self.led[channel].setStyleSheet("background-color: green")
-            else:
-                self.led[channel].setStyleSheet("background-color: red")
-#            self.label[channel].setText(str(ret['caen_'+channel+'_Voltage']))
-            #set label to Voltage, Current, Power
-#            self.label[channel].setText('V: '+str(ret['caen_'+channel+'_Voltage'])+' C: '+str(ret['caen_'+channel+'_Current']))
-            self.label[channel].setText(f'V: {ret["caen_"+channel+"_Voltage"]:6.2f}V C: {ret["caen_"+channel+"_Current"]:6.2f}A P: {ret["caen_"+channel+"_Voltage"]*ret["caen_"+channel+"_Current"]:6.2f}W')   
-      except:
-          print("Cannot parse")
-    @pyqtSlot()
-    def on(self,channel):
-        self.send('TurnOn,PowerSupplyId:caen,ChannelId:'+channel)
-    @pyqtSlot()
-    def off(self,channel):
-        self.send('TurnOff,PowerSupplyId:caen,ChannelId:'+channel)
+        """Periodic update method"""
+        self.queryThread.setup_query('GetStatus,PowerSupplyId:caen', True)
+        self.queryThread.start()
 
-    def send(self,message,receive=False):
-        print(message)
-        tcpClass = tcp_util(ip='192.168.0.45',port=7000)
-        tcpClass.sendMessage(message)
+    def handle_query_response(self, data):
+        """Handle the response from query thread"""
         try:
-          if receive :
-            data = tcpClass.socket.recv(BUFFER_SIZE)[8:].decode("utf-8")
-            print(data)
-            parsedData={}
-            for token in data.split(',') :
-                if token.startswith('caen'):
-                    key,value=token.split(":")
-                    value=float(value)
-                    parsedData[key]=value
-            print(json.dumps(parsedData,indent=4),flush=True)
-            return parsedData
-        except:
-            print("Cannot parse")
+            for channel in self.channels:
+                if data['caen_'+channel+'_IsOn'] > 0.5:
+                    self.led[channel].setStyleSheet("background-color: green")
+                else:
+                    self.led[channel].setStyleSheet("background-color: red")
+                self.label[channel].setText(
+                    f'V: {data["caen_"+channel+"_Voltage"]:6.2f}V '
+                    f'C: {data["caen_"+channel+"_Current"]:6.2f}A '
+                    f'P: {data["caen_"+channel+"_Voltage"]*data["caen_"+channel+"_Current"]:6.2f}W'
+                )
+        except Exception as e:
+            print(f"Error handling response: {e}")
+
+    def handle_query_error(self, error_msg):
+        """Handle errors from query thread"""
+        print(f"Query error: {error_msg}")
+
+    @pyqtSlot()
+    def on(self, channel):
+        self.queryThread.setup_query(f'TurnOn,PowerSupplyId:caen,ChannelId:{channel}')
+        self.queryThread.start()
+
+    @pyqtSlot()
+    def off(self, channel):
+        self.queryThread.setup_query(f'TurnOff,PowerSupplyId:caen,ChannelId:{channel}')
+        self.queryThread.start()
+
 def main():
     app = QApplication(sys.argv)
     ex = caenGUI()
