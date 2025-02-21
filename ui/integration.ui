@@ -24,10 +24,10 @@
        <attribute name="title">
         <string>Mount and Test</string>
        </attribute>
-       <layout class="QGridLayout" name="gridLayout_7">
+       <layout class="QGridLayout" name="gridLayout_4">
         <item row="0" column="0">
-         <layout class="QGridLayout" name="gridLayout_6">
-          <item row="0" column="0">
+         <layout class="QHBoxLayout" name="horizontalLayout_6">
+          <item>
            <layout class="QVBoxLayout" name="verticalLayout_3">
             <item>
              <layout class="QVBoxLayout" name="verticalLayout">
@@ -54,6 +54,43 @@
                  <widget class="QLineEdit" name="positionLE"/>
                 </item>
                </layout>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_5">
+                <property name="text">
+                 <string>Ring Position</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGraphicsView" name="graphicsView">
+                <property name="minimumSize">
+                 <size>
+                  <width>300</width>
+                  <height>300</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="verticalSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>40</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_7">
+                <property name="text">
+                 <string>DB actions</string>
+                </property>
+               </widget>
               </item>
               <item>
                <layout class="QHBoxLayout" name="horizontalLayout_2">
@@ -179,19 +216,9 @@
               </item>
              </layout>
             </item>
-            <item>
-             <widget class="QGraphicsView" name="graphicsView">
-              <property name="minimumSize">
-               <size>
-                <width>300</width>
-                <height>300</height>
-               </size>
-              </property>
-             </widget>
-            </item>
            </layout>
           </item>
-          <item row="0" column="1">
+          <item>
            <layout class="QVBoxLayout" name="verticalLayout_5">
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_3">
@@ -361,6 +388,26 @@
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_2">
                <item>
+                <spacer name="verticalSpacer_2">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Vertical</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_6">
+                 <property name="text">
+                  <string>CAEN control:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
                 <layout class="QHBoxLayout" name="horizontalLayout_4">
                  <item>
                   <widget class="QPushButton" name="lvOnButton">
@@ -387,6 +434,19 @@
                     <string>LV OFF</string>
                    </property>
                   </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacer_7">
+                   <property name="orientation">
+                    <enum>Qt::Orientation::Horizontal</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>40</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
                  </item>
                  <item>
                   <widget class="QFrame" name="lvLed">
@@ -452,6 +512,19 @@
                     <string>HV OFF</string>
                    </property>
                   </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacer_8">
+                   <property name="orientation">
+                    <enum>Qt::Orientation::Horizontal</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>40</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
                  </item>
                  <item>
                   <widget class="QFrame" name="hvLed">
@@ -696,12 +769,265 @@
        <attribute name="title">
         <string>Settings</string>
        </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_6">
+        <item>
+         <widget class="QLabel" name="placeholdersHelpLabel">
+          <property name="text">
+           <string>Available placeholders:
+{ring_id} - Ring ID
+{position} - Position number
+{module_id} - Module ID
+{fiber} - Selected fiber
+{power} - Selected power source
+
+Placeholders can be used in commands and API endpoints.</string>
+          </property>
+          <property name="textFormat">
+           <enum>Qt::PlainText</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="commandsGroupBox">
+          <property name="title">
+           <string>Test Commands</string>
+          </property>
+          <layout class="QFormLayout" name="formLayout">
+           <item row="0" column="0">
+            <widget class="QLabel" name="checkIDLabel">
+             <property name="text">
+              <string>Check ID Command:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="checkIDCommandLE">
+             <property name="text">
+              <string>check_id.sh --module {module_id} --position {position}</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="lightOnLabel">
+             <property name="text">
+              <string>Light On Test Command:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="lightOnCommandLE">
+             <property name="text">
+              <string>light_on_test.sh --ring {ring_id} --pos {position} --fiber {fiber}</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="darkTestLabel">
+             <property name="text">
+              <string>Dark Test Command:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLineEdit" name="darkTestCommandLE">
+             <property name="text">
+              <string>dark_test.sh --module {module_id} --power {power}</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="apiGroupBox">
+          <property name="title">
+           <string>API Settings</string>
+          </property>
+          <layout class="QFormLayout" name="formLayout_2">
+           <item row="0" column="0">
+            <widget class="QLabel" name="mqttServerLabel">
+             <property name="text">
+              <string>MQTT Server:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="mqttServerLE">
+             <property name="text">
+              <string>test.mosquitto.org</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="mqttTopicLabel">
+             <property name="text">
+              <string>MQTT Topic:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="mqttTopicLE">
+             <property name="text">
+              <string>/ar/thermal/image</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="apiUrlLabel">
+             <property name="text">
+              <string>API Base URL:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLineEdit" name="apiBaseUrlLE">
+             <property name="text">
+              <string>http://localhost:8000/api</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="connectFiberLabel">
+             <property name="text">
+              <string>Connect Fiber Endpoint:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <layout class="QHBoxLayout" name="horizontalLayout_7">
+             <item>
+              <widget class="QComboBox" name="connectFiberMethodCB">
+               <item>
+                <property name="text">
+                 <string>POST</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>GET</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>PUT</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>DELETE</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="connectFiberEndpointLE">
+               <property name="text">
+                <string>connect/fiber/{fiber}</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="connectPowerLabel">
+             <property name="text">
+              <string>Connect Power Endpoint:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <layout class="QHBoxLayout" name="horizontalLayout_8">
+             <item>
+              <widget class="QComboBox" name="connectPowerMethodCB">
+               <item>
+                <property name="text">
+                 <string>POST</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>GET</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>PUT</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>DELETE</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="connectPowerEndpointLE">
+               <property name="text">
+                <string>connect/power/{power}</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_9">
+          <item>
+           <spacer name="horizontalSpacer_9">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="applySettingsPB">
+            <property name="text">
+             <string>Apply Settings</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <spacer name="verticalSpacer_3">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
       </widget>
       <widget class="QWidget" name="tab_4">
        <attribute name="title">
-        <string>Monitoring</string>
+        <string>Commands Output</string>
        </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_4"/>
+       <layout class="QVBoxLayout" name="verticalLayout_4">
+        <item>
+         <widget class="QPlainTextEdit" name="commandOutputTE">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+          <property name="plainText">
+           <string></string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </widget>
      </widget>
     </item>
@@ -711,22 +1037,6 @@
  </widget>
  <resources/>
  <connections>
-  <connection>
-   <sender>ringLE</sender>
-   <signal>returnPressed()</signal>
-   <receiver>MainWindow</receiver>
-   <slot>splitRingAndPosition()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>166</x>
-     <y>55</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>399</x>
-     <y>299</y>
-    </hint>
-   </hints>
-  </connection>
  </connections>
  <slots>
   <signal>updateRing(QString)</signal>
