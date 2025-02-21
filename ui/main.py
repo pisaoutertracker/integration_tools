@@ -1,5 +1,9 @@
 import integration_gui
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLineEdit, QLabel, QFormLayout
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QVBoxLayout, QWidget, 
+    QLineEdit, QLabel, QFormLayout, QTreeWidgetItem,
+    QTreeWidget, QMessageBox
+)
 from PyQt5.QtGui import QPen
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt5.QtWidgets import QGraphicsScene
@@ -36,6 +40,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Initialize log emitter
         self.log_emitter = LogEmitter()
         self.log_emitter.log_message.connect(self.append_log)
+        
+        # Fix text format setting
+        self.placeholdersHelpLabel.setTextFormat(Qt.PlainText)
         
         # Initialize MQTT client to None
         self.client = None
@@ -79,6 +86,29 @@ class MainApp(integration_gui.Ui_MainWindow):
 
         # Initial MQTT setup
         self.setup_mqtt()
+
+        # Connect filter signals
+        self.speedCB.currentTextChanged.connect(self.update_module_list)
+        self.spacerCB.currentTextChanged.connect(self.update_module_list)
+        self.spacerCB_2.currentTextChanged.connect(self.update_module_list)
+        self.spacerCB_3.currentTextChanged.connect(self.update_module_list)
+        
+        # Initial module list load
+        self.update_module_list()
+
+        # Connect select module button
+        self.selectModulePB.clicked.connect(self.select_module)
+        
+        # Enable selection mode for tree widget
+        self.treeWidget.setSelectionMode(QTreeWidget.SingleSelection)
+
+        # Connect selection changes
+        self.moduleLE.textChanged.connect(self.update_connection_status)
+        self.powerCB.currentTextChanged.connect(self.update_connection_status)
+        self.fiberCB.currentTextChanged.connect(self.update_connection_status)
+
+        # Initial connection status check
+        QTimer.singleShot(100, self.update_connection_status)  # Small delay to ensure UI is ready
 
     def setup_thermal_plot(self):
         self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(10, 8))
@@ -136,6 +166,9 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.mqttServerLE.setText(settings.get('mqtt_server', 'test.mosquitto.org'))
                 self.mqttTopicLE.setText(settings.get('mqtt_topic', '/ar/thermal/image'))
                 
+                # Load DB endpoint
+                self.dbEndpointLE.setText(settings.get('db_endpoint', 'http://localhost:5000/modules'))
+                
         except FileNotFoundError:
             # Use defaults if no settings file exists
             self.save_settings()
@@ -153,6 +186,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             'dark_test_command': self.darkTestCommandLE.text(),
             'mqtt_server': self.mqttServerLE.text(),
             'mqtt_topic': self.mqttTopicLE.text(),
+            'db_endpoint': self.dbEndpointLE.text(),  # Add DB endpoint
         }
         
         try:
@@ -365,6 +399,15 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.log_output(f"Error:\n{e.stderr}")
             return False, e.stderr
 
+    def show_error_dialog(self, message):
+        """Show error dialog with the given message"""
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Warning)
+        msg.setText("API Error")
+        msg.setInformativeText(message)
+        msg.setWindowTitle("Error")
+        msg.exec_()
+
     def make_api_request(self, endpoint, method, data=None):
         """Make API request and return result"""
         url = self.expand_placeholders(self.apiBaseUrlLE.text())
@@ -374,7 +417,6 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.log_output(f"Making {method} request to: {url}/{endpoint}")
             
             if data:
-                # Expand placeholders in all data values
                 expanded_data = {
                     k: self.expand_placeholders(str(v)) 
                     for k, v in data.items()
@@ -387,12 +429,19 @@ class MainApp(integration_gui.Ui_MainWindow):
                 json=expanded_data if data else None
             )
                 
-            response.raise_for_status()
+            if response.status_code != 200:
+                error_msg = f"API Error ({response.status_code}): {response.text}"
+                self.log_output(error_msg)
+                self.show_error_dialog(error_msg)
+                return False, None
+
             result = response.json()
             self.log_output(f"Response: {result}")
             return True, result
         except requests.RequestException as e:
-            self.log_output(f"API Error: {str(e)}")
+            error_msg = f"API Error: {str(e)}"
+            self.log_output(error_msg)
+            self.show_error_dialog(error_msg)
             return False, str(e)
 
     def log_output(self, text):
@@ -430,25 +479,79 @@ class MainApp(integration_gui.Ui_MainWindow):
             "background-color: rgb(85, 170, 0);" if success else "background-color: red;")
         self.hvONTestCB.setChecked(success)
 
+    def disconnect_connection(self, cable_id, port):
+        """Disconnect a cable's detSide connections"""
+        try:
+            # Get current connections
+            response = requests.post(
+                f"{self.apiBaseUrlLE.text()}/snapshot",
+                json={"cable": cable_id, "side": "detSide"}
+            )
+            if response.status_code == 200:
+                snapshot = response.json()
+                for line in snapshot:
+                    if snapshot[line]["connections"]:
+                        # Get the connected module
+                        connected_module = snapshot[line]["connections"][-1]["cable"]
+                        # Disconnect it
+                        data = {
+                            "cable2": cable_id,
+                            "cable1": connected_module,
+                            "port2": port ,
+                            "port1": port if port=="power" else "fiber"
+                        }
+                        self.make_api_request(
+                            endpoint="disconnect",
+                            method="POST",
+                            data=data
+                        )
+                        return #only disconnect the first
+        except Exception as e:
+            self.log_output(f"Error disconnecting: {str(e)}")
+
     def connect_power(self):
         self.log_output("=== Connecting Power ===")
+        # First disconnect any existing connections
+        self.disconnect_connection(self.powerCB.currentText(), "power")
+        
+        # Then make the new connection
+        data = {
+            "cable1": self.moduleLE.text(),
+            "cable2": self.powerCB.currentText(),
+            "port1": "power",
+            "port2": "power"
+        }
         success, result = self.make_api_request(
             endpoint=self.connectPowerEndpointLE.text(),
             method=self.connectPowerMethodCB.currentText(),
-            data={"power": self.powerCB.currentText()}
+            data=data
         )
-        self.connectPowerLED.setStyleSheet(
-            "background-color: rgb(85, 170, 0);" if success else "background-color: red;")
+        
+        # Update connection status and LEDs
+        self.update_connection_status()
+        self.update_connection_leds()
 
     def connect_fiber(self):
         self.log_output("=== Connecting Fiber ===")
+        # First disconnect any existing connections
+        self.disconnect_connection(self.fiberCB.currentText(), "A")
+        
+        # Then make the new connection
+        data = {
+            "cable1": self.moduleLE.text(),
+            "cable2": self.fiberCB.currentText(),
+            "port1": "fiber",
+            "port2": "A"
+        }
         success, result = self.make_api_request(
             endpoint=self.connectFiberEndpointLE.text(),
             method=self.connectFiberMethodCB.currentText(),
-            data={"fiber": self.fiberCB.currentText()}
+            data=data
         )
-        self.connectFiberLED.setStyleSheet(
-            "background-color: rgb(85, 170, 0);" if success else "background-color: red;")
+        
+        # Update connection status and LEDs
+        self.update_connection_status()
+        self.update_connection_leds()
 
     def apply_settings(self):
         """Apply current settings"""
@@ -462,6 +565,222 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.log_output("MQTT settings applied successfully")
         else:
             self.log_output("Failed to apply MQTT settings")
+
+    def update_module_list(self):
+        """Update the module list based on current filters"""
+        try:
+            # Get endpoint from settings
+            endpoint = self.dbEndpointLE.text()
+            
+            # Make request to DB
+            response = requests.get(endpoint)
+            if response.status_code != 200:
+                self.log_output(f"Error fetching modules: {response.status_code}")
+                return
+                
+            modules = response.json()
+            
+            # Apply filters
+            speed_filter = self.speedCB.currentText()
+            spacer_filter = self.spacerCB.currentText()
+            grade_filter = self.spacerCB_2.currentText()
+            status_filter = self.spacerCB_3.currentText()
+            
+            filtered_modules = []
+            for module in modules:
+                if speed_filter != "any" and module.get("speed") != speed_filter:
+                    continue
+                if spacer_filter != "any" and module.get("spacer") != spacer_filter:
+                    continue
+                if grade_filter != "any" and module.get("grade") != grade_filter:
+                    continue
+                if status_filter != "Ready For Mounting" and module.get("status") != status_filter:
+                    continue
+                filtered_modules.append(module)
+            
+            # Clear existing items
+            self.treeWidget.clear()
+            
+            # Add filtered modules
+            for module in filtered_modules:
+                item = QTreeWidgetItem(self.treeWidget)
+                item.setText(0, module.get("moduleName", ""))
+                item.setText(1, module.get("inventorySlot", ""))
+                item.setText(2, module.get("speed", ""))
+                item.setText(3, str(module.get("spacer", "")))
+                item.setText(4, module.get("grade", ""))
+                
+        except Exception as e:
+            self.log_output(f"Error updating module list: {str(e)}")
+
+    def select_module(self):
+        """Handle module selection from inventory"""
+        selected_items = self.treeWidget.selectedItems()
+        if not selected_items:
+            self.log_output("No module selected")
+            return
+        
+        selected_item = selected_items[0]
+        module_id = selected_item.text(0)  # Get module name from first column
+        
+        # Set the module ID in the first tab
+        self.moduleLE.setText(module_id)
+        
+        # Switch to first tab
+        self.tabWidget.setCurrentIndex(0)
+        
+        self.log_output(f"Selected module: {module_id}")
+
+    def update_connection_status(self):
+        """Update the connection status labels showing both connection directions"""
+        try:
+            power_id = self.powerCB.currentText()
+            fiber_id = self.fiberCB.currentText()
+
+            # Get power connections
+            power_status = set()
+            if power_id:
+                det_endpoint, crate_endpoints = self.get_power_endpoints(power_id)
+                if det_endpoint and crate_endpoints:
+                    for crate_endpoint in crate_endpoints:
+                        power_status.add(f"{det_endpoint} <--> {crate_endpoint}")
+
+            # Get fiber connections
+            fiber_status = set()
+            if fiber_id:
+                det_endpoint, crate_endpoint = self.get_fiber_endpoints(fiber_id)
+                if det_endpoint and crate_endpoint:
+                    fiber_status.add(f"{det_endpoint} <--> {crate_endpoint}")
+
+            # Update labels
+            self.powerConnectionLabel.setText("\n".join(power_status) if power_status else "Not connected")
+            self.fiberConnectionLabel.setText("\n".join(fiber_status) if fiber_status else "Not connected")
+
+            # Update LED colors
+            self.update_connection_leds()
+
+        except Exception as e:
+            self.log_output(f"Error updating connection status: {str(e)}")
+            self.powerConnectionLabel.setText("Error checking status")
+            self.fiberConnectionLabel.setText("Error checking status")
+
+    def check_connection_match(self, det_endpoint):
+        """Check if the detected connection matches the selected module"""
+        selected_module = self.moduleLE.text()
+        return selected_module == "" or selected_module == det_endpoint
+
+    def update_connection_leds(self):
+        """Update LED colors based on connection status and matching"""
+        try:
+            power_id = self.powerCB.currentText()
+            fiber_id = self.fiberCB.currentText()
+            
+            # Get power connection status
+            if power_id:
+                det_endpoint, _ = self.get_power_endpoints(power_id)
+                if det_endpoint:
+                    if self.check_connection_match(det_endpoint):
+                        self.connectPowerLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
+                    else:
+                        self.connectPowerLED.setStyleSheet("background-color: rgb(255, 255, 0);")  # Yellow
+                else:
+                    self.connectPowerLED.setStyleSheet("background-color: red;")
+            
+            # Get fiber connection status
+            if fiber_id:
+                det_endpoint, _ = self.get_fiber_endpoints(fiber_id)
+                if det_endpoint:
+                    if self.check_connection_match(det_endpoint):
+                        self.connectFiberLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
+                    else:
+                        self.connectFiberLED.setStyleSheet("background-color: rgb(255, 255, 0);")  # Yellow
+                else:
+                    self.connectFiberLED.setStyleSheet("background-color: red;")
+                
+        except Exception as e:
+            self.log_output(f"Error updating LEDs: {str(e)}")
+
+    def get_fiber_endpoints(self, fiber_id):
+        """Get both detSide and crateSide endpoints for a fiber connection"""
+        try:
+            # Get detSide path
+            det_response = requests.post(
+                f"{self.apiBaseUrlLE.text()}/snapshot",
+                json={"cable": fiber_id, "side": "detSide"}
+            )
+            if det_response.status_code != 200:
+                return None, None
+
+            det_snapshot = det_response.json()
+            det_endpoint = None
+            for line in det_snapshot:
+                if det_snapshot[line]["connections"]:
+                    # Get the last connection in the detSide path
+                    det_endpoint = det_snapshot[line]["connections"][-1]["cable"]
+                    break
+
+            # Get crateSide path from the module
+            if det_endpoint:
+                crate_response = requests.post(
+                    f"{self.apiBaseUrlLE.text()}/snapshot",
+                    json={"cable": det_endpoint, "side": "crateSide"}
+                )
+                if crate_response.status_code == 200:
+                    crate_snapshot = crate_response.json()
+                    # Look at fiber lines (1,2)
+                    for line in ["1", "2"]:
+                        if line in crate_snapshot and crate_snapshot[line]["connections"]:
+                            last_conn = crate_snapshot[line]["connections"][-1]
+                            ports = last_conn['crate_port'] + last_conn['det_port']
+                            port = ports[0] if ports else "?"
+                            return det_endpoint, f"{last_conn['cable']}_{port}"
+
+            return None, None
+        except Exception as e:
+            self.log_output(f"Error getting fiber endpoints: {str(e)}")
+            return None, None
+
+    def get_power_endpoints(self, power_id):
+        """Get both detSide and crateSide endpoints for power connections"""
+        try:
+            # Get detSide path
+            det_response = requests.post(
+                f"{self.apiBaseUrlLE.text()}/snapshot",
+                json={"cable": power_id, "side": "detSide"}
+            )
+            if det_response.status_code != 200:
+                return None, []
+
+            det_snapshot = det_response.json()
+            det_endpoint = None
+            for line in det_snapshot:
+                if det_snapshot[line]["connections"]:
+                    # Get the last connection in the detSide path
+                    det_endpoint = det_snapshot[line]["connections"][-1]["cable"]
+                    break
+
+            # Get crateSide path from the module
+            if det_endpoint:
+                crate_response = requests.post(
+                    f"{self.apiBaseUrlLE.text()}/snapshot",
+                    json={"cable": det_endpoint, "side": "crateSide"}
+                )
+                if crate_response.status_code == 200:
+                    crate_snapshot = crate_response.json()
+                    crate_endpoints = []
+                    # Look at power lines (3,4)
+                    for line in ["3", "4"]:
+                        if line in crate_snapshot and crate_snapshot[line]["connections"]:
+                            last_conn = crate_snapshot[line]["connections"][-1]
+                            ports = last_conn['crate_port'] + last_conn['det_port']
+                            port = ports[0] if ports else "?"
+                            crate_endpoints.append(f"{last_conn['cable']}_{port}")
+                    return det_endpoint, crate_endpoints
+
+            return None, []
+        except Exception as e:
+            self.log_output(f"Error getting power endpoints: {str(e)}")
+            return None, []
 
 def main():
     app = QApplication(sys.argv)

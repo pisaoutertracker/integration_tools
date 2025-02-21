@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>720</width>
-    <height>692</height>
+    <height>705</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -109,9 +109,12 @@
                   <property name="orientation">
                    <enum>Qt::Orientation::Horizontal</enum>
                   </property>
+                  <property name="sizeType">
+                   <enum>QSizePolicy::Policy::Minimum</enum>
+                  </property>
                   <property name="sizeHint" stdset="0">
                    <size>
-                    <width>40</width>
+                    <width>10</width>
                     <height>20</height>
                    </size>
                   </property>
@@ -130,89 +133,102 @@
             </item>
             <item>
              <layout class="QGridLayout" name="gridLayout">
-              <item row="1" column="1">
+              <item row="0" column="1">
                <widget class="QComboBox" name="fiberCB"/>
               </item>
-              <item row="1" column="0">
+              <item row="3" column="0" colspan="2">
+               <widget class="QLabel" name="powerConnectionLabel">
+                <property name="text">
+                 <string>Not connected</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
                <widget class="QPushButton" name="connectFiberPB">
                 <property name="text">
                  <string>Connect Fiber</string>
                 </property>
                </widget>
               </item>
-              <item row="0" column="1">
-               <widget class="QComboBox" name="powerCB"/>
-              </item>
-              <item row="1" column="3">
-               <spacer name="horizontalSpacer_5">
-                <property name="orientation">
-                 <enum>Qt::Orientation::Horizontal</enum>
+              <item row="2" column="3">
+               <widget class="QFrame" name="connectPowerLED">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
                 </property>
-                <property name="sizeHint" stdset="0">
+                <property name="minimumSize">
                  <size>
-                  <width>40</width>
-                  <height>20</height>
+                  <width>30</width>
+                  <height>34</height>
                  </size>
                 </property>
-               </spacer>
+                <property name="styleSheet">
+                 <string notr="true">background-color: rgb(85, 170, 0);</string>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::Shape::StyledPanel</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Shadow::Raised</enum>
+                </property>
+               </widget>
               </item>
-              <item row="0" column="0">
+              <item row="2" column="1">
+               <widget class="QComboBox" name="powerCB"/>
+              </item>
+              <item row="1" column="0" colspan="2">
+               <widget class="QLabel" name="fiberConnectionLabel">
+                <property name="text">
+                 <string>Not connected</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QFrame" name="connectFiberLED">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>30</width>
+                  <height>34</height>
+                 </size>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">background-color: rgb(85, 170, 0);</string>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::Shape::StyledPanel</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Shadow::Raised</enum>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
                <widget class="QPushButton" name="connectPowerPB">
                 <property name="text">
                  <string>Connect Power</string>
                 </property>
                </widget>
               </item>
-              <item row="0" column="3">
-               <spacer name="horizontalSpacer_6">
+              <item row="0" column="2">
+               <spacer name="horizontalSpacer_5">
                 <property name="orientation">
                  <enum>Qt::Orientation::Horizontal</enum>
                 </property>
                 <property name="sizeHint" stdset="0">
                  <size>
-                  <width>40</width>
+                  <width>10</width>
                   <height>20</height>
                  </size>
                 </property>
                </spacer>
-              </item>
-              <item row="1" column="4">
-               <widget class="QFrame" name="connectFiberLED">
-                <property name="minimumSize">
-                 <size>
-                  <width>30</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="styleSheet">
-                 <string notr="true">background-color: rgb(85, 170, 0);</string>
-                </property>
-                <property name="frameShape">
-                 <enum>QFrame::Shape::StyledPanel</enum>
-                </property>
-                <property name="frameShadow">
-                 <enum>QFrame::Shadow::Raised</enum>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="4">
-               <widget class="QFrame" name="connectPowerLED">
-                <property name="minimumSize">
-                 <size>
-                  <width>30</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="styleSheet">
-                 <string notr="true">background-color: rgb(85, 170, 0);</string>
-                </property>
-                <property name="frameShape">
-                 <enum>QFrame::Shape::StyledPanel</enum>
-                </property>
-                <property name="frameShadow">
-                 <enum>QFrame::Shadow::Raised</enum>
-                </property>
-               </widget>
               </item>
              </layout>
             </item>
@@ -251,6 +267,12 @@
               </item>
               <item>
                <widget class="QFrame" name="checkIDLED">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
                 <property name="minimumSize">
                  <size>
                   <width>30</width>
@@ -327,6 +349,12 @@
               </item>
               <item row="1" column="3">
                <widget class="QFrame" name="hvONTestLED">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
                 <property name="minimumSize">
                  <size>
                   <width>30</width>
@@ -353,6 +381,12 @@
               </item>
               <item row="0" column="3">
                <widget class="QFrame" name="hvOFFTestLED">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
                 <property name="minimumSize">
                  <size>
                   <width>30</width>
@@ -395,7 +429,7 @@
                  <property name="sizeHint" stdset="0">
                   <size>
                    <width>20</width>
-                   <height>40</height>
+                   <height>10</height>
                   </size>
                  </property>
                 </spacer>
@@ -460,7 +494,7 @@
                     <string>background-color: red;</string>
                    </property>
                    <property name="frameShape">
-                    <enum>QFrame::Shape::Box</enum>
+                    <enum>QFrame::Shape::StyledPanel</enum>
                    </property>
                   </widget>
                  </item>
@@ -477,7 +511,7 @@
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
-                   <height>20</height>
+                   <height>30</height>
                   </size>
                  </property>
                  <property name="text">
@@ -538,7 +572,7 @@
                     <string>background-color: red;</string>
                    </property>
                    <property name="frameShape">
-                    <enum>QFrame::Shape::Box</enum>
+                    <enum>QFrame::Shape::StyledPanel</enum>
                    </property>
                   </widget>
                  </item>
@@ -555,7 +589,7 @@
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
-                   <height>20</height>
+                   <height>30</height>
                   </size>
                  </property>
                  <property name="text">
@@ -592,178 +626,192 @@
        <attribute name="title">
         <string>Module Inventory</string>
        </attribute>
-       <widget class="QTreeWidget" name="treeWidget">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>170</y>
-          <width>661</width>
-          <height>331</height>
-         </rect>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>661</width>
-          <height>0</height>
-         </size>
-        </property>
-        <column>
-         <property name="text">
-          <string>Name</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Inventory Slot</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Speed</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Spacer</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Grade</string>
-         </property>
-        </column>
+       <layout class="QVBoxLayout" name="verticalLayout_7">
         <item>
-         <property name="text">
-          <string>PS_PG_99999</string>
-         </property>
-         <property name="text">
-          <string>3B_05</string>
-         </property>
-         <property name="text">
-          <string>5G</string>
-         </property>
-         <property name="text">
-          <string>40</string>
-         </property>
-         <property name="text">
-          <string>A++</string>
-         </property>
+         <widget class="QGroupBox" name="groupBox">
+          <property name="title">
+           <string>Filters:</string>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_5">
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_8">
+             <property name="text">
+              <string>Speed:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QComboBox" name="speedCB">
+             <item>
+              <property name="text">
+               <string>any</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>5G</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>10G</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_9">
+             <property name="text">
+              <string>Spacer:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QComboBox" name="spacerCB">
+             <item>
+              <property name="text">
+               <string>any</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>4.0mm</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>2.6mm</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>1.8mm</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="label_10">
+             <property name="text">
+              <string>Grade:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QComboBox" name="spacerCB_2">
+             <item>
+              <property name="text">
+               <string>any</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_11">
+             <property name="text">
+              <string>Status:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QComboBox" name="spacerCB_3">
+             <item>
+              <property name="text">
+               <string>Ready For Mounting</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Mounted</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>To Be Tested</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+          </layout>
+         </widget>
         </item>
-       </widget>
-       <widget class="QGroupBox" name="groupBox">
-        <property name="geometry">
-         <rect>
-          <x>9</x>
-          <y>9</y>
-          <width>215</width>
-          <height>162</height>
-         </rect>
-        </property>
-        <property name="title">
-         <string>Filters:</string>
-        </property>
-        <layout class="QGridLayout" name="gridLayout_5">
-         <item row="0" column="0">
-          <widget class="QLabel" name="label_8">
+        <item>
+         <widget class="QTreeWidget" name="treeWidget">
+          <property name="minimumSize">
+           <size>
+            <width>661</width>
+            <height>0</height>
+           </size>
+          </property>
+          <column>
            <property name="text">
-            <string>Speed:</string>
+            <string>Name</string>
            </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QComboBox" name="speedCB">
-           <item>
-            <property name="text">
-             <string>any</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>5G</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>10G</string>
-            </property>
-           </item>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="label_9">
+          </column>
+          <column>
            <property name="text">
-            <string>Spacer:</string>
+            <string>Inventory Slot</string>
            </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QComboBox" name="spacerCB">
-           <item>
-            <property name="text">
-             <string>any</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>4.0mm</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>2.6mm</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>1.8mm</string>
-            </property>
-           </item>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="label_10">
+          </column>
+          <column>
            <property name="text">
-            <string>Grade:</string>
+            <string>Speed</string>
            </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QComboBox" name="spacerCB_2">
-           <item>
-            <property name="text">
-             <string>any</string>
-            </property>
-           </item>
-          </widget>
-         </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="label_11">
+          </column>
+          <column>
            <property name="text">
-            <string>Status:</string>
+            <string>Spacer</string>
            </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QComboBox" name="spacerCB_3">
-           <item>
-            <property name="text">
-             <string>Ready For Mounting</string>
+          </column>
+          <column>
+           <property name="text">
+            <string>Grade</string>
+           </property>
+          </column>
+          <item>
+           <property name="text">
+            <string>PS_PG_99999</string>
+           </property>
+           <property name="text">
+            <string>3B_05</string>
+           </property>
+           <property name="text">
+            <string>5G</string>
+           </property>
+           <property name="text">
+            <string>40</string>
+           </property>
+           <property name="text">
+            <string>A++</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_10">
+          <item>
+           <spacer name="horizontalSpacer_10">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
             </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>Mounted</string>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
             </property>
-           </item>
-           <item>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="selectModulePB">
             <property name="text">
-             <string>To Be Tested</string>
+             <string>Select Module</string>
             </property>
-           </item>
-          </widget>
-         </item>
-        </layout>
-       </widget>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
       </widget>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
@@ -781,9 +829,6 @@
 {power} - Selected power source
 
 Placeholders can be used in commands and API endpoints.</string>
-          </property>
-          <property name="textFormat">
-           <enum>Qt::PlainText</enum>
           </property>
          </widget>
         </item>
@@ -845,55 +890,69 @@ Placeholders can be used in commands and API endpoints.</string>
           </property>
           <layout class="QFormLayout" name="formLayout_2">
            <item row="0" column="0">
+            <widget class="QLabel" name="dbEndpointLabel">
+             <property name="text">
+              <string>DB Endpoint:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="dbEndpointLE">
+             <property name="text">
+              <string>http://localhost:5000/modules</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
             <widget class="QLabel" name="mqttServerLabel">
              <property name="text">
               <string>MQTT Server:</string>
              </property>
             </widget>
            </item>
-           <item row="0" column="1">
+           <item row="1" column="1">
             <widget class="QLineEdit" name="mqttServerLE">
              <property name="text">
               <string>test.mosquitto.org</string>
              </property>
             </widget>
            </item>
-           <item row="1" column="0">
+           <item row="2" column="0">
             <widget class="QLabel" name="mqttTopicLabel">
              <property name="text">
               <string>MQTT Topic:</string>
              </property>
             </widget>
            </item>
-           <item row="1" column="1">
+           <item row="2" column="1">
             <widget class="QLineEdit" name="mqttTopicLE">
              <property name="text">
               <string>/ar/thermal/image</string>
              </property>
             </widget>
            </item>
-           <item row="2" column="0">
+           <item row="3" column="0">
             <widget class="QLabel" name="apiUrlLabel">
              <property name="text">
               <string>API Base URL:</string>
              </property>
             </widget>
            </item>
-           <item row="2" column="1">
+           <item row="3" column="1">
             <widget class="QLineEdit" name="apiBaseUrlLE">
              <property name="text">
               <string>http://localhost:8000/api</string>
              </property>
             </widget>
            </item>
-           <item row="3" column="0">
+           <item row="4" column="0">
             <widget class="QLabel" name="connectFiberLabel">
              <property name="text">
               <string>Connect Fiber Endpoint:</string>
              </property>
             </widget>
            </item>
-           <item row="3" column="1">
+           <item row="4" column="1">
             <layout class="QHBoxLayout" name="horizontalLayout_7">
              <item>
               <widget class="QComboBox" name="connectFiberMethodCB">
@@ -928,14 +987,14 @@ Placeholders can be used in commands and API endpoints.</string>
              </item>
             </layout>
            </item>
-           <item row="4" column="0">
+           <item row="5" column="0">
             <widget class="QLabel" name="connectPowerLabel">
              <property name="text">
               <string>Connect Power Endpoint:</string>
              </property>
             </widget>
            </item>
-           <item row="4" column="1">
+           <item row="5" column="1">
             <layout class="QHBoxLayout" name="horizontalLayout_8">
              <item>
               <widget class="QComboBox" name="connectPowerMethodCB">
@@ -978,7 +1037,7 @@ Placeholders can be used in commands and API endpoints.</string>
           <item>
            <spacer name="horizontalSpacer_9">
             <property name="orientation">
-             <enum>Qt::Horizontal</enum>
+             <enum>Qt::Orientation::Horizontal</enum>
             </property>
             <property name="sizeHint" stdset="0">
              <size>
@@ -1000,7 +1059,7 @@ Placeholders can be used in commands and API endpoints.</string>
         <item>
          <spacer name="verticalSpacer_3">
           <property name="orientation">
-           <enum>Qt::Vertical</enum>
+           <enum>Qt::Orientation::Vertical</enum>
           </property>
           <property name="sizeHint" stdset="0">
            <size>
@@ -1023,7 +1082,7 @@ Placeholders can be used in commands and API endpoints.</string>
            <bool>true</bool>
           </property>
           <property name="plainText">
-           <string></string>
+           <string/>
           </property>
          </widget>
         </item>
@@ -1036,8 +1095,7 @@ Placeholders can be used in commands and API endpoints.</string>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources/>
- <connections>
- </connections>
+ <connections/>
  <slots>
   <signal>updateRing(QString)</signal>
   <signal>updatePosition(QString)</signal>

@@ -1,10 +1,11 @@
-api_base_url: http://localhost:8000/api
+api_base_url: http://localhost:5000
 check_id_command: check_id.sh --module {module_id} --position {position}
 dark_test_command: dark_test.sh --module {module_id} --power {power}
-fiber_endpoint: connect/fiber/{fiber}
+db_endpoint: http://localhost:5000/modules
+fiber_endpoint: connect
 fiber_method: POST
 light_on_command: light_on_test.sh --ring {ring_id} --pos {position} --fiber {fiber}
 mqtt_server: test.mosquitto.org
 mqtt_topic: /ar/thermal/image
-power_endpoint: connect/power/{power}
+power_endpoint: connect
 power_method: POST
