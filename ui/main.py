@@ -56,6 +56,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         powers=["BINT1"]
         self.fiberCB.addItems(fibers)
         self.powerCB.addItems(powers)
+        self.number_of_modules=18
         self.draw_ring()
         
         # Setup thermal camera plotting
@@ -289,12 +290,22 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def split_ring_and_position(self):
         ring_position = self.ringLE.text()
-        ring, position = ring_position.split(';')
+        ring=ring_position
+        position="0"
+        if ';' in ring_position:
+            ring, position = ring_position.split(';')
         self.ringLE.setText(ring)
         self.positionLE.setText(position)
+        if ring[:2] == "L1":
+            self.number_of_modules=18
+        if ring[:2] == "L2":
+            self.number_of_modules=26
+        if ring[:2] == "L3":
+            self.number_of_modules=36
+        self.draw_ring()
     
     def draw_ring(self):
-        number_of_modules=18
+        
         #draw a ring with number_of_modules modules, each is draw as a rectangle
         # even and odd modules are drawn at different radii
         # draw in graphics view
@@ -307,7 +318,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         pen.setStyle(Qt.DashLine)
         radius=min(self.graphicsView.width(),self.graphicsView.height())/2.5
         scene.addEllipse(0, 0, radius*2, radius*2, pen)
-        deltaphi=360/number_of_modules*2
+        deltaphi=360/self.number_of_modules*2
         #solid
         pen.setStyle(Qt.SolidLine)
         #draw two circles in the middle-top
@@ -316,16 +327,16 @@ class MainApp(integration_gui.Ui_MainWindow):
         scene.addEllipse(radius-4, -17, 1, 1, pen)
         scene.addEllipse(radius+10, -17, 1, 1, pen)
 
-        for i in range(1,number_of_modules+1):
+        for i in range(1,self.number_of_modules+1):
             phi=-(i)*deltaphi+deltaphi/2
             phi-=90
-            if i> number_of_modules/2:
+            if i> self.number_of_modules/2:
                 phi+=deltaphi/2
             if self.positionLE.text()==str(i):
                 pen.setColor(Qt.red)
             else:
                 pen.setColor(Qt.black)
-            if i<= number_of_modules/2:
+            if i<= self.number_of_modules/2:
                 x1=(radius*0.95)*cos((phi+deltaphi/4)/180*pi)+radius
                 y1=(radius*0.95)*sin((phi+deltaphi/4)/180*pi)+radius
                 x2=(radius*0.95)*cos((phi-deltaphi/4)/180*pi)+radius
@@ -613,7 +624,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                     module_speed="5G"
                 if "_05-" in module.get("moduleName", ""):
                     module_speed="5G"
-                print(module_speed)
+               # print(module_speed)
                 if module.get("children") is not None:                  
                     if module.get("children").get("PS Read-out Hybrid") is not None:            
                         if module.get("children").get("PS Read-out Hybrid").get("details") is not None:                  
@@ -624,7 +635,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                                 if module_speed=="5Gbps":
                                     module_speed="5G"
                 module["speed"]=module_speed   
-                print("setting speed",module_speed)
+                #print("setting speed",module_speed)
                 
                 if speed_filter != "any" and module_speed != speed_filter:
                     continue
