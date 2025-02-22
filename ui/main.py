@@ -1,3 +1,4 @@
+import threading
 import integration_gui
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget, 
@@ -397,19 +398,20 @@ class MainApp(integration_gui.Ui_MainWindow):
             return text
 
     def run_command(self, command):
-        """Run a shell command and return result"""
-        try:
-            expanded_command = self.expand_placeholders(command)
-            self.log_output(f"Running command: {expanded_command}")
-            self.log_output(f"Using placeholders: {self.get_placeholder_values()}")
-            
-            result = subprocess.run(expanded_command, shell=True, check=True, 
-                                  capture_output=True, text=True)
-            self.log_output(f"Output:\n{result.stdout}")
-            return True, result.stdout
-        except subprocess.CalledProcessError as e:
-            self.log_output(f"Error:\n{e.stderr}")
-            return False, e.stderr
+        """Run a shell command on a separate thread"""
+        def worker():
+            try:
+                expanded_command = self.expand_placeholders(command)
+                self.log_output(f"Running command: {expanded_command}")
+                self.log_output(f"Using placeholders: {self.get_placeholder_values()}")
+                
+                result = subprocess.run(expanded_command, shell=True, check=True, 
+                                          capture_output=True, text=True)
+                self.log_output(f"Output:\n{result.stdout}")
+            except subprocess.CalledProcessError as e:
+                self.log_output(f"Error:\n{e.stderr}")
+        threading.Thread(target=worker, daemon=True).start()
+        return (True, None)
 
     def show_error_dialog(self, message):
         """Show error dialog with the given message"""
@@ -677,7 +679,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             
             # Clear existing items
             self.treeWidget.clear()
-            
+            self.treeWidget.header().resizeSection(0, 200)
             # Add filtered modules
             for module in filtered_modules:
                 item = QTreeWidgetItem(self.treeWidget)
@@ -688,6 +690,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                # item.setText(4,json.dumps(module.get("details", {}), indent=4))
                 item.setText(4, module.get("details", {}).get("ASTATUS", ""))
                 item.setText(5, module.get("details", {}).get("DESCRIPTION", ""))
+                item.setText(6, str(module.get("crateSide", {}).get("1", [])))  
                 
         except Exception as e:
             self.log_output(f"Error updating module list: {str(e)}")
@@ -871,4 +874,5 @@ def main():
 
 if __name__ == '__main__':
     import sys
+
     main()
