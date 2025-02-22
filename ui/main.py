@@ -6,8 +6,8 @@ from PyQt5.QtWidgets import (
     QTreeWidget, QMessageBox, QPushButton, QInputDialog, QHBoxLayout, QSpacerItem, QSizePolicy, QComboBox
 )
 from PyQt5.QtGui import QPen
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
-from PyQt5.QtWidgets import QGraphicsScene
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread, QSize
+from PyQt5.QtWidgets import QGraphicsScene, QGraphicsView
 from math import *
 import requests
 import subprocess
@@ -56,6 +56,30 @@ class MainApp(integration_gui.Ui_MainWindow):
         # First call setupUi to create all UI elements from the .ui file
         self.setupUi(window)    
         
+        # Set stretch factors for the main grid layout to make left side expand more
+        grid_layout = self.tab.layout()
+        grid_layout.setColumnStretch(0, 2)  # Left column gets 2 parts
+        grid_layout.setColumnStretch(1, 1)  # Right column gets 1 part
+        
+        # Set up square aspect ratio for graphics view
+        self.graphicsView.setMinimumSize(300, 300)
+        self.graphicsView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.graphicsView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # Create a custom resize event for the graphics view
+        # def resizeEvent(event):
+        #     # Get the smaller of width or height
+        #     size = min(event.size().width(), event.size().height())
+        #     # Create a square size
+        #     square_size = QSize(size, size)
+        #     # Resize to square
+        #     self.graphicsView.resize(square_size)
+        #     # Call parent resize event
+        #     QGraphicsView.resizeEvent(self.graphicsView, event)
+            
+        # # Attach the custom resize event
+        # self.graphicsView.resizeEvent = resizeEvent
+        
         # Initialize log emitter
         self.log_emitter = LogEmitter()
         self.log_emitter.log_message.connect(self.append_log)
@@ -92,6 +116,11 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.searchBox.textChanged.connect(self.filter_modules)
         self.ringLE.returnPressed.connect(self.split_ring_and_position)
         self.positionLE.returnPressed.connect(self.draw_ring)
+        self.mountPB.clicked.connect(self.mount_module)
+        self.unmountPB.clicked.connect(self.unmount_module)
+        
+        # Initialize mounted modules dict
+        self.mounted_modules = {}
         
         fibers=["SfibA","SfibB"]
         powers=["BINT1"]
@@ -218,6 +247,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Connect signals
         self.layertypeCB.currentTextChanged.connect(self.update_filters_from_layer)
         self.ringLE.textChanged.connect(self.update_layer_from_ring)
+
+        # Connect module ID changes to check mounting status
+        self.moduleLE.textChanged.connect(self.check_module_mounting_status)
 
     def setup_thermal_plot(self):
         self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(10, 8))
@@ -428,13 +460,22 @@ class MainApp(integration_gui.Ui_MainWindow):
         scene.addEllipse(radius-4, -17, 1, 1, pen)
         scene.addEllipse(radius+10, -17, 1, 1, pen)
 
+        ring_id = self.ringLE.text()
+        
         for i in range(1,self.number_of_modules+1):
             phi=-(i)*deltaphi+deltaphi/2
             phi-=90
             if i> self.number_of_modules/2:
                 phi+=deltaphi/2
+                
+            # Check if this position has a mounted module
+            position_key = f"{ring_id};{i}"
+            is_mounted = position_key in self.mounted_modules
+            
             if self.positionLE.text()==str(i):
                 pen.setColor(Qt.red)
+            elif is_mounted:
+                pen.setColor(Qt.blue)  # Use blue for mounted positions
             else:
                 pen.setColor(Qt.black)
             
@@ -468,6 +509,29 @@ class MainApp(integration_gui.Ui_MainWindow):
             scene.addLine(x2, y2, x4, y4, pen)
             scene.addLine(x4, y4, x3, y3, pen)
             scene.addLine(x3, y3, x1, y1, pen)
+            
+            # Add module ID text for mounted modules
+            if is_mounted:
+                text = self.mounted_modules[position_key]
+            else:
+                text= str(i)
+            # Calculate center point of the module
+            center_x = (x1 + x3) / 2
+            center_y = (y1 + y3) / 2
+            
+            # Calculate angle for radial text (in degrees)
+            angle = atan2(center_y - radius, center_x - radius) * 180 / pi
+            # Add 90 degrees to make text perpendicular to radius
+            angle += 180-deltaphi/4
+            
+            text_item = scene.addText(text)
+            # Center the text around its position
+            text_bounds = text_item.boundingRect()
+            text_item.setPos((radius*0.5)*cos(phi/180*pi)+radius - text_bounds.width()/2, 
+                            (radius*0.5)*sin(phi/180*pi)+radius - text_bounds.height()/2)
+            # Set the rotation around the center of the text
+            text_item.setTransformOriginPoint(text_bounds.center())
+            text_item.setRotation(angle)
 
         # Enable mouse tracking
         self.graphicsView.setMouseTracking(True)
@@ -479,9 +543,6 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Convert click coordinates to scene coordinates
         scene_pos = self.graphicsView.mapToScene(event.pos())
         x, y = scene_pos.x(), scene_pos.y()
-        
-        # Debug click location
-        #self.log_output(f"Click at scene coordinates: ({x:.1f}, {y:.1f})")
         
         # Check if click is inside any module
         for module in self.module_coordinates:
@@ -495,19 +556,33 @@ class MainApp(integration_gui.Ui_MainWindow):
             min_y = min(y for _, y in polygon)
             max_y = max(y for _, y in polygon)
             
-            # Debug information
-            #self.log_output(f"Module {module['position']} bounds: x({min_x:.1f}, {max_x:.1f}), y({min_y:.1f}, {max_y:.1f})")
-            
             # First do a bounding box check
             if (min_x <= x <= max_x and min_y <= y <= max_y):
                 # If in bounding box, do detailed polygon check
                 if self.point_in_polygon(x, y, polygon):
-                    self.log_output(f"Found match in module {module['position']}")
-                    self.log_output(f"Module corners: {polygon}")
-                    # Update position LE
-                    self.positionLE.setText(str(module['position']))
-                    # Redraw ring to update highlighting
-                    self.draw_ring()
+                    new_position = str(module['position'])
+                    
+                    # Only proceed if position actually changed
+                    if new_position != self.positionLE.text():
+                        self.log_output(f"Found match in module {new_position}")
+                        
+                        # Update position LE
+                        self.positionLE.setText(new_position)
+                        
+                        # Check if a module is mounted at this position
+                        ring_id = self.ringLE.text()
+                        position_key = f"{ring_id};{new_position}"
+                        
+                        if position_key in self.mounted_modules:
+                            # Update module ID with the mounted module's ID
+                            mounted_module_id = self.mounted_modules[position_key]
+                            self.moduleLE.setText(mounted_module_id)
+                            
+                            # Reset test states since we have a new module
+                            self.reset_test_states()
+                        
+                        # Redraw ring to update highlighting
+                        self.draw_ring()
                     break
 
     def point_in_polygon(self, x, y, polygon):
@@ -597,16 +672,12 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.log_output(f"Making {method} request to: {url}")
             
             if data:
-                expanded_data = {
-                    k: self.expand_placeholders(str(v)) 
-                    for k, v in data.items()
-                }
-                self.log_output(f"With data: {expanded_data}")
+                self.log_output(f"With data: {data}")
             
             response = requests.request(
                 method=method.lower(),
                 url=url,
-                json=expanded_data if data else None
+                json=data if data else None
             )
                 
             if response.status_code != 200:
@@ -808,6 +879,13 @@ class MainApp(integration_gui.Ui_MainWindow):
             # Store full module list
             self.all_modules = modules
             
+            # Update mounted modules dict
+            self.mounted_modules = {
+                m.get("mounted_on", ""): m.get("moduleName", "")
+                for m in modules
+                if m.get("mounted_on")
+            }
+            
             # Apply filters and update display
             self.filter_modules()
             
@@ -837,7 +915,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             for module in self.all_modules:
                 if module is None:
                     continue
-                    
+                #print(module)
                 # Get module speed
                 module_speed = ""
                 if "_5_" in module.get("moduleName", "") or "_05_" in module.get("moduleName", "") or "_5-" in module.get("moduleName", "") or "_05-" in module.get("moduleName", ""):
@@ -875,7 +953,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                     str(module.get("inventorySlot", "")).lower() +
                     str(module.get("speed", "")).lower() +
                     str(module.get("spacer", "")).lower() +
-                    str(module.get("details", {}).get("ASTATUS", "")).lower() +
+                    str(module.get("status", "")).lower() +
                     str(module.get("details", {}).get("DESCRIPTION", "")).lower()
                 )
                 
@@ -888,9 +966,10 @@ class MainApp(integration_gui.Ui_MainWindow):
                 item.setText(1, module.get("inventorySlot", ""))
                 item.setText(2, module.get("speed", ""))
                 item.setText(3, str(module.get("spacer", "")))
-                item.setText(4, module.get("details", {}).get("ASTATUS", ""))
+                item.setText(4, module.get("status",""))
                 item.setText(5, module.get("details", {}).get("DESCRIPTION", ""))
                 item.setText(6, str(module.get("crateSide", {}).get("1", [])))
+                item.setText(7, module.get("mounted_on", ""))
                 
             # Resize columns to content
             for i in range(self.treeWidget.columnCount()):
@@ -908,9 +987,13 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         selected_item = selected_items[0]
         module_id = selected_item.text(0)  # Get module name from first column
+        mounted_on = selected_item.text(7)  # Get mounted_on status
         
         # Set the module ID in the first tab
         self.moduleLE.setText(module_id)
+        
+        # Enable/disable unmount button based on mounted status
+        self.unmountPB.setEnabled(bool(mounted_on))
         
         # Load module details in the background
         try:
@@ -1140,50 +1223,19 @@ class MainApp(integration_gui.Ui_MainWindow):
             if dialog.exec_():
                 item.setText(1, dialog.textValue())
 
-    def save_module_details(self):
-        """Save the modified module details back to the database"""
-        try:
-            # Convert tree widget back to dictionary
-            data = self.tree_to_dict(self.detailsTree.invisibleRootItem())
-            
-            # Make API request to update module
-            print(self.get_api_url(f'modules/{self.current_module_id}'))
-            print(data)
-            #remove _id from data
-            if "_id" in data:
-                del data["_id"]
-            response = requests.put(
-                self.get_api_url(f'modules/{self.current_module_id}'),
-                json=data
-            )
-            
-            if response.status_code == 200:
-                self.log_output("Module details updated successfully")
-            else:
-                self.log_output(f"Error updating module: {response.text}")
-            
-        except Exception as e:
-            self.log_output(f"Error saving module details: {str(e)}")
-
     def tree_to_dict(self, item):
-        """Convert tree widget items back to dictionary"""
+        """Convert tree widget items back to dictionary recursively"""
         result = {}
+        
         for i in range(item.childCount()):
             child = item.child(i)
             key = child.text(0)
             
             if child.childCount() > 0:
-                if key.startswith('['):  # Handle list items
-                    value = []
-                    for j in range(child.childCount()):
-                        list_item = child.child(j)
-                        if list_item.childCount() > 0:
-                            value.append(self.tree_to_dict(list_item))
-                        else:
-                            value.append(list_item.text(1))
-                else:
-                    value = self.tree_to_dict(child)
+                # This is a non-leaf node, recurse
+                value = self.tree_to_dict(child)
             else:
+                # This is a leaf node, get its value
                 value = child.text(1)
                 # Try to convert to appropriate type
                 try:
@@ -1197,11 +1249,66 @@ class MainApp(integration_gui.Ui_MainWindow):
                         value = float(value)
                 except:
                     pass
-                
-            if not key.startswith('['):  # Skip list indices
-                result[key] = value
+            
+            # Handle nested paths using dot notation
+            key_parts = key.split('.')
+            current_dict = result
+            for part in key_parts[:-1]:
+                if part not in current_dict:
+                    current_dict[part] = {}
+                current_dict = current_dict[part]
+            current_dict[key_parts[-1]] = value
                 
         return result
+
+    def merge_dicts(self, dict1, dict2):
+        """Recursively merge two dictionaries"""
+        result = dict1.copy()
+        for key, value in dict2.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self.merge_dicts(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    def save_module_details(self):
+        """Save the modified module details back to the database"""
+        try:
+            # First get current module data to preserve all fields
+            response = requests.get(self.get_api_url(f'modules/{self.current_module_id}'))
+            if response.status_code != 200:
+                self.log_output(f"Error fetching module: {response.text}")
+                return
+                
+            current_data = response.json()
+            
+            # Convert tree widget back to dictionary
+            new_data = self.tree_to_dict(self.detailsTree.invisibleRootItem())
+            print(new_data)
+            print(current_data)
+            # Recursively merge the data
+            merged_data = self.merge_dicts(current_data, new_data)
+            
+            # Remove _id from merged data
+            if "_id" in merged_data:
+                del merged_data["_id"]
+            
+            # Make API request to update module
+            print(merged_data)
+            #return #debug check what it would do
+            response = requests.put(
+                self.get_api_url(f'modules/{self.current_module_id}'),
+                json=merged_data
+            )
+            
+            if response.status_code == 200:
+                self.log_output("Module details updated successfully")
+                self.update_module_list()  # Refresh the module list to show updated data
+            else:
+                self.log_output(f"Error updating module: {response.text}")
+            
+        except Exception as e:
+            self.log_output(f"Error saving module details: {str(e)}")
 
     def view_module_details(self):
         """View details for selected module"""
@@ -1298,6 +1405,153 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Update layer type combo box
         self.layertypeCB.setCurrentText(matching_layer)
+
+    def mount_module(self):
+        """Mount a module at the specified ring position"""
+        module_id = self.moduleLE.text()
+        ring_id = self.ringLE.text()
+        position = self.positionLE.text()
+        
+        if not all([module_id, ring_id, position]):
+            self.show_error_dialog("Please specify module ID, ring ID and position")
+            return
+
+        # Validate position is a number
+        try:
+            position_num = int(position)
+        except ValueError:
+            self.show_error_dialog(f"Invalid position: '{position}' is not a number")
+            return
+
+        # Check if position is valid for the layer
+        max_positions = {
+            "L1": 18,
+            "L2": 26,
+            "L3": 36
+        }
+        layer = next((key for key in max_positions.keys() if ring_id.startswith(key)), None)
+        if not layer:
+            self.show_error_dialog(
+                f"Invalid ring ID format: {ring_id}\n\n"
+                f"Ring ID must start with one of: L1, L2, L3"
+            )
+            return
+            
+        if position_num < 1 or position_num > max_positions[layer]:
+            self.show_error_dialog(
+                f"Invalid position for {layer}\n\n"
+                f"Position {position_num} is out of range.\n"
+                f"Valid positions for {layer} are 1 to {max_positions[layer]}"
+            )
+            return
+
+        # Check if module is already mounted somewhere
+        success, modules = self.make_api_request(
+            endpoint='modules',
+            method='GET'
+        )
+        if not success:
+            self.show_error_dialog("Failed to check module mounting status.\nPlease check your database connection.")
+            return
+
+        for module in modules:
+            # Check if this module is already mounted somewhere
+            if module.get("moduleName") == module_id and module.get("mounted_on"):
+                self.show_error_dialog(
+                    f"Module already mounted\n\n"
+                    f"Module {module_id} is already mounted at position {module.get('mounted_on')}\n"
+                    f"Please unmount it first if you want to move it."
+                )
+                return
+                
+            # Check if there's already a module in the target position
+            if module.get("mounted_on") == f"{ring_id};{position}":
+                self.show_error_dialog(
+                    f"Position already occupied\n\n"
+                    f"Position {ring_id};{position} is already occupied by module {module.get('moduleName')}\n"
+                    f"Please unmount that module first."
+                )
+                return
+
+        # If we get here, all validations passed
+        # First get current module data
+        response = requests.get(self.get_api_url(f'modules/{module_id}'))
+        if response.status_code != 200:
+            self.show_error_dialog(f"Error fetching module data: {response.text}")
+            return
+            
+        module_data = response.json()
+        mounted_on = f"{ring_id};{position}"
+        
+        # Update only the relevant fields while preserving others
+        module_data["mounted_on"] = mounted_on
+        module_data["status"] = "MOUNTED"
+        
+        # Remove _id from mounted_on 
+        if "_id" in module_data:
+            del module_data["_id"]
+            
+        success, result = self.make_api_request(
+            endpoint=f'modules/{module_id}',
+            method='PUT',
+            data=module_data
+        )
+        
+        if success:
+            self.log_output(f"Module {module_id} mounted at {mounted_on}")
+            self.unmountPB.setEnabled(True)
+            self.update_module_list()
+            self.draw_ring()  # Redraw ring to show mounted modules
+        else:
+            self.show_error_dialog(f"Failed to mount module: {result}")
+
+    def unmount_module(self):
+        """Unmount the currently selected module"""
+        module_id = self.moduleLE.text()
+        
+        if not module_id:
+            self.log_output("No module selected")
+            return
+            
+        # First get current module data
+        response = requests.get(self.get_api_url(f'modules/{module_id}'))
+        if response.status_code != 200:
+            self.log_output(f"Error fetching module: {response.text}")
+            return
+            
+        module_data = response.json()
+        
+        # Update only the relevant fields while preserving others
+        module_data["mounted_on"] = ""
+        module_data["status"] = "un-mounted"
+        if "_id" in module_data :
+            del module_data["_id"]
+        
+        success, result = self.make_api_request(
+            endpoint=f'modules/{module_id}',
+            method='PUT',
+            data=module_data
+        )
+        
+        if success:
+            self.log_output(f"Module {module_id} unmounted")
+            self.unmountPB.setEnabled(False)
+            self.update_module_list()
+            self.draw_ring()  # Redraw ring to show mounted modules
+        else:
+            self.log_output(f"Failed to unmount module: {result}")
+
+    def check_module_mounting_status(self):
+        """Check if the current module ID is mounted and update unmount button state"""
+        module_id = self.moduleLE.text()
+        
+        if not module_id:
+            self.unmountPB.setEnabled(False)
+            return
+            
+        # Check if this module ID exists in mounted_modules values
+        is_mounted = any(module_id == mounted_id for mounted_id in self.mounted_modules.values())
+        self.unmountPB.setEnabled(is_mounted)
 
 def main():
     app = QApplication(sys.argv)

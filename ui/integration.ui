@@ -88,8 +88,8 @@
            <widget class="QGraphicsView" name="graphicsView">
             <property name="minimumSize">
              <size>
-              <width>300</width>
-              <height>300</height>
+              <width>500</width>
+              <height>500</height>
              </size>
             </property>
            </widget>
@@ -98,6 +98,9 @@
            <spacer name="verticalSpacer">
             <property name="orientation">
              <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeType">
+             <enum>QSizePolicy::Minimum</enum>
             </property>
             <property name="sizeHint" stdset="0">
              <size>
@@ -143,6 +146,16 @@
              <widget class="QPushButton" name="mountPB">
               <property name="text">
                <string>Mount</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="unmountPB">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="text">
+               <string>Un-mount</string>
               </property>
              </widget>
             </item>
@@ -792,6 +805,11 @@
           <column>
            <property name="text">
             <string>Connections</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Mounted_on</string>
            </property>
           </column>
           <item>
