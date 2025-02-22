@@ -3,10 +3,10 @@ import integration_gui
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget, 
     QLineEdit, QLabel, QFormLayout, QTreeWidgetItem,
-    QTreeWidget, QMessageBox
+    QTreeWidget, QMessageBox, QPushButton, QInputDialog, QHBoxLayout, QSpacerItem, QSizePolicy, QComboBox
 )
 from PyQt5.QtGui import QPen
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
 from PyQt5.QtWidgets import QGraphicsScene
 from math import *
 import requests
@@ -34,8 +34,26 @@ class LogEmitter(QObject):
     """Helper class to emit log messages from any thread"""
     log_message = pyqtSignal(str)
 
+# Add new CommandWorker class
+class CommandWorker(QThread):
+    finished = pyqtSignal(bool, str, str)  # success, stdout, stderr
+    
+    def __init__(self, command):
+        super().__init__()
+        self.command = command
+        
+    def run(self):
+        try:
+            expanded_command = self.command
+            result = subprocess.run(expanded_command, shell=True, 
+                                  capture_output=True, text=True)
+            self.finished.emit(result.returncode == 0, result.stdout, result.stderr)
+        except Exception as e:
+            self.finished.emit(False, "", str(e))
+
 class MainApp(integration_gui.Ui_MainWindow):
     def __init__(self, window):
+        # First call setupUi to create all UI elements from the .ui file
         self.setupUi(window)    
         
         # Initialize log emitter
@@ -51,10 +69,63 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Load settings before setting up connections
         self.load_settings()
         
+        # Store the full module list for filtering - initialize before using
+        self.all_modules = []
+        
+        # Add search box - move this before connecting signals
+        searchLayout = QHBoxLayout()
+        searchLabel = QLabel("Search:")
+        self.searchBox = QLineEdit()
+        self.searchBox.setPlaceholderText("Search modules...")
+        searchLayout.addWidget(searchLabel)
+        searchLayout.addWidget(self.searchBox)
+        searchLayout.addStretch()
+        
+        # Insert search layout before the tree widget
+        layout = self.tab_2.layout()
+        layout.insertLayout(1, searchLayout)
+        
+        # Enable sorting
+        self.treeWidget.setSortingEnabled(True)
+        
+        # Now connect signals after UI elements exist
+        self.searchBox.textChanged.connect(self.filter_modules)
         self.ringLE.returnPressed.connect(self.split_ring_and_position)
         self.positionLE.returnPressed.connect(self.draw_ring)
+        
         fibers=["SfibA","SfibB"]
         powers=["BINT1"]
+        self.layers_to_filters = {
+            "L1_47": {
+                "spacer": "2.6mm",
+                "speed": "10G",
+            },
+            "L1_60": {
+                "spacer": "4.0mm",
+                "speed": "10G",
+            },
+            "L1_72": {
+                "spacer": "4.0mm",
+                "speed": "10G",
+            },
+            #40,55,68
+            "L2_40": {
+                "spacer": "2.6mm",
+                "speed": "10G",
+            },
+            "L2_55": {
+                "spacer": "2.6mm",
+                "speed": "10G",
+            },
+            "L2_68": {
+                "spacer": "4.0mm",
+                "speed": "10G",
+            },
+            "L3": {
+                "spacer": "2.6mm",
+                "speed": "5G",
+            },
+        }
         self.fiberCB.addItems(fibers)
         self.powerCB.addItems(powers)
         self.number_of_modules=18
@@ -74,14 +145,12 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.connectFiberPB.clicked.connect(self.connect_fiber)
         
         # Connect settings-related signals
-        self.apiBaseUrlLE.textChanged.connect(self.save_settings)
         self.checkIDCommandLE.textChanged.connect(self.save_settings)
         self.lightOnCommandLE.textChanged.connect(self.save_settings)
         self.darkTestCommandLE.textChanged.connect(self.save_settings)
-        self.connectFiberEndpointLE.textChanged.connect(self.save_settings)
-        self.connectPowerEndpointLE.textChanged.connect(self.save_settings)
-        self.connectFiberMethodCB.currentTextChanged.connect(self.save_settings)
-        self.connectPowerMethodCB.currentTextChanged.connect(self.save_settings)
+        self.dbEndpointLE.textChanged.connect(self.save_settings)
+        self.mqttServerLE.textChanged.connect(self.save_settings)
+        self.mqttTopicLE.textChanged.connect(self.save_settings)
         
         # Connect Apply button
         self.applySettingsPB.clicked.connect(self.apply_settings)
@@ -109,8 +178,46 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.powerCB.currentTextChanged.connect(self.update_connection_status)
         self.fiberCB.currentTextChanged.connect(self.update_connection_status)
         self.fiber_endpoint=""
+        
         # Initial connection status check
         QTimer.singleShot(100, self.update_connection_status)  # Small delay to ensure UI is ready
+
+        # Connect module details buttons
+        self.editDetailsButton.clicked.connect(self.edit_selected_detail)
+        self.saveDetailsButton.clicked.connect(self.save_module_details)
+        
+        # Setup inventory buttons
+        self.setup_inventory_buttons()
+        
+        # Initialize current module tracking
+        self.current_module_id = None
+
+        # Initialize test states
+        self.checkIDLED.setStyleSheet("background-color: rgb(255, 255, 0);")  # Yellow
+        self.hvOFFTestLED.setStyleSheet("background-color: rgb(255, 255, 0);")
+        self.hvONTestLED.setStyleSheet("background-color: rgb(255, 255, 0);")
+        
+        # Disable tests 2 and 3 initially
+        self.hvOFFTestPB.setEnabled(False)
+        self.hvONTestPB.setEnabled(False)
+        
+        # Track command workers
+        self.current_worker = None
+
+        # Connect module ID changes to reset test states
+        self.moduleLE.textChanged.connect(self.reset_test_states)
+        
+        # Connect module selection to reset test states
+        self.selectModulePB.clicked.connect(self.reset_test_states)
+
+        # Populate layer type combo box
+        self.layertypeCB.clear()
+        self.layertypeCB.addItem("any")
+        self.layertypeCB.addItems(sorted(self.layers_to_filters.keys()))
+        
+        # Connect signals
+        self.layertypeCB.currentTextChanged.connect(self.update_filters_from_layer)
+        self.ringLE.textChanged.connect(self.update_layer_from_ring)
 
     def setup_thermal_plot(self):
         self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(10, 8))
@@ -148,47 +255,37 @@ class MainApp(integration_gui.Ui_MainWindow):
                 settings = yaml.safe_load(f)
                 
             if settings:
-                # Load API settings
-                self.apiBaseUrlLE.setText(settings.get('api_base_url', ''))
-                self.connectFiberEndpointLE.setText(settings.get('fiber_endpoint', ''))
-                self.connectPowerEndpointLE.setText(settings.get('power_endpoint', ''))
-                
-                # Load HTTP methods
-                fiber_method = settings.get('fiber_method', 'POST')
-                power_method = settings.get('power_method', 'POST')
-                self.connectFiberMethodCB.setCurrentText(fiber_method)
-                self.connectPowerMethodCB.setCurrentText(power_method)
-                
-                # Load commands
-                self.checkIDCommandLE.setText(settings.get('check_id_command', ''))
-                self.lightOnCommandLE.setText(settings.get('light_on_command', ''))
-                self.darkTestCommandLE.setText(settings.get('dark_test_command', ''))
+                # Load database URL
+                self.dbEndpointLE.setText(settings.get('db_url', 'http://localhost:5000'))
                 
                 # Load MQTT settings
                 self.mqttServerLE.setText(settings.get('mqtt_server', 'test.mosquitto.org'))
                 self.mqttTopicLE.setText(settings.get('mqtt_topic', '/ar/thermal/image'))
                 
-                # Load DB endpoint
-                self.dbEndpointLE.setText(settings.get('db_endpoint', 'http://localhost:5000/modules'))
+                # Load command settings
+                self.checkIDCommandLE.setText(settings.get('check_id_command', ''))
+                self.lightOnCommandLE.setText(settings.get('light_on_command', ''))
+                self.darkTestCommandLE.setText(settings.get('dark_test_command', ''))
                 
         except FileNotFoundError:
             # Use defaults if no settings file exists
             self.save_settings()
 
+    def get_api_url(self, endpoint=''):
+        """Get full API URL with endpoint"""
+        base_url = self.dbEndpointLE.text().rstrip('/')
+        return f"{base_url}/{endpoint.lstrip('/')}" if endpoint else base_url
+
     def save_settings(self):
         """Save settings to YAML file"""
         settings = {
-            'api_base_url': self.apiBaseUrlLE.text(),
-            'fiber_endpoint': self.connectFiberEndpointLE.text(),
-            'power_endpoint': self.connectPowerEndpointLE.text(),
-            'fiber_method': self.connectFiberMethodCB.currentText(),
-            'power_method': self.connectPowerMethodCB.currentText(),
+            'db_url': self.dbEndpointLE.text(),
+            'mqtt_server': self.mqttServerLE.text(),
+            'mqtt_topic': self.mqttTopicLE.text(),
+            # Add command settings
             'check_id_command': self.checkIDCommandLE.text(),
             'light_on_command': self.lightOnCommandLE.text(),
             'dark_test_command': self.darkTestCommandLE.text(),
-            'mqtt_server': self.mqttServerLE.text(),
-            'mqtt_topic': self.mqttTopicLE.text(),
-            'db_endpoint': self.dbEndpointLE.text(),  # Add DB endpoint
         }
         
         try:
@@ -306,12 +403,15 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.draw_ring()
     
     def draw_ring(self):
-        
         #draw a ring with number_of_modules modules, each is draw as a rectangle
         # even and odd modules are drawn at different radii
         # draw in graphics view
         scene = QGraphicsScene()
         self.graphicsView.setScene(scene)
+        
+        # Store module coordinates for click detection
+        self.module_coordinates = []
+        
         pen = QPen()
         pen.setWidth(2)
         pen.setColor(Qt.black)
@@ -337,6 +437,8 @@ class MainApp(integration_gui.Ui_MainWindow):
                 pen.setColor(Qt.red)
             else:
                 pen.setColor(Qt.black)
+            
+            # Calculate module coordinates
             if i<= self.number_of_modules/2:
                 x1=(radius*0.95)*cos((phi+deltaphi/4)/180*pi)+radius
                 y1=(radius*0.95)*sin((phi+deltaphi/4)/180*pi)+radius
@@ -346,12 +448,6 @@ class MainApp(integration_gui.Ui_MainWindow):
                 y3=(radius*1.1)*sin((phi+deltaphi/4)/180*pi)+radius
                 x4=(radius*1.1)*cos((phi-deltaphi/4)/180*pi)+radius
                 y4=(radius*1.1)*sin((phi-deltaphi/4)/180*pi)+radius
-                scene.addLine(x1, y1, x2, y2, pen)
-                scene.addLine(x2, y2, x4, y4, pen)
-                scene.addLine(x4, y4, x3, y3, pen)
-                scene.addLine(x3, y3, x1, y1, pen)  
-                
-                
             else:
                 x1=(radius*0.9)*cos((phi+deltaphi/4)/180*pi)+radius
                 y1=(radius*0.9)*sin((phi+deltaphi/4)/180*pi)+radius
@@ -361,18 +457,78 @@ class MainApp(integration_gui.Ui_MainWindow):
                 y3=(radius*1.05)*sin((phi+deltaphi/4)/180*pi)+radius
                 x4=(radius*1.05)*cos((phi-deltaphi/4)/180*pi)+radius
                 y4=(radius*1.05)*sin((phi-deltaphi/4)/180*pi)+radius
-                scene.addLine(x1, y1, x2, y2, pen)
-                scene.addLine(x2, y2, x4, y4, pen)
-                scene.addLine(x4, y4, x3, y3, pen)
-                scene.addLine(x3, y3, x1, y1, pen)
-        
+            
+            # Store module coordinates and position number
+            self.module_coordinates.append({
+                'position': i,
+                'coords': [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+            })
+            
+            scene.addLine(x1, y1, x2, y2, pen)
+            scene.addLine(x2, y2, x4, y4, pen)
+            scene.addLine(x4, y4, x3, y3, pen)
+            scene.addLine(x3, y3, x1, y1, pen)
 
-
-
-                
-
-
+        # Enable mouse tracking
+        self.graphicsView.setMouseTracking(True)
+        self.graphicsView.mousePressEvent = self.handle_ring_click
         self.graphicsView.show()
+
+    def handle_ring_click(self, event):
+        """Handle clicks on the ring diagram"""
+        # Convert click coordinates to scene coordinates
+        scene_pos = self.graphicsView.mapToScene(event.pos())
+        x, y = scene_pos.x(), scene_pos.y()
+        
+        # Debug click location
+        #self.log_output(f"Click at scene coordinates: ({x:.1f}, {y:.1f})")
+        
+        # Check if click is inside any module
+        for module in self.module_coordinates:
+            coords = module['coords']
+            # Create polygon from module coordinates
+            polygon = [(x_, y_) for x_, y_ in coords]
+            
+            # Calculate bounding box for quick check
+            min_x = min(x for x, _ in polygon)
+            max_x = max(x for x, _ in polygon)
+            min_y = min(y for _, y in polygon)
+            max_y = max(y for _, y in polygon)
+            
+            # Debug information
+            #self.log_output(f"Module {module['position']} bounds: x({min_x:.1f}, {max_x:.1f}), y({min_y:.1f}, {max_y:.1f})")
+            
+            # First do a bounding box check
+            if (min_x <= x <= max_x and min_y <= y <= max_y):
+                # If in bounding box, do detailed polygon check
+                if self.point_in_polygon(x, y, polygon):
+                    self.log_output(f"Found match in module {module['position']}")
+                    self.log_output(f"Module corners: {polygon}")
+                    # Update position LE
+                    self.positionLE.setText(str(module['position']))
+                    # Redraw ring to update highlighting
+                    self.draw_ring()
+                    break
+
+    def point_in_polygon(self, x, y, polygon):
+        """Check if point (x,y) is inside polygon using cross product method"""
+        def sign(p1, p2, p3):
+            return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+        
+        def is_point_in_triangle(pt, v1, v2, v3):
+            d1 = sign(pt, v1, v2)
+            d2 = sign(pt, v2, v3)
+            d3 = sign(pt, v3, v1)
+            
+            has_neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
+            has_pos = (d1 > 0) or (d2 > 0) or (d3 > 0)
+            
+            return not (has_neg and has_pos)
+        
+        # For quadrilateral, split into two triangles and check both
+        point = (x, y)
+        return (is_point_in_triangle(point, polygon[0], polygon[1], polygon[2]) or 
+                is_point_in_triangle(point, polygon[2], polygon[3], polygon[0]))
 
     def get_placeholder_values(self):
         """Get current values for all placeholders"""
@@ -398,20 +554,31 @@ class MainApp(integration_gui.Ui_MainWindow):
             return text
 
     def run_command(self, command):
-        """Run a shell command on a separate thread"""
-        def worker():
-            try:
-                expanded_command = self.expand_placeholders(command)
-                self.log_output(f"Running command: {expanded_command}")
-                self.log_output(f"Using placeholders: {self.get_placeholder_values()}")
-                
-                result = subprocess.run(expanded_command, shell=True, check=True, 
-                                          capture_output=True, text=True)
-                self.log_output(f"Output:\n{result.stdout}")
-            except subprocess.CalledProcessError as e:
-                self.log_output(f"Error:\n{e.stderr}")
-        threading.Thread(target=worker, daemon=True).start()
-        return (True, None)
+        """Run a shell command asynchronously"""
+        if self.current_worker is not None:
+            self.current_worker.finished.disconnect()
+            self.current_worker.terminate()
+            self.current_worker.wait()
+        
+        expanded_command = self.expand_placeholders(command)
+        self.log_output(f"Running command: {expanded_command}")
+        self.log_output(f"Using placeholders: {self.get_placeholder_values()}")
+        
+        self.current_worker = CommandWorker(expanded_command)
+        self.current_worker.finished.connect(self.handle_command_finished)
+        self.current_worker.start()
+
+    def handle_command_finished(self, success, stdout, stderr):
+        """Handle command completion"""
+        if stdout:
+            self.log_output(f"Output:\n{stdout}")
+        if stderr:
+            self.log_output(f"Error:\n{stderr}")
+        
+        # Clean up worker
+        if self.current_worker:
+            self.current_worker.finished.disconnect()
+            self.current_worker = None
 
     def show_error_dialog(self, message):
         """Show error dialog with the given message"""
@@ -424,11 +591,10 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def make_api_request(self, endpoint, method, data=None):
         """Make API request and return result"""
-        url = self.expand_placeholders(self.apiBaseUrlLE.text())
-        endpoint = self.expand_placeholders(endpoint)
+        url = self.get_api_url(endpoint)
         
         try:
-            self.log_output(f"Making {method} request to: {url}/{endpoint}")
+            self.log_output(f"Making {method} request to: {url}")
             
             if data:
                 expanded_data = {
@@ -439,7 +605,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             
             response = requests.request(
                 method=method.lower(),
-                url=f"{url}/{endpoint}",
+                url=url,
                 json=expanded_data if data else None
             )
                 
@@ -474,31 +640,76 @@ class MainApp(integration_gui.Ui_MainWindow):
         )
 
     def run_check_id(self):
+        """Run Check ID test"""
         self.log_output("=== Running Check ID ===")
-        success, output = self.run_command(self.checkIDCommandLE.text())
-        self.checkIDLED.setStyleSheet(
-            "background-color: rgb(85, 170, 0);" if success else "background-color: red;")
+        
+        def handle_check_id(success, stdout, stderr):
+            if success:
+                self.checkIDLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
+                self.hvOFFTestPB.setEnabled(True)  # Enable test 2
+                
+                # Try to parse module ID from output
+                try:
+                    # Assuming output format contains "Module ID: XXXX"
+                    print(stdout)
+                    module_id = stdout.split("Module ID:")[1].strip().split()[0]
+                    self.checkIDlabel.setText(f"ID: {module_id}")
+                except:
+                    self.log_output("Could not parse module ID from output")
+            else:
+                self.checkIDLED.setStyleSheet("background-color: red;")
+                self.hvOFFTestPB.setEnabled(False)  
+                self.hvONTestPB.setEnabled(False)
+        
+        if self.current_worker:
+            self.current_worker.finished.disconnect()
+        self.current_worker = CommandWorker(self.expand_placeholders(self.checkIDCommandLE.text()))
+        self.current_worker.finished.connect(handle_check_id)
+        self.current_worker.start()
 
     def run_light_on_test(self):
+        """Run Light On Test"""
         self.log_output("=== Running Light On Test ===")
-        success, output = self.run_command(self.lightOnCommandLE.text())
-        self.hvOFFTestLED.setStyleSheet(
-            "background-color: rgb(85, 170, 0);" if success else "background-color: red;")
-        self.hvOFFTestCB.setChecked(success)
+        
+        def handle_light_on(success, stdout, stderr):
+            if success:
+                self.hvOFFTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
+                self.hvOFFTestCB.setChecked(True)
+                self.hvONTestPB.setEnabled(True)  # Enable test 3
+            else:
+                self.hvOFFTestLED.setStyleSheet("background-color: red;")
+                self.hvOFFTestCB.setChecked(False)
+        
+        if self.current_worker:
+            self.current_worker.finished.disconnect()
+        self.current_worker = CommandWorker(self.expand_placeholders(self.lightOnCommandLE.text()))
+        self.current_worker.finished.connect(handle_light_on)
+        self.current_worker.start()
 
     def run_dark_test(self):
+        """Run Dark Test"""
         self.log_output("=== Running Dark Test ===")
-        success, output = self.run_command(self.darkTestCommandLE.text())
-        self.hvONTestLED.setStyleSheet(
-            "background-color: rgb(85, 170, 0);" if success else "background-color: red;")
-        self.hvONTestCB.setChecked(success)
+        
+        def handle_dark_test(success, stdout, stderr):
+            if success:
+                self.hvONTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
+                self.hvONTestCB.setChecked(True)
+            else:
+                self.hvONTestLED.setStyleSheet("background-color: red;")
+                self.hvONTestCB.setChecked(False)
+        
+        if self.current_worker:
+            self.current_worker.finished.disconnect()
+        self.current_worker = CommandWorker(self.expand_placeholders(self.darkTestCommandLE.text()))
+        self.current_worker.finished.connect(handle_dark_test)
+        self.current_worker.start()
 
     def disconnect_connection(self, cable_id, port):
         """Disconnect a cable's detSide connections"""
         try:
             # Get current connections
             response = requests.post(
-                f"{self.apiBaseUrlLE.text()}/snapshot",
+                f"{self.dbEndpointLE.text()}/snapshot",
                 json={"cable": cable_id, "side": "detSide"}
             )
             if response.status_code == 200:
@@ -536,8 +747,8 @@ class MainApp(integration_gui.Ui_MainWindow):
             "port2": "power"
         }
         success, result = self.make_api_request(
-            endpoint=self.connectPowerEndpointLE.text(),
-            method=self.connectPowerMethodCB.currentText(),
+            endpoint='connect',  # Simplified endpoint
+            method='POST',
             data=data
         )
         
@@ -558,8 +769,8 @@ class MainApp(integration_gui.Ui_MainWindow):
             "port2": "A"
         }
         success, result = self.make_api_request(
-            endpoint=self.connectFiberEndpointLE.text(),
-            method=self.connectFiberMethodCB.currentText(),
+            endpoint='connect',  # Simplified endpoint
+            method='POST',
             data=data
         )
         
@@ -584,7 +795,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         """Update the module list based on current filters"""
         try:
             # Get endpoint from settings
-            endpoint = self.dbEndpointLE.text()
+            endpoint = self.dbEndpointLE.text()+"/modules"
             
             # Make request to DB
             response = requests.get(endpoint)
@@ -593,9 +804,20 @@ class MainApp(integration_gui.Ui_MainWindow):
                 return
                 
             modules = response.json()
-            #pretty print with indented json
-            self.log_output(json.dumps(modules, indent=4))
-            # Apply filters
+            
+            # Store full module list
+            self.all_modules = modules
+            
+            # Apply filters and update display
+            self.filter_modules()
+            
+        except Exception as e:
+            self.log_output(f"Error updating module list: {str(e)}")
+
+    def filter_modules(self):
+        """Filter modules based on search text and other filters"""
+        try:
+            search_text = self.searchBox.text().lower()
             speed_filter = self.speedCB.currentText()
             spacer_filter = self.spacerCB.currentText()
             spacer_dict = {
@@ -605,95 +827,77 @@ class MainApp(integration_gui.Ui_MainWindow):
                 "any": "any"
             }
             spacer_filter = spacer_dict[spacer_filter]
-
+            
             grade_filter = self.spacerCB_2.currentText()
             status_filter = self.spacerCB_3.currentText()
-            module_speed=""
-            spacer=""
-            filtered_modules = []
-            for module in modules:
-                if module is None:
-                    continue
-                if "_5_" in module.get("moduleName", ""):
-                    module_speed="5G"
-                if "_10_" in module.get("moduleName", ""):
-                    module_speed="10G"
-                if "_05_" in module.get("moduleName", ""):
-                    module_speed="5G"
-                if "_10-" in module.get("moduleName", ""):
-                    module_speed="10G"
-                if "_5-" in module.get("moduleName", ""):
-                    module_speed="5G"
-                if "_05-" in module.get("moduleName", ""):
-                    module_speed="5G"
-               # print(module_speed)
-                if module.get("children") is not None:                  
-                    if module.get("children").get("PS Read-out Hybrid") is not None:            
-                        if module.get("children").get("PS Read-out Hybrid").get("details") is not None:                  
-                            if module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH") is not None:                  
-                                module_speed=module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH")
-                                if module_speed=="10Gbps":
-                                    module_speed="10G"
-                                if module_speed=="5Gbps":
-                                    module_speed="5G"
-                module["speed"]=module_speed   
-                #print("setting speed",module_speed)
-                
-                if speed_filter != "any" and module_speed != speed_filter:
-                    continue
-                #PS_26_05-IBA_00102
-                fields=module.get("moduleName", "").split("_")
-                if len(fields) > 2:
-                    spacer=fields[1]
-                if spacer_filter != "any" and spacer != spacer_filter:
-                    continue
-                module["spacer"]=spacer
-                # if grade_filter != "any" and module.get("grade") != grade_filter:
-                #     continue
-                # if status_filter != "Ready For Mounting" and module.get("status") != status_filter:
-                #     continue
-
-        # "details": {
-        #     "ID": "585960",
-        #     "RECORD_INSERTION_TIME": "2024-05-21 00:00:00",
-        #     "LOCATION": "IT-Pisa[INFN Pisa]",
-        #     "PART_PARENT_ID": "490740",
-        #     "KIND_OF_PART_ID": "9020",
-        #     "KIND_OF_PART": "PS Module",
-        #     "MANUFACTURER": "INFN Perugia",
-        #     "BARCODE": "PS_16_10_IPG-00005",
-        #     "SERIAL_NUMBER": "PS_16_10_IPG-00005",
-        #     "VERSION": "",
-        #     "NAME_LABEL": "PS_16_10_IPG-00005",
-        #     "PRODUCTION_DATE": "",
-        #     "BATCH_NUMBER": "",
-        #     "DESCRIPTION": "Left Hybrid not responding, sensors currents slightly high",
-        #     "ARING_INDEX": "",
-        #     "APS_SENSOR_SPACING": "",
-        #     "AMODULE_INTEGRATION_STATUS": "",
-        #     "ASTATUS": "Damaged",
-        #     "APOSITION_INDEX": "2"
-
-
-                filtered_modules.append(module)
             
             # Clear existing items
             self.treeWidget.clear()
-            self.treeWidget.header().resizeSection(0, 200)
-            # Add filtered modules
-            for module in filtered_modules:
+            
+            for module in self.all_modules:
+                if module is None:
+                    continue
+                    
+                # Get module speed
+                module_speed = ""
+                if "_5_" in module.get("moduleName", "") or "_05_" in module.get("moduleName", "") or "_5-" in module.get("moduleName", "") or "_05-" in module.get("moduleName", ""):
+                    module_speed = "5G"
+                if "_10_" in module.get("moduleName", "") or "_10-" in module.get("moduleName", ""):
+                    module_speed = "10G"
+                    
+                # Check hybrid details for speed
+                if module.get("children") is not None:
+                    if module.get("children").get("PS Read-out Hybrid") is not None:
+                        if module.get("children").get("PS Read-out Hybrid").get("details") is not None:
+                            if module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH") is not None:
+                                module_speed = module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH")
+                                if module_speed == "10Gbps":
+                                    module_speed = "10G"
+                                if module_speed == "5Gbps":
+                                    module_speed = "5G"
+                
+                module["speed"] = module_speed
+                
+                # Get spacer
+                fields = module.get("moduleName", "").split("_")
+                spacer = fields[1] if len(fields) > 2 else ""
+                module["spacer"] = spacer
+                
+                # Apply filters
+                if speed_filter != "any" and module_speed != speed_filter:
+                    continue
+                if spacer_filter != "any" and spacer != spacer_filter:
+                    continue
+                    
+                # Apply search filter
+                searchable_text = (
+                    str(module.get("moduleName", "")).lower() +
+                    str(module.get("inventorySlot", "")).lower() +
+                    str(module.get("speed", "")).lower() +
+                    str(module.get("spacer", "")).lower() +
+                    str(module.get("details", {}).get("ASTATUS", "")).lower() +
+                    str(module.get("details", {}).get("DESCRIPTION", "")).lower()
+                )
+                
+                if search_text and search_text not in searchable_text:
+                    continue
+                    
+                # Add matching module to tree
                 item = QTreeWidgetItem(self.treeWidget)
                 item.setText(0, module.get("moduleName", ""))
                 item.setText(1, module.get("inventorySlot", ""))
                 item.setText(2, module.get("speed", ""))
                 item.setText(3, str(module.get("spacer", "")))
-               # item.setText(4,json.dumps(module.get("details", {}), indent=4))
                 item.setText(4, module.get("details", {}).get("ASTATUS", ""))
                 item.setText(5, module.get("details", {}).get("DESCRIPTION", ""))
-                item.setText(6, str(module.get("crateSide", {}).get("1", [])))  
+                item.setText(6, str(module.get("crateSide", {}).get("1", [])))
+                
+            # Resize columns to content
+            for i in range(self.treeWidget.columnCount()):
+                self.treeWidget.resizeColumnToContents(i)
                 
         except Exception as e:
-            self.log_output(f"Error updating module list: {str(e)}")
+            self.log_output(f"Error filtering modules: {str(e)}")
 
     def select_module(self):
         """Handle module selection from inventory"""
@@ -707,6 +911,18 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Set the module ID in the first tab
         self.moduleLE.setText(module_id)
+        
+        # Load module details in the background
+        try:
+            response = requests.get(self.get_api_url(f'modules/{module_id}'))
+            if response.status_code == 200:
+                module_data = response.json()
+                self.current_module_id = module_id
+                self.populate_details_tree(module_data)
+            else:
+                self.log_output(f"Error fetching module details: {response.text}")
+        except Exception as e:
+            self.log_output(f"Error loading module details: {str(e)}")
         
         # Switch to first tab
         self.tabWidget.setCurrentIndex(0)
@@ -788,7 +1004,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         try:
             # Get detSide path
             det_response = requests.post(
-                f"{self.apiBaseUrlLE.text()}/snapshot",
+                f"{self.dbEndpointLE.text()}/snapshot",
                 json={"cable": fiber_id, "side": "detSide"}
             )
             if det_response.status_code != 200:
@@ -805,7 +1021,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             # Get crateSide path from the module
             if det_endpoint:
                 crate_response = requests.post(
-                    f"{self.apiBaseUrlLE.text()}/snapshot",
+                    f"{self.dbEndpointLE.text()}/snapshot",
                     json={"cable": det_endpoint, "side": "crateSide"}
                 )
                 if crate_response.status_code == 200:
@@ -828,7 +1044,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         try:
             # Get detSide path
             det_response = requests.post(
-                f"{self.apiBaseUrlLE.text()}/snapshot",
+                self.get_api_url('snapshot'),
                 json={"cable": power_id, "side": "detSide"}
             )
             if det_response.status_code != 200:
@@ -845,7 +1061,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             # Get crateSide path from the module
             if det_endpoint:
                 crate_response = requests.post(
-                    f"{self.apiBaseUrlLE.text()}/snapshot",
+                    self.get_api_url('snapshot'),
                     json={"cable": det_endpoint, "side": "crateSide"}
                 )
                 if crate_response.status_code == 200:
@@ -864,6 +1080,224 @@ class MainApp(integration_gui.Ui_MainWindow):
         except Exception as e:
             self.log_output(f"Error getting power endpoints: {str(e)}")
             return None, []
+
+    def setup_module_details_tab(self):
+        """Setup the module details tab"""
+        # Create main layout
+        layout = QVBoxLayout(self.moduleDetailsTab)
+        
+        # Add tree widget for hierarchical display
+        self.detailsTree = QTreeWidget()
+        self.detailsTree.setHeaderLabels(['Field', 'Value'])
+        self.detailsTree.setColumnWidth(0, 200)
+        layout.addWidget(self.detailsTree)
+        
+        # Add edit button
+        self.editDetailsButton = QPushButton("Edit Selected")
+        self.editDetailsButton.clicked.connect(self.edit_selected_detail)
+        layout.addWidget(self.editDetailsButton)
+        
+        # Add save button
+        self.saveDetailsButton = QPushButton("Save Changes")
+        self.saveDetailsButton.clicked.connect(self.save_module_details)
+        layout.addWidget(self.saveDetailsButton)
+
+    def populate_details_tree(self, data, parent=None):
+        """Recursively populate the details tree with module data"""
+        if parent is None:
+            self.detailsTree.clear()
+            parent = self.detailsTree
+        
+        if isinstance(data, dict):
+            for key, value in sorted(data.items()):
+                item = QTreeWidgetItem([str(key), ''])
+                if parent == self.detailsTree:
+                    parent.addTopLevelItem(item)
+                else:
+                    parent.addChild(item)
+                self.populate_details_tree(value, item)
+        elif isinstance(data, list):
+            for i, value in enumerate(data):
+                if isinstance(value, dict) and 'childName' in value:
+                    # Special handling for child components
+                    item = QTreeWidgetItem([value['childName'], value.get('childType', '')])
+                else:
+                    item = QTreeWidgetItem([f"[{i}]", ''])
+                parent.addChild(item)
+                self.populate_details_tree(value, item)
+        else:
+            parent.setText(1, str(data))
+
+    def edit_selected_detail(self):
+        """Edit the selected detail"""
+        item = self.detailsTree.currentItem()
+        if item and item.text(1):  # Only edit leaf nodes
+            dialog = QInputDialog()
+            dialog.setWindowTitle("Edit Value")
+            dialog.setLabelText(f"Edit value for {item.text(0)}:")
+            dialog.setTextValue(item.text(1))
+            
+            if dialog.exec_():
+                item.setText(1, dialog.textValue())
+
+    def save_module_details(self):
+        """Save the modified module details back to the database"""
+        try:
+            # Convert tree widget back to dictionary
+            data = self.tree_to_dict(self.detailsTree.invisibleRootItem())
+            
+            # Make API request to update module
+            print(self.get_api_url(f'modules/{self.current_module_id}'))
+            print(data)
+            #remove _id from data
+            if "_id" in data:
+                del data["_id"]
+            response = requests.put(
+                self.get_api_url(f'modules/{self.current_module_id}'),
+                json=data
+            )
+            
+            if response.status_code == 200:
+                self.log_output("Module details updated successfully")
+            else:
+                self.log_output(f"Error updating module: {response.text}")
+            
+        except Exception as e:
+            self.log_output(f"Error saving module details: {str(e)}")
+
+    def tree_to_dict(self, item):
+        """Convert tree widget items back to dictionary"""
+        result = {}
+        for i in range(item.childCount()):
+            child = item.child(i)
+            key = child.text(0)
+            
+            if child.childCount() > 0:
+                if key.startswith('['):  # Handle list items
+                    value = []
+                    for j in range(child.childCount()):
+                        list_item = child.child(j)
+                        if list_item.childCount() > 0:
+                            value.append(self.tree_to_dict(list_item))
+                        else:
+                            value.append(list_item.text(1))
+                else:
+                    value = self.tree_to_dict(child)
+            else:
+                value = child.text(1)
+                # Try to convert to appropriate type
+                try:
+                    if value.lower() == 'true':
+                        value = True
+                    elif value.lower() == 'false':
+                        value = False
+                    elif value.isdigit():
+                        value = int(value)
+                    elif value.replace('.','',1).isdigit():
+                        value = float(value)
+                except:
+                    pass
+                
+            if not key.startswith('['):  # Skip list indices
+                result[key] = value
+                
+        return result
+
+    def view_module_details(self):
+        """View details for selected module"""
+        selected_items = self.treeWidget.selectedItems()
+        if not selected_items:
+            self.log_output("No module selected")
+            return
+        
+        module_id = selected_items[0].text(0)  # Get module name
+        self.current_module_id = module_id
+        
+        try:
+            # Get module details from DB
+            print("Debug", self.get_api_url(f'modules/{module_id}'))
+            response = requests.get(self.get_api_url(f'modules/{module_id}'))
+            if response.status_code == 200:
+                module_data = response.json()
+                self.populate_details_tree(module_data)
+                self.tabWidget.setCurrentWidget(self.moduleDetailsTab)
+            else:
+                self.log_output(f"Error fetching module details: {response.text}")
+            
+        except Exception as e:
+            self.log_output(f"Error viewing module details: {str(e)}")
+
+    def setup_inventory_buttons(self):
+        """Setup buttons for inventory tab"""
+        buttonLayout = QHBoxLayout()
+        
+        spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        buttonLayout.addItem(spacer)
+        
+#        self.selectModulePB = QPushButton("Select Module")
+#        self.selectModulePB.clicked.connect(self.select_module)
+#        buttonLayout.addWidget(self.selectModulePB)
+        
+        self.viewDetailsPB = QPushButton("View Details")
+        self.viewDetailsPB.clicked.connect(self.view_module_details)
+        buttonLayout.addWidget(self.viewDetailsPB)
+        
+        # Add button layout to tab
+        self.tab_2.layout().addLayout(buttonLayout)
+
+    def reset_test_states(self):
+        """Reset all test states to initial condition"""
+        # Reset LED colors
+        self.checkIDLED.setStyleSheet("background-color: rgb(255, 255, 0);")  # Yellow
+        self.hvOFFTestLED.setStyleSheet("background-color: rgb(255, 255, 0);")
+        self.hvONTestLED.setStyleSheet("background-color: rgb(255, 255, 0);")
+        
+        # Reset checkboxes
+        self.hvOFFTestCB.setChecked(False)
+        self.hvONTestCB.setChecked(False)
+        
+        # Disable tests 2 and 3
+        self.hvOFFTestPB.setEnabled(False)
+        self.hvONTestPB.setEnabled(False)
+        
+        # Clear ID label
+        self.checkIDlabel.setText("ID:")
+
+    def update_filters_from_layer(self, layer_type):
+        """Update speed and spacer filters based on selected layer type"""
+        if layer_type == "any":
+            self.speedCB.setCurrentText("any")
+            self.spacerCB.setCurrentText("any")
+            return
+        
+        if layer_type in self.layers_to_filters:
+            filters = self.layers_to_filters[layer_type]
+            self.speedCB.setCurrentText(filters["speed"])
+            self.spacerCB.setCurrentText(filters["spacer"])
+
+    def update_layer_from_ring(self, ring_id):
+        """Update layer type selection based on ring ID"""
+        if not ring_id:
+            return
+        
+        # Find matching layer type
+        matching_layer = "any"
+        for layer in self.layers_to_filters:
+            if ring_id.startswith(layer.split("_")[0]):  # Match L1, L2, L3 part
+                # If we have an exact match with the full layer (e.g. L1_47), use it
+                if ring_id.startswith(layer):
+                    matching_layer = layer
+                    break
+                # If we only match the L3 part, use it
+                elif layer == "L3":
+                    matching_layer = layer
+                    break
+                # Otherwise keep looking for a better match
+                elif matching_layer == "any":
+                    matching_layer = layer
+        
+        # Update layer type combo box
+        self.layertypeCB.setCurrentText(matching_layer)
 
 def main():
     app = QApplication(sys.argv)

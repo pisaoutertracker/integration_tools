@@ -257,7 +257,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QLabel" name="label_4">
+             <widget class="QLabel" name="checkIDlabel">
               <property name="text">
                <string>TextLabel</string>
               </property>
@@ -633,82 +633,21 @@
            <string>Filters:</string>
           </property>
           <layout class="QGridLayout" name="gridLayout_5">
-           <item row="2" column="0">
-            <widget class="QLabel" name="label_10">
-             <property name="text">
-              <string>Grade:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="1">
-            <widget class="QComboBox" name="spacerCB_3">
-             <item>
-              <property name="text">
-               <string>Ready For Mounting</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Mounted</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>To Be Tested</string>
-              </property>
-             </item>
-            </widget>
-           </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="label_11">
-             <property name="text">
-              <string>Status:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QComboBox" name="spacerCB_2">
-             <item>
-              <property name="text">
-               <string>any</string>
-              </property>
-             </item>
-            </widget>
-           </item>
-           <item row="0" column="0">
+           <item row="1" column="0">
             <widget class="QLabel" name="label_8">
              <property name="text">
               <string>Speed:</string>
              </property>
             </widget>
            </item>
-           <item row="0" column="1">
-            <widget class="QComboBox" name="speedCB">
-             <item>
-              <property name="text">
-               <string>any</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>5G</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>10G</string>
-              </property>
-             </item>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="label_9">
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_10">
              <property name="text">
-              <string>Spacer:</string>
+              <string>Grade:</string>
              </property>
             </widget>
            </item>
-           <item row="1" column="1">
+           <item row="2" column="1">
             <widget class="QComboBox" name="spacerCB">
              <item>
               <property name="text">
@@ -730,6 +669,83 @@
                <string>1.8mm</string>
               </property>
              </item>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="label_9">
+             <property name="text">
+              <string>Spacer:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QComboBox" name="spacerCB_2">
+             <item>
+              <property name="text">
+               <string>any</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_11">
+             <property name="text">
+              <string>Status:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QComboBox" name="speedCB">
+             <item>
+              <property name="text">
+               <string>any</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>5G</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>10G</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QComboBox" name="spacerCB_3">
+             <item>
+              <property name="text">
+               <string>Ready For Mounting</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Mounted</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>To Be Tested</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QComboBox" name="layertypeCB">
+             <item>
+              <property name="text">
+               <string>any</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_4">
+             <property name="text">
+              <string>Layer type:</string>
+             </property>
             </widget>
            </item>
           </layout>
@@ -829,6 +845,48 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="moduleDetailsTab">
+       <attribute name="title">
+        <string>Module Details</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_8">
+        <item>
+         <widget class="QTreeWidget" name="detailsTree">
+          <property name="columnCount">
+           <number>2</number>
+          </property>
+          <column>
+           <property name="text">
+            <string>Field</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Value</string>
+           </property>
+          </column>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_11">
+          <item>
+           <widget class="QPushButton" name="editDetailsButton">
+            <property name="text">
+             <string>Edit Selected</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="saveDetailsButton">
+            <property name="text">
+             <string>Save Changes</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
         <string>Settings</string>
@@ -845,7 +903,7 @@
 {power} - Selected power source
 {fiber_endpoint} - Fiber endpoint (i.e. FC7)
 
-Placeholders can be used in commands and API endpoints.</string>
+Placeholders can be used in commands.</string>
           </property>
          </widget>
         </item>
@@ -909,14 +967,14 @@ Placeholders can be used in commands and API endpoints.</string>
            <item row="0" column="0">
             <widget class="QLabel" name="dbEndpointLabel">
              <property name="text">
-              <string>DB Endpoint:</string>
+              <string>Database URL:</string>
              </property>
             </widget>
            </item>
            <item row="0" column="1">
             <widget class="QLineEdit" name="dbEndpointLE">
              <property name="text">
-              <string>http://localhost:5000/modules</string>
+              <string>http://localhost:5000</string>
              </property>
             </widget>
            </item>
@@ -948,109 +1006,18 @@ Placeholders can be used in commands and API endpoints.</string>
              </property>
             </widget>
            </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="apiUrlLabel">
-             <property name="text">
-              <string>API Base URL:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="1">
-            <widget class="QLineEdit" name="apiBaseUrlLE">
-             <property name="text">
-              <string>http://localhost:8000/api</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="0">
-            <widget class="QLabel" name="connectFiberLabel">
-             <property name="text">
-              <string>Connect Fiber Endpoint:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="1">
-            <layout class="QHBoxLayout" name="horizontalLayout_7">
-             <item>
-              <widget class="QComboBox" name="connectFiberMethodCB">
-               <item>
-                <property name="text">
-                 <string>POST</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>GET</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>PUT</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>DELETE</string>
-                </property>
-               </item>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="connectFiberEndpointLE">
-               <property name="text">
-                <string>connect/fiber/{fiber}</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item row="5" column="0">
-            <widget class="QLabel" name="connectPowerLabel">
-             <property name="text">
-              <string>Connect Power Endpoint:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="1">
-            <layout class="QHBoxLayout" name="horizontalLayout_8">
-             <item>
-              <widget class="QComboBox" name="connectPowerMethodCB">
-               <item>
-                <property name="text">
-                 <string>POST</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>GET</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>PUT</string>
-                </property>
-               </item>
-               <item>
-                <property name="text">
-                 <string>DELETE</string>
-                </property>
-               </item>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLineEdit" name="connectPowerEndpointLE">
-               <property name="text">
-                <string>connect/power/{power}</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
           </layout>
          </widget>
         </item>
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_9">
+          <item>
+           <widget class="QPushButton" name="applySettingsPB">
+            <property name="text">
+             <string>Apply settings</string>
+            </property>
+           </widget>
+          </item>
           <item>
            <spacer name="horizontalSpacer_8">
             <property name="orientation">
@@ -1063,13 +1030,6 @@ Placeholders can be used in commands and API endpoints.</string>
              </size>
             </property>
            </spacer>
-          </item>
-          <item>
-           <widget class="QPushButton" name="applySettingsPB">
-            <property name="text">
-             <string>Apply Settings</string>
-            </property>
-           </widget>
           </item>
          </layout>
         </item>
