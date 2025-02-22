@@ -158,6 +158,19 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.fiberCB.addItems(fibers)
         self.powerCB.addItems(powers)
         self.number_of_modules=18
+
+#                config_dir = os.path.expanduser("~/.config/integration_ui")
+        #load last session from ~/.config/integration_ui/lastsession.txt
+        session_file = os.path.join(os.path.expanduser("~/.config/integration_ui"), "lastsession.txt")
+        if os.path.exists(session_file):
+            with open(session_file, "r") as f:
+                session = f.read().strip()
+                self.ringLE.setText(session)
+                self.split_ring_and_position()
+        else:
+            self.ringLE.setText("L1")
+            self.split_ring_and_position()
+
         self.draw_ring()
         
         # Setup thermal camera plotting
@@ -278,11 +291,19 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def get_settings_file(self):
         """Get the settings file path"""
-        return os.path.join(os.path.dirname(__file__), 'settings.yaml')
+        config_file = os.path.join(os.path.expanduser("~/.config/integration_ui"), 'settings.yaml')
+        bundled_file = os.path.join(os.path.dirname(__file__), 'settings.yaml')
+        if os.path.exists(config_file):
+            return config_file
+        elif os.path.exists(bundled_file):
+            return bundled_file
+        else:
+            return config_file
 
     def load_settings(self):
         """Load settings from YAML file"""
         try:
+            
             with open(self.get_settings_file(), 'r') as f:
                 settings = yaml.safe_load(f)
                 
@@ -420,6 +441,11 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def split_ring_and_position(self):
         ring_position = self.ringLE.text()
+        config_dir = os.path.expanduser("~/.config/integration_ui")
+        os.makedirs(config_dir, exist_ok=True)
+        session_file = os.path.join(config_dir, "lastsession.txt")
+        with open(session_file, "w") as f:
+            f.write(self.ringLE.text())
         ring=ring_position
         position="0"
         if ';' in ring_position:
