@@ -16,7 +16,7 @@ import paho.mqtt.client as mqtt
 import struct
 import numpy as np
 from caenGUI import CAENControl
-
+import json
 # Set matplotlib backend before importing pyplot
 import matplotlib
 matplotlib.use('Qt5Agg')
@@ -106,7 +106,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.moduleLE.textChanged.connect(self.update_connection_status)
         self.powerCB.currentTextChanged.connect(self.update_connection_status)
         self.fiberCB.currentTextChanged.connect(self.update_connection_status)
-
+        self.fiber_endpoint=""
         # Initial connection status check
         QTimer.singleShot(100, self.update_connection_status)  # Small delay to ensure UI is ready
 
@@ -369,7 +369,8 @@ class MainApp(integration_gui.Ui_MainWindow):
             'position': self.positionLE.text(),
             'module_id': self.moduleLE.text(),
             'fiber': self.fiberCB.currentText(),
-            'power': self.powerCB.currentText()
+            'power': self.powerCB.currentText(),
+            'fiber_endpoint': self.fiber_endpoint,
         }
 
     def expand_placeholders(self, text):
@@ -579,23 +580,88 @@ class MainApp(integration_gui.Ui_MainWindow):
                 return
                 
             modules = response.json()
-            
+            #pretty print with indented json
+            self.log_output(json.dumps(modules, indent=4))
             # Apply filters
             speed_filter = self.speedCB.currentText()
             spacer_filter = self.spacerCB.currentText()
+            spacer_dict = {
+                "4.0mm": "40",
+                "2.6mm": "26",
+                "1.8mm": "18",
+                "any": "any"
+            }
+            spacer_filter = spacer_dict[spacer_filter]
+
             grade_filter = self.spacerCB_2.currentText()
             status_filter = self.spacerCB_3.currentText()
-            
+            module_speed=""
+            spacer=""
             filtered_modules = []
             for module in modules:
-                if speed_filter != "any" and module.get("speed") != speed_filter:
+                if module is None:
                     continue
-                if spacer_filter != "any" and module.get("spacer") != spacer_filter:
+                if "_5_" in module.get("moduleName", ""):
+                    module_speed="5G"
+                if "_10_" in module.get("moduleName", ""):
+                    module_speed="10G"
+                if "_05_" in module.get("moduleName", ""):
+                    module_speed="5G"
+                if "_10-" in module.get("moduleName", ""):
+                    module_speed="10G"
+                if "_5-" in module.get("moduleName", ""):
+                    module_speed="5G"
+                if "_05-" in module.get("moduleName", ""):
+                    module_speed="5G"
+                print(module_speed)
+                if module.get("children") is not None:                  
+                    if module.get("children").get("PS Read-out Hybrid") is not None:            
+                        if module.get("children").get("PS Read-out Hybrid").get("details") is not None:                  
+                            if module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH") is not None:                  
+                                module_speed=module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH")
+                                if module_speed=="10Gbps":
+                                    module_speed="10G"
+                                if module_speed=="5Gbps":
+                                    module_speed="5G"
+                module["speed"]=module_speed   
+                print("setting speed",module_speed)
+                
+                if speed_filter != "any" and module_speed != speed_filter:
                     continue
-                if grade_filter != "any" and module.get("grade") != grade_filter:
+                #PS_26_05-IBA_00102
+                fields=module.get("moduleName", "").split("_")
+                if len(fields) > 2:
+                    spacer=fields[1]
+                if spacer_filter != "any" and spacer != spacer_filter:
                     continue
-                if status_filter != "Ready For Mounting" and module.get("status") != status_filter:
-                    continue
+                module["spacer"]=spacer
+                # if grade_filter != "any" and module.get("grade") != grade_filter:
+                #     continue
+                # if status_filter != "Ready For Mounting" and module.get("status") != status_filter:
+                #     continue
+
+        # "details": {
+        #     "ID": "585960",
+        #     "RECORD_INSERTION_TIME": "2024-05-21 00:00:00",
+        #     "LOCATION": "IT-Pisa[INFN Pisa]",
+        #     "PART_PARENT_ID": "490740",
+        #     "KIND_OF_PART_ID": "9020",
+        #     "KIND_OF_PART": "PS Module",
+        #     "MANUFACTURER": "INFN Perugia",
+        #     "BARCODE": "PS_16_10_IPG-00005",
+        #     "SERIAL_NUMBER": "PS_16_10_IPG-00005",
+        #     "VERSION": "",
+        #     "NAME_LABEL": "PS_16_10_IPG-00005",
+        #     "PRODUCTION_DATE": "",
+        #     "BATCH_NUMBER": "",
+        #     "DESCRIPTION": "Left Hybrid not responding, sensors currents slightly high",
+        #     "ARING_INDEX": "",
+        #     "APS_SENSOR_SPACING": "",
+        #     "AMODULE_INTEGRATION_STATUS": "",
+        #     "ASTATUS": "Damaged",
+        #     "APOSITION_INDEX": "2"
+
+
                 filtered_modules.append(module)
             
             # Clear existing items
@@ -608,7 +674,9 @@ class MainApp(integration_gui.Ui_MainWindow):
                 item.setText(1, module.get("inventorySlot", ""))
                 item.setText(2, module.get("speed", ""))
                 item.setText(3, str(module.get("spacer", "")))
-                item.setText(4, module.get("grade", ""))
+               # item.setText(4,json.dumps(module.get("details", {}), indent=4))
+                item.setText(4, module.get("details", {}).get("ASTATUS", ""))
+                item.setText(5, module.get("details", {}).get("DESCRIPTION", ""))
                 
         except Exception as e:
             self.log_output(f"Error updating module list: {str(e)}")
@@ -651,6 +719,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 det_endpoint, crate_endpoint = self.get_fiber_endpoints(fiber_id)
                 if det_endpoint and crate_endpoint:
                     fiber_status.add(f"{det_endpoint} <--> {crate_endpoint}")
+                    self.fiber_endpoint = crate_endpoint
 
             # Update labels
             self.powerConnectionLabel.setText("\n".join(power_status) if power_status else "Not connected")

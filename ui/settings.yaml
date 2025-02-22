@@ -1,5 +1,5 @@
 api_base_url: http://localhost:5000
-check_id_command: check_id.sh --module {module_id} --position {position}
+check_id_command: check_id.sh --module {module_id} --position {position} --fc7 {fiber_endpoint}
 dark_test_command: dark_test.sh --module {module_id} --power {power}
 db_endpoint: http://localhost:5000/modules
 fiber_endpoint: connect

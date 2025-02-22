@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>720</width>
-    <height>705</height>
+    <height>723</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,7 +18,7 @@
     <item row="1" column="0">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -633,6 +633,48 @@
            <string>Filters:</string>
           </property>
           <layout class="QGridLayout" name="gridLayout_5">
+           <item row="2" column="0">
+            <widget class="QLabel" name="label_10">
+             <property name="text">
+              <string>Grade:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QComboBox" name="spacerCB_3">
+             <item>
+              <property name="text">
+               <string>Ready For Mounting</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Mounted</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>To Be Tested</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_11">
+             <property name="text">
+              <string>Status:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QComboBox" name="spacerCB_2">
+             <item>
+              <property name="text">
+               <string>any</string>
+              </property>
+             </item>
+            </widget>
+           </item>
            <item row="0" column="0">
             <widget class="QLabel" name="label_8">
              <property name="text">
@@ -690,48 +732,6 @@
              </item>
             </widget>
            </item>
-           <item row="2" column="0">
-            <widget class="QLabel" name="label_10">
-             <property name="text">
-              <string>Grade:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QComboBox" name="spacerCB_2">
-             <item>
-              <property name="text">
-               <string>any</string>
-              </property>
-             </item>
-            </widget>
-           </item>
-           <item row="3" column="0">
-            <widget class="QLabel" name="label_11">
-             <property name="text">
-              <string>Status:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="1">
-            <widget class="QComboBox" name="spacerCB_3">
-             <item>
-              <property name="text">
-               <string>Ready For Mounting</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Mounted</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>To Be Tested</string>
-              </property>
-             </item>
-            </widget>
-           </item>
           </layout>
          </widget>
         </item>
@@ -765,7 +765,12 @@
           </column>
           <column>
            <property name="text">
-            <string>Grade</string>
+            <string>Status</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Description</string>
            </property>
           </column>
           <item>
@@ -827,6 +832,7 @@
 {module_id} - Module ID
 {fiber} - Selected fiber
 {power} - Selected power source
+{fiber_endpoint} - Fiber endpoint (i.e. FC7)
 
 Placeholders can be used in commands and API endpoints.</string>
           </property>
