@@ -807,29 +807,29 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.hvOFFTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
                 self.hvOFFTestCB.setChecked(True)
                 self.hvONTestPB.setEnabled(True)  # Enable test 3
-                
-                # Try to parse noise values from output
-                try:
-                    # Update results label with the output
-                    noise_text = "<html><head/><body><p>Noise:</p>"
+                self.resultsLabel.setText(stdout)
+                # # Try to parse noise values from output
+                # try:
+                #     # Update results label with the output
+                #     noise_text = "<html><head/><body><p>Noise:</p>"
                     
-                    # Look for MPA and SSA noise values in the output
-                    mpa_noise = "0.0"
-                    ssa_noise = "0.0"
+                #     # Look for MPA and SSA noise values in the output
+                #     mpa_noise = "0.0"
+                #     ssa_noise = "0.0"
                     
-                    for line in stdout.split('\n'):
-                        if "MPA noise:" in line:
-                            mpa_noise = line.split(":")[-1].strip()
-                        elif "SSA noise:" in line:
-                            ssa_noise = line.split(":")[-1].strip()
+                #     for line in stdout.split('\n'):
+                #         if "MPA noise:" in line:
+                #             mpa_noise = line.split(":")[-1].strip()
+                #         elif "SSA noise:" in line:
+                #             ssa_noise = line.split(":")[-1].strip()
                     
-                    noise_text += f"<p>MPA: {mpa_noise}</p>"
-                    noise_text += f"<p>SSA: {ssa_noise}</p>"
-                    noise_text += "</body></html>"
+                #     noise_text += f"<p>MPA: {mpa_noise}</p>"
+                #     noise_text += f"<p>SSA: {ssa_noise}</p>"
+                #     noise_text += "</body></html>"
                     
-                    self.resultsLabel.setText(noise_text)
-                except Exception as e:
-                    self.log_output(f"Error parsing test results: {e}")
+                #     self.resultsLabel.setText(noise_text)
+                # except Exception as e:
+                #     self.log_output(f"Error parsing test results: {e}")
                     
             else:
                 self.hvOFFTestLED.setStyleSheet("background-color: red;")
