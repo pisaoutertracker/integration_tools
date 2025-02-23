@@ -891,6 +891,13 @@
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_10">
           <item>
+           <widget class="QPushButton" name="selectModulePB">
+            <property name="text">
+             <string>&lt;-- Select Module</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <spacer name="horizontalSpacer_9">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>
@@ -904,9 +911,9 @@
            </spacer>
           </item>
           <item>
-           <widget class="QPushButton" name="selectModulePB">
+           <widget class="QPushButton" name="viewDetailsPB">
             <property name="text">
-             <string>Select Module</string>
+             <string>View Details --&gt;</string>
             </property>
            </widget>
           </item>
@@ -1065,7 +1072,7 @@ Placeholders can be used in commands.</string>
            <item row="4" column="1">
             <widget class="QLineEdit" name="resultsUrlLE">
              <property name="text">
-              <string>file:Results/html/latest/index.html</string>
+              <string>Results/html/latest/index.html</string>
              </property>
             </widget>
            </item>
@@ -1183,13 +1190,18 @@ Placeholders can be used in commands.</string>
        <attribute name="title">
         <string>Plots</string>
        </attribute>
-       <layout class="QGridLayout" name="gridLayout_6">
-        <item row="0" column="0">
-         <widget class="QWebEngineView" name="webView" native="true">
-          <property name="url" stdset="0">
-           <url>
-            <string>about:blank</string>
-           </url>
+       <layout class="QVBoxLayout" name="gridLayout_6">
+        <item>
+         <widget class="QTextBrowser" name="resultsBrowser">
+          <property name="openExternalLinks">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="openInBrowserPB">
+          <property name="text">
+           <string>Open in System Browser</string>
           </property>
          </widget>
         </item>

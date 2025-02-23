@@ -30,6 +30,9 @@ import struct
 import numpy as np
 from caenGUI import CAENControl
 
+import webbrowser
+import os.path
+
 # Add this class near the top of the file
 class LogEmitter(QObject):
     """Helper class to emit log messages from any thread"""
@@ -287,6 +290,10 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Store max temperature
         self.max_temperature = 0.0
+
+        # Connect open in browser button
+        self.openInBrowserPB.clicked.connect(self.open_results_in_browser)
+
     def setup_thermal_plot(self):
         self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(8, 6))
         
@@ -1520,16 +1527,10 @@ class MainApp(integration_gui.Ui_MainWindow):
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         buttonLayout.addItem(spacer)
         
-#        self.selectModulePB = QPushButton("Select Module")
-#        self.selectModulePB.clicked.connect(self.select_module)
-#        buttonLayout.addWidget(self.selectModulePB)
-        
-        self.viewDetailsPB = QPushButton("View Details")
-        self.viewDetailsPB.clicked.connect(self.view_module_details)
-        buttonLayout.addWidget(self.viewDetailsPB)
-        
         # Add button layout to tab
         self.tab_2.layout().addLayout(buttonLayout)
+        # Connect the "View Details" button signal
+        self.viewDetailsPB.clicked.connect(self.view_module_details)
 
     def reset_test_states(self):
         """Reset all test states to initial condition"""
@@ -1776,12 +1777,43 @@ class MainApp(integration_gui.Ui_MainWindow):
         """Show test results in plots tab"""
         # Switch to plots tab
         self.tabWidget.setCurrentWidget(self.tab_5)
-        # Load URL from settings
+        
+        # Load URL from settings and normalize path
         url = self.resultsUrlLE.text()
-        if not url.startswith('http://') and not url.startswith('https://') and not url.startswith('file://'):
-            # If it's a local file path, add file:// prefix
-            url = 'file://' + os.path.abspath(url)
-        self.webView.setUrl(QUrl(url))
+        if url.startswith('file:'):
+            # Remove file: prefix if present and make absolute path
+            url = url.replace('file:', '', 1)
+            url = os.path.abspath(url)
+            url = f'file://{url}'
+        elif not url.startswith('http://') and not url.startswith('https://'):
+            # If no protocol specified, assume local file
+            url = os.path.abspath(url)
+            url = f'file://{url}'
+        
+        # Try to load the content into text browser
+        try:
+            self.resultsBrowser.setSource(QUrl(url))
+            self.log_output(f"Loading results from: {url}")
+        except Exception as e:
+            self.resultsBrowser.setHtml(f"""
+                <h2>Error loading results</h2>
+                <p>Could not load: {url}</p>
+                <p>Error: {str(e)}</p>
+                <p>Click 'Open in System Browser' below to view results in your default web browser.</p>
+            """)
+            self.log_output(f"Error loading results: {str(e)}")
+
+    def open_results_in_browser(self):
+        """Open test results in system default browser"""
+        url = self.resultsUrlLE.text()
+        if url.startswith('file:'):
+            url = url.replace('file:', '', 1)
+            url = os.path.abspath(url)
+            url = f'file://{url}'
+        elif not url.startswith('http://') and not url.startswith('https://'):
+            url = os.path.abspath(url)
+            url = f'file://{url}'
+        webbrowser.open(url)
 
 def main():
     app = QApplication(sys.argv)

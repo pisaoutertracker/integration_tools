@@ -5,4 +5,4 @@ db_url: http://localhost:5000
 light_on_command: 'echo SSA: 3.3 \n MPA 2.0'
 mqtt_server: test.mosquitto.org
 mqtt_topic: /ar/thermal/image
-results_url: file:/home/arizzi/integration_tools/ui/Results/html/latest/index.html
+results_url: file:///home/arizzi/integration_tools/ui/Results/html/latest/index.html
