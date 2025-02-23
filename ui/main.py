@@ -6,8 +6,9 @@ from PyQt5.QtWidgets import (
     QTreeWidget, QMessageBox, QPushButton, QInputDialog, QHBoxLayout, QSpacerItem, QSizePolicy, QComboBox
 )
 from PyQt5.QtGui import QPen
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread, QSize
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread, QSize, QUrl
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsView
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 from math import *
 import requests
 import subprocess
@@ -89,6 +90,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Initialize MQTT client to None
         self.client = None
+        
+        # Initialize air state
+        self.air_state = False
         
         # Load settings before setting up connections
         self.load_settings()
@@ -186,6 +190,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.dbEndpointLE.textChanged.connect(self.save_settings)
         self.mqttServerLE.textChanged.connect(self.save_settings)
         self.mqttTopicLE.textChanged.connect(self.save_settings)
+        self.airCommandLE.textChanged.connect(self.save_settings)
+        self.resultsUrlLE.textChanged.connect(self.save_settings)
         
         # Connect Apply button
         self.applySettingsPB.clicked.connect(self.apply_settings)
@@ -259,7 +265,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
         # Connect module ID changes to check mounting status
         self.moduleLE.textChanged.connect(self.check_module_mounting_status)
-        
+
         session_file = os.path.join(os.path.expanduser("~/.config/integration_ui"), "lastsession.txt")
         if os.path.exists(session_file):
             with open(session_file, "r") as f:
@@ -271,8 +277,18 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.split_ring_and_position()
 
         self.draw_ring()        
+
+        # Connect air control buttons
+        self.airONPB.clicked.connect(lambda: self.control_air(True))
+        self.airOFFPB.clicked.connect(lambda: self.control_air(False))
+        
+        # Connect test results button
+        self.pushButton.clicked.connect(self.show_test_results)
+        
+        # Store max temperature
+        self.max_temperature = 0.0
     def setup_thermal_plot(self):
-        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(8, 6))
         
         # First plot: Image
         self.im = self.ax1.imshow(np.random.rand(24, 32) * 30 + 10, cmap="plasma")
@@ -310,7 +326,6 @@ class MainApp(integration_gui.Ui_MainWindow):
     def load_settings(self):
         """Load settings from YAML file"""
         try:
-            
             with open(self.get_settings_file(), 'r') as f:
                 settings = yaml.safe_load(f)
                 
@@ -326,6 +341,8 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.checkIDCommandLE.setText(settings.get('check_id_command', ''))
                 self.lightOnCommandLE.setText(settings.get('light_on_command', ''))
                 self.darkTestCommandLE.setText(settings.get('dark_test_command', ''))
+                self.airCommandLE.setText(settings.get('air_command', 'air.sh {airOn}'))
+                self.resultsUrlLE.setText(settings.get('results_url', 'file:Results/html/latest/index.html'))
                 
         except FileNotFoundError:
             # Use defaults if no settings file exists
@@ -346,9 +363,15 @@ class MainApp(integration_gui.Ui_MainWindow):
             'check_id_command': self.checkIDCommandLE.text(),
             'light_on_command': self.lightOnCommandLE.text(),
             'dark_test_command': self.darkTestCommandLE.text(),
+            'air_command': self.airCommandLE.text(),
+            'results_url': self.resultsUrlLE.text(),
         }
         
         try:
+            # Ensure config directory exists
+            config_dir = os.path.dirname(self.get_settings_file())
+            os.makedirs(config_dir, exist_ok=True)
+            
             with open(self.get_settings_file(), 'w') as f:
                 yaml.dump(settings, f, default_flow_style=False)
         except Exception as e:
@@ -427,6 +450,10 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.min_values.append(min(flo_arr))
             self.max_values.append(max(flo_arr))
             self.avg_values.append(np.mean(flo_arr))
+            
+            # Update max temperature display
+            self.max_temperature = max(flo_arr)
+            self.tMaxLabel.setText(f"Tmax: {self.max_temperature:.1f}")
             
             # Keep maximum 600 values
             if len(self.time) > 600:
@@ -780,9 +807,34 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.hvOFFTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
                 self.hvOFFTestCB.setChecked(True)
                 self.hvONTestPB.setEnabled(True)  # Enable test 3
+                
+                # Try to parse noise values from output
+                try:
+                    # Update results label with the output
+                    noise_text = "<html><head/><body><p>Noise:</p>"
+                    
+                    # Look for MPA and SSA noise values in the output
+                    mpa_noise = "0.0"
+                    ssa_noise = "0.0"
+                    
+                    for line in stdout.split('\n'):
+                        if "MPA noise:" in line:
+                            mpa_noise = line.split(":")[-1].strip()
+                        elif "SSA noise:" in line:
+                            ssa_noise = line.split(":")[-1].strip()
+                    
+                    noise_text += f"<p>MPA: {mpa_noise}</p>"
+                    noise_text += f"<p>SSA: {ssa_noise}</p>"
+                    noise_text += "</body></html>"
+                    
+                    self.resultsLabel.setText(noise_text)
+                except Exception as e:
+                    self.log_output(f"Error parsing test results: {e}")
+                    
             else:
                 self.hvOFFTestLED.setStyleSheet("background-color: red;")
                 self.hvOFFTestCB.setChecked(False)
+                self.log_output(f"Light on test error: {stderr}")
         
         if self.current_worker:
             self.current_worker.finished.disconnect()
@@ -798,9 +850,34 @@ class MainApp(integration_gui.Ui_MainWindow):
             if success:
                 self.hvONTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
                 self.hvONTestCB.setChecked(True)
+                
+                # Try to parse noise values from output
+                try:
+                    # Update results label with the output
+                    noise_text = "<html><head/><body><p>Noise:</p>"
+                    
+                    # Look for MPA and SSA noise values in the output
+                    mpa_noise = "0.0"
+                    ssa_noise = "0.0"
+                    
+                    for line in stdout.split('\n'):
+                        if "MPA noise:" in line:
+                            mpa_noise = line.split(":")[-1].strip()
+                        elif "SSA noise:" in line:
+                            ssa_noise = line.split(":")[-1].strip()
+                    
+                    noise_text += f"<p>MPA: {mpa_noise}</p>"
+                    noise_text += f"<p>SSA: {ssa_noise}</p>"
+                    noise_text += "</body></html>"
+                    
+                    self.resultsLabel.setText(noise_text)
+                except Exception as e:
+                    self.log_output(f"Error parsing test results: {e}")
+                    
             else:
                 self.hvONTestLED.setStyleSheet("background-color: red;")
                 self.hvONTestCB.setChecked(False)
+                self.log_output(f"Dark test error: {stderr}")
         
         if self.current_worker:
             self.current_worker.finished.disconnect()
@@ -1471,6 +1548,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Clear ID label
         self.checkIDlabel.setText("ID:")
+        
+        # Reset results label
+        self.resultsLabel.setText("<html><head/><body><p>Noise:</p><p>MPA: 0.0</p><p>SSA: 0.0</p></body></html>")
 
     def update_filters_from_layer(self, layer_type):
         """Update speed and spacer filters based on selected layer type"""
@@ -1673,6 +1753,35 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.log_output(f"Error fetching module details: {response.text}")
         except Exception as e:
             self.log_output(f"Error loading module details: {str(e)}")
+
+    def control_air(self, turn_on):
+        """Control air system"""
+        self.air_state = turn_on
+        command = self.airCommandLE.text().format(airOn="1" if turn_on else "0")
+        
+        def handle_air_result(success, stdout, stderr):
+            if success:
+                self.airLed.setStyleSheet("background-color: rgb(85, 170, 0);" if turn_on else "background-color: red;")
+            else:
+                self.log_output(f"Air control error: {stderr}")
+                self.airLed.setStyleSheet("background-color: red;")
+        
+        if self.current_worker:
+            self.current_worker.finished.disconnect()
+        self.current_worker = CommandWorker(command)
+        self.current_worker.finished.connect(handle_air_result)
+        self.current_worker.start()
+
+    def show_test_results(self):
+        """Show test results in plots tab"""
+        # Switch to plots tab
+        self.tabWidget.setCurrentWidget(self.tab_5)
+        # Load URL from settings
+        url = self.resultsUrlLE.text()
+        if not url.startswith('http://') and not url.startswith('https://') and not url.startswith('file://'):
+            # If it's a local file path, add file:// prefix
+            url = 'file://' + os.path.abspath(url)
+        self.webView.setUrl(QUrl(url))
 
 def main():
     app = QApplication(sys.argv)

@@ -28,6 +28,13 @@
         <item row="0" column="0">
          <layout class="QVBoxLayout" name="verticalLayout">
           <item>
+           <widget class="QLabel" name="label_5">
+            <property name="text">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Ring:&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <layout class="QHBoxLayout" name="horizontalLayout">
             <item>
              <widget class="QLabel" name="label">
@@ -78,13 +85,6 @@
            </layout>
           </item>
           <item>
-           <widget class="QLabel" name="label_5">
-            <property name="text">
-             <string>Ring Position</string>
-            </property>
-           </widget>
-          </item>
-          <item>
            <widget class="QGraphicsView" name="graphicsView">
             <property name="minimumSize">
              <size>
@@ -113,7 +113,7 @@
           <item>
            <widget class="QLabel" name="label_7">
             <property name="text">
-             <string>DB actions</string>
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Module:&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
             </property>
            </widget>
           </item>
@@ -128,19 +128,6 @@
             </item>
             <item>
              <widget class="QLineEdit" name="moduleLE"/>
-            </item>
-            <item>
-             <spacer name="horizontalSpacer">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>40</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
             </item>
             <item>
              <widget class="QPushButton" name="mountPB">
@@ -264,6 +251,12 @@
            <layout class="QHBoxLayout" name="horizontalLayout_3">
             <item>
              <widget class="QPushButton" name="checkIDPB">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>30</height>
+               </size>
+              </property>
               <property name="text">
                <string>Check ID</string>
               </property>
@@ -315,32 +308,31 @@
           </item>
           <item>
            <layout class="QGridLayout" name="gridLayout_2">
-            <item row="0" column="1">
-             <widget class="QCheckBox" name="hvOFFTestCB">
-              <property name="enabled">
-               <bool>false</bool>
+            <item row="2" column="2">
+             <spacer name="horizontalSpacer_4">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
               </property>
-              <property name="text">
-               <string/>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
               </property>
-             </widget>
+             </spacer>
             </item>
-            <item row="2" column="1">
-             <widget class="QCheckBox" name="hvONTestCB">
-              <property name="enabled">
-               <bool>false</bool>
+            <item row="0" column="2">
+             <spacer name="horizontalSpacer_2">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
               </property>
-              <property name="text">
-               <string/>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
               </property>
-             </widget>
-            </item>
-            <item row="0" column="0">
-             <widget class="QPushButton" name="hvOFFTestPB">
-              <property name="text">
-               <string>Light On Tests (HV off)</string>
-              </property>
-             </widget>
+             </spacer>
             </item>
             <item row="0" column="3">
              <widget class="QFrame" name="hvOFFTestLED">
@@ -366,8 +358,24 @@
             </item>
             <item row="2" column="0">
              <widget class="QPushButton" name="hvONTestPB">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>30</height>
+               </size>
+              </property>
               <property name="text">
                <string>Dark Tests (HV on)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QCheckBox" name="hvONTestCB">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="text">
+               <string/>
               </property>
              </widget>
             </item>
@@ -393,33 +401,56 @@
               </property>
              </widget>
             </item>
-            <item row="0" column="2">
-             <spacer name="horizontalSpacer_2">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
+            <item row="0" column="1">
+             <widget class="QCheckBox" name="hvOFFTestCB">
+              <property name="enabled">
+               <bool>false</bool>
               </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>40</width>
-                <height>20</height>
-               </size>
+              <property name="text">
+               <string/>
               </property>
-             </spacer>
+             </widget>
             </item>
-            <item row="2" column="2">
-             <spacer name="horizontalSpacer_4">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
+            <item row="0" column="0">
+             <widget class="QPushButton" name="hvOFFTestPB">
+              <property name="minimumSize">
                <size>
-                <width>40</width>
-                <height>20</height>
+                <width>0</width>
+                <height>30</height>
                </size>
               </property>
-             </spacer>
+              <property name="text">
+               <string>Light On Tests (HV off)</string>
+              </property>
+             </widget>
             </item>
            </layout>
+          </item>
+          <item>
+           <widget class="QLabel" name="resultsLabel">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>100</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Noise:&lt;/p&gt;&lt;p&gt;MPA: 0.0     &lt;/p&gt;&lt;p&gt;SSA: 0.0&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>30</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Test Results (plots)</string>
+            </property>
+           </widget>
           </item>
           <item>
            <widget class="QWidget" name="caenWidget" native="true">
@@ -437,19 +468,6 @@
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_2">
              <item>
-              <spacer name="verticalSpacer_2">
-               <property name="orientation">
-                <enum>Qt::Vertical</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>20</width>
-                 <height>40</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-             <item>
               <widget class="QLabel" name="label_6">
                <property name="text">
                 <string>CAEN control:</string>
@@ -463,7 +481,7 @@
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
-                   <height>34</height>
+                   <height>30</height>
                   </size>
                  </property>
                  <property name="text">
@@ -485,17 +503,23 @@
                 </widget>
                </item>
                <item>
-                <spacer name="horizontalSpacer_6">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
+                <widget class="QLabel" name="lvLabel">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
                  </property>
-                 <property name="sizeHint" stdset="0">
+                 <property name="minimumSize">
                   <size>
-                   <width>40</width>
-                   <height>20</height>
+                   <width>0</width>
+                   <height>30</height>
                   </size>
                  </property>
-                </spacer>
+                 <property name="text">
+                  <string>0.0</string>
+                 </property>
+                </widget>
                </item>
                <item>
                 <widget class="QFrame" name="lvLed">
@@ -516,32 +540,13 @@
               </layout>
              </item>
              <item>
-              <widget class="QLabel" name="lvLabel">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>30</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>0.0</string>
-               </property>
-              </widget>
-             </item>
-             <item>
               <layout class="QHBoxLayout" name="horizontalLayout_5">
                <item>
                 <widget class="QPushButton" name="hvOnButton">
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
-                   <height>34</height>
+                   <height>30</height>
                   </size>
                  </property>
                  <property name="text">
@@ -563,17 +568,23 @@
                 </widget>
                </item>
                <item>
-                <spacer name="horizontalSpacer_7">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
+                <widget class="QLabel" name="hvLabel">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
                  </property>
-                 <property name="sizeHint" stdset="0">
+                 <property name="minimumSize">
                   <size>
-                   <width>40</width>
-                   <height>20</height>
+                   <width>0</width>
+                   <height>30</height>
                   </size>
                  </property>
-                </spacer>
+                 <property name="text">
+                  <string>0.0</string>
+                 </property>
+                </widget>
                </item>
                <item>
                 <widget class="QFrame" name="hvLed">
@@ -594,23 +605,63 @@
               </layout>
              </item>
              <item>
-              <widget class="QLabel" name="hvLabel">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>30</height>
-                </size>
-               </property>
-               <property name="text">
-                <string>0.0</string>
-               </property>
-              </widget>
+              <layout class="QHBoxLayout" name="horizontalLayout_6">
+               <item>
+                <widget class="QPushButton" name="airONPB">
+                 <property name="text">
+                  <string>Air ON</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="airOFFPB">
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>30</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>Air OFF</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="tMaxLabel">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="text">
+                  <string>Tmax: 0.0</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QFrame" name="airLed">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>34</width>
+                   <height>34</height>
+                  </size>
+                 </property>
+                 <property name="styleSheet">
+                  <string>background-color: red;</string>
+                 </property>
+                 <property name="frameShape">
+                  <enum>QFrame::NoFrame</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
              </item>
             </layout>
            </widget>
@@ -625,8 +676,8 @@
             </property>
             <property name="minimumSize">
              <size>
-              <width>64</width>
-              <height>280</height>
+              <width>300</width>
+              <height>400</height>
              </size>
             </property>
            </widget>
@@ -877,11 +928,11 @@
             <bold>true</bold>
            </font>
           </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
-          </property>
           <property name="text">
            <string/>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
           </property>
          </widget>
         </item>
@@ -965,7 +1016,7 @@ Placeholders can be used in commands.</string>
            <item row="1" column="0">
             <widget class="QLabel" name="lightOnLabel">
              <property name="text">
-              <string>Light On Test Command:</string>
+              <string>Light-On Test Command:</string>
              </property>
             </widget>
            </item>
@@ -987,6 +1038,34 @@ Placeholders can be used in commands.</string>
             <widget class="QLineEdit" name="darkTestCommandLE">
              <property name="text">
               <string>dark_test.sh --module {module_id} --power {power}</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_13">
+             <property name="text">
+              <string>Air control command:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QLineEdit" name="airCommandLE">
+             <property name="text">
+              <string>air.sh {airOn}</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_14">
+             <property name="text">
+              <string>Results URL:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLineEdit" name="resultsUrlLE">
+             <property name="text">
+              <string>file:Results/html/latest/index.html</string>
              </property>
             </widget>
            </item>
@@ -1100,12 +1179,35 @@ Placeholders can be used in commands.</string>
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="tab_5">
+       <attribute name="title">
+        <string>Plots</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_6">
+        <item row="0" column="0">
+         <widget class="QWebEngineView" name="webView" native="true">
+          <property name="url" stdset="0">
+           <url>
+            <string>about:blank</string>
+           </url>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
    </layout>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QWebEngineView</class>
+   <extends>QWidget</extends>
+   <header location="global">QtWebEngineWidgets/QWebEngineView</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
  <slots>

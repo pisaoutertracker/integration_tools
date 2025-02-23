@@ -1,6 +1,8 @@
+air_command: air.sh {airOn}
 check_id_command: 'echo Module ID: {module_id}'
 dark_test_command: /bin/false
 db_url: http://localhost:5000
 light_on_command: /bin/true
 mqtt_server: test.mosquitto.org
 mqtt_topic: /ar/thermal/image
+results_url: file:/home/arizzi/integration_tools/ui/Results/html/latest/index.html

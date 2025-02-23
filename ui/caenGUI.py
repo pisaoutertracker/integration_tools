@@ -147,10 +147,16 @@ class CAENControl(QObject):
                     self.led[channel].setStyleSheet("background-color: green")
                 else:
                     self.led[channel].setStyleSheet("background-color: red")
-                self.label[channel].setText(
-                    f'V: {data["caen_"+channel+"_Voltage"]:6.2f}V '
-                    f'C: {data["caen_"+channel+"_Current"]:6.2f}A '
-                    f'P: {data["caen_"+channel+"_Voltage"]*data["caen_"+channel+"_Current"]:6.2f}W'
+                if "HV" in channel :
+                    self.label[channel].setText(
+                    f'V: {data["caen_"+channel+"_Voltage"]:3.1f}V '
+                    f'C: {data["caen_"+channel+"_Current"]:2.1f}uA '
+                )
+                else:
+                    self.label[channel].setText(
+                    f'V: {data["caen_"+channel+"_Voltage"]:2.1f}V '
+                    f'C: {data["caen_"+channel+"_Current"]:1.1f}A '
+                    f'P: {data["caen_"+channel+"_Voltage"]*data["caen_"+channel+"_Current"]:1.1f}W'
                 )
         except Exception as e:
             print(f"Error handling response: {e}")
