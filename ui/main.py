@@ -112,6 +112,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Enable sorting
         self.treeWidget.setSortingEnabled(True)
         
+        # Setup module details tab
+        self.setup_module_details_tab()
+        
         # Now connect signals after UI elements exist
         self.searchBox.textChanged.connect(self.filter_modules)
         self.ringLE.returnPressed.connect(self.split_ring_and_position)
@@ -161,17 +164,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
 #                config_dir = os.path.expanduser("~/.config/integration_ui")
         #load last session from ~/.config/integration_ui/lastsession.txt
-        session_file = os.path.join(os.path.expanduser("~/.config/integration_ui"), "lastsession.txt")
-        if os.path.exists(session_file):
-            with open(session_file, "r") as f:
-                session = f.read().strip()
-                self.ringLE.setText(session)
-                self.split_ring_and_position()
-        else:
-            self.ringLE.setText("L1")
-            self.split_ring_and_position()
 
-        self.draw_ring()
         
         # Setup thermal camera plotting
         self.setup_thermal_plot()
@@ -252,6 +245,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Connect module selection to reset test states
         self.selectModulePB.clicked.connect(self.reset_test_states)
 
+        # Connect module ID changes to load details
+        self.moduleLE.textChanged.connect(self.load_module_details)
+
         # Populate layer type combo box
         self.layertypeCB.clear()
         self.layertypeCB.addItem("any")
@@ -263,7 +259,18 @@ class MainApp(integration_gui.Ui_MainWindow):
 
         # Connect module ID changes to check mounting status
         self.moduleLE.textChanged.connect(self.check_module_mounting_status)
+        
+        session_file = os.path.join(os.path.expanduser("~/.config/integration_ui"), "lastsession.txt")
+        if os.path.exists(session_file):
+            with open(session_file, "r") as f:
+                session = f.read().strip()
+                self.ringLE.setText(session)
+                self.split_ring_and_position()
+        else:
+            self.ringLE.setText("L1")
+            self.split_ring_and_position()
 
+        self.draw_ring()        
     def setup_thermal_plot(self):
         self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(10, 8))
         
@@ -941,7 +948,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             for module in self.all_modules:
                 if module is None:
                     continue
-                #print(module)
+                
                 # Get module speed
                 module_speed = ""
                 if "_5_" in module.get("moduleName", "") or "_05_" in module.get("moduleName", "") or "_5-" in module.get("moduleName", "") or "_05-" in module.get("moduleName", ""):
@@ -993,8 +1000,61 @@ class MainApp(integration_gui.Ui_MainWindow):
                 item.setText(2, module.get("speed", ""))
                 item.setText(3, str(module.get("spacer", "")))
                 item.setText(4, module.get("status",""))
-                item.setText(5, module.get("details", {}).get("DESCRIPTION", ""))
-                item.setText(6, str(module.get("crateSide", {}).get("1", [])))
+                item.setText(6, module.get("details", {}).get("DESCRIPTION", ""))
+                
+                # Handle connections column
+                connections = module.get("crateSide", {})
+                print(connections)
+                connections = [y[0] for x,y in connections.items() if len(y)>0]
+                connections = list(set(connections))  # Make connections entries unique
+                item.setText(5, "/".join(connections))
+                
+                # Add disconnect button if there are connections
+                if len(connections) > 0 :
+                    # Create a widget to hold both connection info and button
+                    container = QWidget()
+                    layout = QVBoxLayout(container)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setSpacing(0)
+                    
+                    # Create button with connection info
+                    disconnect_button = QPushButton()
+                    # Make button smaller
+                    disconnect_button.setMaximumHeight(20)
+                    font = disconnect_button.font()
+                    font.setPointSize(8)
+                    disconnect_button.setFont(font)
+                    print("conn",connections)
+                    button_text =  "Disconnect "+ ("/".join(connections))
+                    # Get connection info for both sides
+                    # try:
+                    #     connected_to = []
+                    #     for side in ["crateSide", "detSide"]:
+                    #         response = requests.post(
+                    #             f"{self.dbEndpointLE.text()}/snapshot",
+                    #             json={"cable": module.get("moduleName", ""), "side": side}
+                    #         )
+                    #         if response.status_code == 200:
+                    #             snapshot = response.json()
+                    #             for line in snapshot:
+                    #                 if snapshot[line]["connections"]:
+                    #                     conn = snapshot[line]["connections"][-1]
+                    #                     connected_to.append(conn["cable"])
+                        
+                    #     # Create button text with connections
+                    #     if connected_to:
+                    #         button_text = f"Disconnect from: {', '.join(set(connected_to))}"
+                    #     else:
+                    #         button_text = "Disconnect"
+                    # except:
+                    #     button_text = "Disconnect"
+                    
+                    disconnect_button.setText(button_text)
+                    disconnect_button.clicked.connect(lambda checked, m=module.get("moduleName", ""): self.disconnect_module(m))
+                    
+                    layout.addWidget(disconnect_button)
+                    self.treeWidget.setItemWidget(item, 5, container)
+                
                 item.setText(7, module.get("mounted_on", ""))
                 
             # Resize columns to content
@@ -1003,6 +1063,58 @@ class MainApp(integration_gui.Ui_MainWindow):
                 
         except Exception as e:
             self.log_output(f"Error filtering modules: {str(e)}")
+
+    def disconnect_module(self, module_id):
+        """Disconnect all connections for a module"""
+        try:
+            self.log_output(f"Disconnecting module: {module_id}")
+            
+            # Get module data directly from the API
+            response = requests.get(self.get_api_url(f'modules/{module_id}'))
+            if response.status_code != 200:
+                raise Exception(f"Failed to get module data: {response.status_code}")
+                
+            module_data = response.json()
+            crate_side = module_data.get("crateSide", {})
+            
+            # Get unique cables from crateSide connections
+            # Each line in crateSide contains a list where first element is the cable name
+            connected_cables = set()
+            for line_connections in crate_side.values():
+                if line_connections and len(line_connections) > 0:
+                    connected_cables.add(line_connections[0])
+            
+            if not connected_cables:
+                self.log_output(f"No connections found for module {module_id}")
+                return
+                
+            self.log_output(f"Found connections to disconnect: {connected_cables}")
+            
+            # Disconnect each cable
+            for cable in connected_cables:
+                data = {
+                    "cable1": module_id,
+                    "cable2": cable
+                }
+                
+                success, result = self.make_api_request(
+                    endpoint="disconnect",
+                    method="POST",
+                    data=data
+                )
+                
+                if success:
+                    self.log_output(f"Successfully disconnected {cable}")
+                else:
+                    self.log_output(f"Failed to disconnect {cable}")
+            
+            # Update the display
+            self.update_module_list()
+            self.update_connection_status()
+            
+        except Exception as e:
+            self.log_output(f"Error disconnecting module: {str(e)}")
+            self.show_error_dialog(f"Failed to disconnect module: {str(e)}")
 
     def select_module(self):
         """Handle module selection from inventory"""
@@ -1020,18 +1132,6 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Enable/disable unmount button based on mounted status
         self.unmountPB.setEnabled(bool(mounted_on))
-        
-        # Load module details in the background
-        try:
-            response = requests.get(self.get_api_url(f'modules/{module_id}'))
-            if response.status_code == 200:
-                module_data = response.json()
-                self.current_module_id = module_id
-                self.populate_details_tree(module_data)
-            else:
-                self.log_output(f"Error fetching module details: {response.text}")
-        except Exception as e:
-            self.log_output(f"Error loading module details: {str(e)}")
         
         # Switch to first tab
         self.tabWidget.setCurrentIndex(0)
@@ -1192,24 +1292,13 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def setup_module_details_tab(self):
         """Setup the module details tab"""
-        # Create main layout
-        layout = QVBoxLayout(self.moduleDetailsTab)
-        
-        # Add tree widget for hierarchical display
-        self.detailsTree = QTreeWidget()
+        # Set up tree widget
         self.detailsTree.setHeaderLabels(['Field', 'Value'])
         self.detailsTree.setColumnWidth(0, 200)
-        layout.addWidget(self.detailsTree)
         
-        # Add edit button
-        self.editDetailsButton = QPushButton("Edit Selected")
+        # Connect buttons
         self.editDetailsButton.clicked.connect(self.edit_selected_detail)
-        layout.addWidget(self.editDetailsButton)
-        
-        # Add save button
-        self.saveDetailsButton = QPushButton("Save Changes")
         self.saveDetailsButton.clicked.connect(self.save_module_details)
-        layout.addWidget(self.saveDetailsButton)
 
     def populate_details_tree(self, data, parent=None):
         """Recursively populate the details tree with module data"""
@@ -1344,21 +1433,8 @@ class MainApp(integration_gui.Ui_MainWindow):
             return
         
         module_id = selected_items[0].text(0)  # Get module name
-        self.current_module_id = module_id
-        
-        try:
-            # Get module details from DB
-            print("Debug", self.get_api_url(f'modules/{module_id}'))
-            response = requests.get(self.get_api_url(f'modules/{module_id}'))
-            if response.status_code == 200:
-                module_data = response.json()
-                self.populate_details_tree(module_data)
-                self.tabWidget.setCurrentWidget(self.moduleDetailsTab)
-            else:
-                self.log_output(f"Error fetching module details: {response.text}")
-            
-        except Exception as e:
-            self.log_output(f"Error viewing module details: {str(e)}")
+        self.moduleLE.setText(module_id)  # This will trigger load_module_details
+        self.tabWidget.setCurrentWidget(self.moduleDetailsTab)
 
     def setup_inventory_buttons(self):
         """Setup buttons for inventory tab"""
@@ -1578,6 +1654,25 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Check if this module ID exists in mounted_modules values
         is_mounted = any(module_id == mounted_id for mounted_id in self.mounted_modules.values())
         self.unmountPB.setEnabled(is_mounted)
+
+    def load_module_details(self):
+        """Load module details in the background when module ID changes"""
+        module_id = self.moduleLE.text()
+        if not module_id:
+            self.moduleNameLabel.setText("")
+            return
+            
+        try:
+            response = requests.get(self.get_api_url(f'modules/{module_id}'))
+            if response.status_code == 200:
+                module_data = response.json()
+                self.current_module_id = module_id
+                self.moduleNameLabel.setText(module_id)
+                self.populate_details_tree(module_data)
+            else:
+                self.log_output(f"Error fetching module details: {response.text}")
+        except Exception as e:
+            self.log_output(f"Error loading module details: {str(e)}")
 
 def main():
     app = QApplication(sys.argv)

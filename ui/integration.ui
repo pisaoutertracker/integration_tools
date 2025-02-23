@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>823</width>
-    <height>865</height>
+    <height>909</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -88,8 +88,8 @@
            <widget class="QGraphicsView" name="graphicsView">
             <property name="minimumSize">
              <size>
-              <width>500</width>
-              <height>500</height>
+              <width>400</width>
+              <height>400</height>
              </size>
             </property>
            </widget>
@@ -868,6 +868,23 @@
         <string>Module Details</string>
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_8">
+        <item>
+         <widget class="QLabel" name="moduleNameLabel">
+          <property name="font">
+           <font>
+            <pointsize>14</pointsize>
+            <weight>75</weight>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
         <item>
          <widget class="QTreeWidget" name="detailsTree">
           <property name="columnCount">
