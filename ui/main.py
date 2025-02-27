@@ -61,9 +61,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.setupUi(window)    
         
         # Set stretch factors for the main grid layout to make left side expand more
-        grid_layout = self.tab.layout()
-        grid_layout.setColumnStretch(0, 2)  # Left column gets 2 parts
-        grid_layout.setColumnStretch(1, 1)  # Right column gets 1 part
+#        grid_layout = self.tab.layout()
+#        grid_layout.setColumnStretch(0, 2)  # Left column gets 2 parts
+#        grid_layout.setColumnStretch(1, 1)  # Right column gets 1 part
         
         # Set up square aspect ratio for graphics view
         self.graphicsView.setMinimumSize(300, 300)
@@ -421,8 +421,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.log_output("Connected to MQTT server")
                 mqtt_topic = self.mqttTopicLE.text()
                 self.log_output(f"Subscribing to topic: {mqtt_topic}")
-                client.subscribe(mqtt_topic)
-                client.subscribe("/air/status")
+                client.subscribe([("/air/status", 0), (mqtt_topic, 0)])
             else:
                 self.log_output(f"MQTT Connection failed with code {rc}")
         except Exception as e:
@@ -867,29 +866,54 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         def handle_dark_test(success, stdout, stderr):
             if success:
-                self.hvONTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
-                self.hvONTestCB.setChecked(True)
-                
-                # Try to parse noise values from output
                 try:
-                    # Update results label with the output
-#                   noise_text = "<html><head/><body><p>Noise:</p>"
-                    
-                    # Look for MPA and SSA noise values in the output
- #                  mpa_noise = "0.0"
- #                  ssa_noise = "0.0"
-                    
-  #                 for line in stdout.split('\n'):
-   #                    if "MPA noise:" in line:
-    #                       mpa_noise = line.split(":")[-1].strip()
-     #                  elif "SSA noise:" in line:
-      #                     ssa_noise = line.split(":")[-1].strip()
-                    
-       #            noise_text += f"<p>MPA: {mpa_noise}</p>"
-        #           noise_text += f"<p>SSA: {ssa_noise}</p>"
-         #          noise_text += "</body></html>"
-                    
-                    self.resultsLabel.setText(noise_text[:20])
+                    self.hvONTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
+                    self.hvONTestCB.setChecked(True)
+                    #{"message": "Entry created", "moduleTestAnalysisName": "Module_PS_26_IPG-10005_Run_run590_Result_Test7"}
+                    moduleTestAnalysisName=re.search(r".*moduleTestAnalysisName\": \"(.*?)\"}", stdout).group(1)
+                    #query DB from  http://....:5000/module_test_analysis endpoint
+                    #get the result from the DB
+                    analysisData=self.make_api_request("module_test_analysis/"+moduleTestAnalysisName, "GET")
+                    if analysisData[0]:
+                        print(analysisData[1])
+                        res={}
+                        for k in analysisData[1]["analysisSummary"].keys():
+                            print(k)
+                            if "Average" in k:
+                                chip=k.split("_")[-1]
+                                hybrid=int(k.split("_")[-2][1:]) % 2
+                                res[(hybrid,chip)]=analysisData[1]["analysisSummary"][k]
+                                                                
+                        noise_text = "<html><head/><body><p>Noise:</p>"
+                        noise_text += "<table border=1>"
+                        noise_text += "<tr><th></th><th>Hybrid 0</th><th>Hybrid 1</th></tr>"
+                        noise_text += "<tr><td>SSA</td><td>%2.2f</td><td>%2.2f</td></tr>"%(res[(0,"SSA")],res[(1,"SSA")])
+                        noise_text += "<tr><td>MPA</td><td>%2.2f</td><td>%2.2f</td></tr>"%(res[(0,"MPA")],res[(1,"MPA")])
+                        noise_text += "</body></html>"
+                        print(noise_text)
+                        self.resultsLabel.setText(noise_text)
+                        #ensure label is redrawn
+                        self.resultsLabel.repaint()
+                        self.resultsLabel.setToolTip(str(analysisData[1]["analysisSummary"]))
+                    # Try to parse noise values from output
+                        # Update results label with the output
+    #                   noise_text = "<html><head/><body><p>Noise:</p>"
+                        
+                        # Look for MPA and SSA noise values in the output
+    #                  mpa_noise = "0.0"
+    #                  ssa_noise = "0.0"
+                        
+    #                 for line in stdout.split('\n'):
+    #                    if "MPA noise:" in line:
+        #                       mpa_noise = line.split(":")[-1].strip()
+        #                  elif "SSA noise:" in line:
+        #                     ssa_noise = line.split(":")[-1].strip()
+                        
+        #            noise_text += f"<p>MPA: {mpa_noise}</p>"
+            #           noise_text += f"<p>SSA: {ssa_noise}</p>"
+            #          noise_text += "</body></html>"
+                        
+              #      self.resultsLabel.setText(noise_text[:20])
                 except Exception as e:
                     self.log_output(f"Error parsing test results: {e}")
                     
