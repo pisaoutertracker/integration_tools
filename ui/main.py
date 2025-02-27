@@ -1960,6 +1960,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Try to load the content into text browser
         try:
             self.resultsBrowser.setSource(QUrl(url))
+            self.resultsBrowser.reload()
             self.log_output(f"Loading results from: {url}")
         except Exception as e:
             self.resultsBrowser.setHtml(f"""
