@@ -508,9 +508,9 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def on_mqtt_message(self, client, userdata, msg):
         """Handle MQTT messages with error protection"""
-        print(msg.topic)
+#        print(msg.topic)
         if msg.topic == "/air/status":
-            print(msg.payload)
+ #           print(msg.payload)
             if int(msg.payload)==1:
                 self.airLed.setStyleSheet("background-color: green;")
             else:
@@ -952,6 +952,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.lightOnCommandLE.text()))
+        self.log_worker = CommandWorker("konsole -e tail -f /home/thermal/BurnIn_moduleTest/logs/Ph2_ACF.log")
         self.current_worker.finished.connect(handle_light_on)
      #   self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
@@ -969,6 +970,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
         
         self.current_worker.start()
+        self.log_worker.start()
 
     def run_dark_test(self):
         """Run Dark Test"""
