@@ -293,7 +293,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.airOFFPB.clicked.connect(lambda: self.control_air(False))
         
         # Connect test results button
-        self.pushButton.clicked.connect(self.show_test_results)
+        self.showPB.clicked.connect(self.show_test_results)
+        
         
         # Store max temperature
         self.max_temperature = 0.0
@@ -305,6 +306,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.current_session_operator = None
         self.current_session_comments = None
         self.current_module_id = None
+        self.pbstatus={}
            #define test session for DB
 #         session = {
 #             "operator": self.BI_Operator_line.text(),
@@ -318,7 +320,25 @@ class MainApp(integration_gui.Ui_MainWindow):
 # #                        "status": "Open" #to be implemented
 #             "modulesList": [],
 #                 }
- 
+    def disable_test_pbs(self):
+        self.pbstatus ={
+            self.checkIDPB: self.checkIDPB.isEnabled(),
+            self.hvOFFTestPB: self.hvOFFTestPB.isEnabled(),
+            self.hvONTestPB: self.hvONTestPB.isEnabled(),
+        }
+        self.checkIDPB.setEnabled(False)
+        self.hvOFFTestPB.setEnabled(False)
+        self.hvONTestPB.setEnabled(False)
+        self.cancelPB.setEnabled(True)
+
+    def reset_test_pbs(self):
+        print("Resetting test PBs")
+        print(self.pbstatus)
+        for pb, status in self.pbstatus.items():
+            pb.setEnabled(status)
+        self.cancelPB.setEnabled(False)
+
+
     def new_session(self):
         session={
             "operator": self.operatorLE.text(),
@@ -871,16 +891,19 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.checkIDCommandLE.text()))
         self.current_worker.finished.connect(handle_check_id)
+        self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
-
-        self.waiting_dialog = QMessageBox()
-        self.waiting_dialog.setWindowTitle("Checking ID")
-        self.waiting_dialog.setText("Wait while checking module ID")
-        #add Cancel
-        self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
-        self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
-        self.waiting_dialog.show()
-        self.current_worker.finished.connect(self.waiting_dialog.accept)
+        self.disable_test_pbs()
+        self.cancelPB.clicked.connect(self.current_worker.terminate)
+        self.cancelPB.clicked.connect(self.reset_test_pbs)
+        # self.waiting_dialog = QMessageBox()
+        # self.waiting_dialog.setWindowTitle("Checking ID")
+        # self.waiting_dialog.setText("Wait while checking module ID")
+        # #add Cancel
+        # self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
+        # self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
+        # self.waiting_dialog.show()
+        #self.current_worker.finished.connect(self.waiting_dialog.accept)
 
         self.current_worker.start()
 
@@ -926,16 +949,19 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.lightOnCommandLE.text()))
         self.current_worker.finished.connect(handle_light_on)
+        self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
-        
-        self.waiting_dialog = QMessageBox()
-        self.waiting_dialog.setWindowTitle("Running Ph2_ACF")
-        self.waiting_dialog.setText("test with lights on")
-        #self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
-        self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
-        self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
-        self.waiting_dialog.show()
-        self.current_worker.finished.connect(self.waiting_dialog.accept)
+        self.disable_test_pbs()
+        self.cancelPB.clicked.connect(self.current_worker.terminate)
+        self.cancelPB.clicked.connect(self.reset_test_pbs)   
+        # self.waiting_dialog = QMessageBox()
+        # self.waiting_dialog.setWindowTitle("Running Ph2_ACF")
+        # self.waiting_dialog.setText("test with lights on")
+        # #self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        # self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
+        # self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
+        # self.waiting_dialog.show()
+        # self.current_worker.finished.connect(self.waiting_dialog.accept)
 
         
         self.current_worker.start()
@@ -1007,20 +1033,25 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.darkTestCommandLE.text()))
         self.current_worker.finished.connect(handle_dark_test)
+        self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
+        self.disable_test_pbs()
+        self.cancelPB.clicked.connect(self.current_worker.terminate)
+        self.cancelPB.clicked.connect(self.reset_test_pbs)
+        
         self.log_worker = CommandWorker("konsole -e tail -f /home/thermal/BurnIn_moduleTest/logs/Ph2_ACF.log")
         
         
 
                                             
-        self.waiting_dialog = QMessageBox()
-        self.waiting_dialog.setWindowTitle("Running Ph2_ACF")
-        self.waiting_dialog.setText("test with modules in dark")
-        #self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
-        self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
-        self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
-        self.waiting_dialog.show()
-        self.current_worker.finished.connect(self.waiting_dialog.accept)
+        # self.waiting_dialog = QMessageBox()
+        # self.waiting_dialog.setWindowTitle("Running Ph2_ACF")
+        # self.waiting_dialog.setText("test with modules in dark")
+        # #self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        # self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
+        # self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
+        # self.waiting_dialog.show()
+        # self.current_worker.finished.connect(self.waiting_dialog.accept)
         self.current_worker.finished.connect(self.log_worker.quit)
 
         self.current_worker.start()
