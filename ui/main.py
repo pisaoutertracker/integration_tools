@@ -32,7 +32,7 @@ from caenGUI import CAENControl
 
 import webbrowser
 import os.path
-
+import re
 # Add this class near the top of the file
 class LogEmitter(QObject):
     """Helper class to emit log messages from any thread"""
@@ -422,6 +422,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 mqtt_topic = self.mqttTopicLE.text()
                 self.log_output(f"Subscribing to topic: {mqtt_topic}")
                 client.subscribe(mqtt_topic)
+                client.subscribe("/air/status")
             else:
                 self.log_output(f"MQTT Connection failed with code {rc}")
         except Exception as e:
@@ -438,7 +439,13 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def on_mqtt_message(self, client, userdata, msg):
         """Handle MQTT messages with error protection"""
-        try:
+        if msg.topic == "/air/status":
+            if msg.payload=="1":
+                self.airLed.setStyleSheet("background-color: green;")
+            else:
+                self.airLed.setStyleSheet("background-color: red;")
+        else:
+          try:
             flo_arr = [
                 struct.unpack("f", msg.payload[i : i + 4])[0]
                 for i in range(0, len(msg.payload), 4)
@@ -477,7 +484,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             
             self.canvas.draw()
             
-        except Exception as e:
+          except Exception as e:
             self.log_output(f"MQTT Message Error: {str(e)}")
 
     def split_ring_and_position(self):
@@ -790,7 +797,10 @@ class MainApp(integration_gui.Ui_MainWindow):
                 try:
                     # Assuming output format contains "Module ID: XXXX"
                     print(stdout)
-                    module_id = stdout.split("Module ID:")[1].strip().split()[0]
+        #            module_id = stdout.split("Module ID:")[1].strip().split()[0]
+        #            self.checkIDlabel.setText(f"ID: {module_id}")
+                    module_id = re.search(r"Board.*Module (.*?)\s\(", stdout).group(1).strip()
+                    print(re.search(r"Module (.*?)\s\(", stdout))
                     self.checkIDlabel.setText(f"ID: {module_id}")
                 except:
                     self.log_output("Could not parse module ID from output")
@@ -803,6 +813,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.checkIDCommandLE.text()))
         self.current_worker.finished.connect(handle_check_id)
+        self.current_worker.finished.connect(self.handle_command_finished) 
         self.current_worker.start()
 
     def run_light_on_test(self):
@@ -814,7 +825,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.hvOFFTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
                 self.hvOFFTestCB.setChecked(True)
                 self.hvONTestPB.setEnabled(True)  # Enable test 3
-                self.resultsLabel.setText(stdout)
+                self.resultsLabel.setText(stdout[:20])
                 # # Try to parse noise values from output
                 # try:
                 #     # Update results label with the output
@@ -847,6 +858,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.lightOnCommandLE.text()))
         self.current_worker.finished.connect(handle_light_on)
+        self.current_worker.finished.connect(self.handle_command_finished) 
         self.current_worker.start()
 
     def run_dark_test(self):
@@ -861,23 +873,23 @@ class MainApp(integration_gui.Ui_MainWindow):
                 # Try to parse noise values from output
                 try:
                     # Update results label with the output
-                    noise_text = "<html><head/><body><p>Noise:</p>"
+#                   noise_text = "<html><head/><body><p>Noise:</p>"
                     
                     # Look for MPA and SSA noise values in the output
-                    mpa_noise = "0.0"
-                    ssa_noise = "0.0"
+ #                  mpa_noise = "0.0"
+ #                  ssa_noise = "0.0"
                     
-                    for line in stdout.split('\n'):
-                        if "MPA noise:" in line:
-                            mpa_noise = line.split(":")[-1].strip()
-                        elif "SSA noise:" in line:
-                            ssa_noise = line.split(":")[-1].strip()
+  #                 for line in stdout.split('\n'):
+   #                    if "MPA noise:" in line:
+    #                       mpa_noise = line.split(":")[-1].strip()
+     #                  elif "SSA noise:" in line:
+      #                     ssa_noise = line.split(":")[-1].strip()
                     
-                    noise_text += f"<p>MPA: {mpa_noise}</p>"
-                    noise_text += f"<p>SSA: {ssa_noise}</p>"
-                    noise_text += "</body></html>"
+       #            noise_text += f"<p>MPA: {mpa_noise}</p>"
+        #           noise_text += f"<p>SSA: {ssa_noise}</p>"
+         #          noise_text += "</body></html>"
                     
-                    self.resultsLabel.setText(noise_text)
+                    self.resultsLabel.setText(noise_text[:20])
                 except Exception as e:
                     self.log_output(f"Error parsing test results: {e}")
                     
@@ -890,6 +902,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.darkTestCommandLE.text()))
         self.current_worker.finished.connect(handle_dark_test)
+        self.current_worker.finished.connect(self.handle_command_finished) 
         self.current_worker.start()
 
     def disconnect_connection(self, cable_id, port):
@@ -1761,12 +1774,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         command = self.airCommandLE.text().format(airOn="1" if turn_on else "0")
         
         def handle_air_result(success, stdout, stderr):
-            if success:
-                self.airLed.setStyleSheet("background-color: rgb(85, 170, 0);" if turn_on else "background-color: red;")
-            else:
-                self.log_output(f"Air control error: {stderr}")
-                self.airLed.setStyleSheet("background-color: red;")
-        
+            pass
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(command)
