@@ -138,7 +138,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Initialize mounted modules dict
         self.mounted_modules = {}
-        
+        self.analysisURL=""
         fibers=["SfibA","SfibB"]
         powers=["BINT1"]
         self.layers_to_filters = {
@@ -950,6 +950,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                     analysisData=self.make_api_request("module_test_analysis/"+moduleTestAnalysisName, "GET")
                     if analysisData[0]:
                         print(analysisData[1])
+                        self.analysisURL=analysisData[1]["analysisFile"]
                         res={}
                         for k in analysisData[1]["analysisSummary"].keys():
                             print(k)
@@ -1925,15 +1926,16 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def open_results_in_browser(self):
         """Open test results in system default browser"""
-        url = self.resultsUrlLE.text()
-        if url.startswith('file:'):
-            url = url.replace('file:', '', 1)
-            url = os.path.abspath(url)
-            url = f'file://{url}'
-        elif not url.startswith('http://') and not url.startswith('https://'):
-            url = os.path.abspath(url)
-            url = f'file://{url}'
-        webbrowser.open(url)
+#       self.analysisUrl
+#       url = self.resultsUrlLE.text()
+#       if url.startswith('file:'):
+#           url = url.replace('file:', '', 1)
+#           url = os.path.abspath(url)
+#           url = f'file://{url}'
+#       elif not url.startswith('http://') and not url.startswith('https://'):
+#           url = os.path.abspath(url)
+#           url = f'file://{url}'
+        webbrowser.open(self.analysisURL)
 
 def main():
     app = QApplication(sys.argv)

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>823</width>
-    <height>909</height>
+    <width>826</width>
+    <height>1038</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -503,71 +503,6 @@ MPA: 2.36&lt;br&gt;
                </widget>
               </item>
               <item>
-               <layout class="QHBoxLayout" name="horizontalLayout_5">
-                <item>
-                 <widget class="QPushButton" name="hvOnButton">
-                  <property name="minimumSize">
-                   <size>
-                    <width>0</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="text">
-                   <string>HV ON</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="hvOffButton">
-                  <property name="minimumSize">
-                   <size>
-                    <width>0</width>
-                    <height>0</height>
-                   </size>
-                  </property>
-                  <property name="text">
-                   <string>HV OFF</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLabel" name="hvLabel">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="minimumSize">
-                   <size>
-                    <width>0</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="text">
-                   <string>0.0</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QFrame" name="hvLed">
-                  <property name="minimumSize">
-                   <size>
-                    <width>34</width>
-                    <height>34</height>
-                   </size>
-                  </property>
-                  <property name="styleSheet">
-                   <string>background-color: red;</string>
-                  </property>
-                  <property name="frameShape">
-                   <enum>QFrame::NoFrame</enum>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-              <item>
                <layout class="QHBoxLayout" name="horizontalLayout_4">
                 <item>
                  <widget class="QPushButton" name="lvOnButton">
@@ -616,6 +551,71 @@ MPA: 2.36&lt;br&gt;
                 </item>
                 <item>
                  <widget class="QFrame" name="lvLed">
+                  <property name="minimumSize">
+                   <size>
+                    <width>34</width>
+                    <height>34</height>
+                   </size>
+                  </property>
+                  <property name="styleSheet">
+                   <string>background-color: red;</string>
+                  </property>
+                  <property name="frameShape">
+                   <enum>QFrame::NoFrame</enum>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_5">
+                <item>
+                 <widget class="QPushButton" name="hvOnButton">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>30</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>HV ON</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="hvOffButton">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>HV OFF</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="hvLabel">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>30</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>0.0</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QFrame" name="hvLed">
                   <property name="minimumSize">
                    <size>
                     <width>34</width>
@@ -690,23 +690,6 @@ MPA: 2.36&lt;br&gt;
                  </widget>
                 </item>
                </layout>
-              </item>
-              <item>
-               <widget class="QWidget" name="caenWidget" native="true">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>60</width>
-                  <height>140</height>
-                 </size>
-                </property>
-                <layout class="QVBoxLayout" name="verticalLayout_2"/>
-               </widget>
               </item>
               <item>
                <widget class="QWidget" name="plotWidget" native="true">
