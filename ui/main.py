@@ -488,8 +488,10 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def on_mqtt_message(self, client, userdata, msg):
         """Handle MQTT messages with error protection"""
+        print(msg.topic)
         if msg.topic == "/air/status":
-            if msg.payload=="1":
+            print(msg.payload)
+            if int(msg.payload)==1:
                 self.airLed.setStyleSheet("background-color: green;")
             else:
                 self.airLed.setStyleSheet("background-color: red;")
