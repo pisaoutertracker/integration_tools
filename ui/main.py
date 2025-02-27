@@ -50,9 +50,15 @@ class CommandWorker(QThread):
     def run(self):
         try:
             expanded_command = self.command
+            #open spinning wheel dialog
             result = subprocess.run(expanded_command, shell=True, 
                                   capture_output=True, text=True)
             self.finished.emit(result.returncode == 0, result.stdout, result.stderr)
+            #create a waiting dialog
+            # Create a waiting dialog
+      
+            
+            
         except Exception as e:
             self.finished.emit(False, "", str(e))
 
@@ -772,7 +778,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         if self.current_worker:
             self.current_worker.finished.disconnect()
             self.current_worker = None
-
+    
+        
     def show_error_dialog(self, message):
         """Show error dialog with the given message"""
         msg = QMessageBox()
@@ -863,6 +870,14 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.current_worker = CommandWorker(self.expand_placeholders(self.checkIDCommandLE.text()))
         self.current_worker.finished.connect(handle_check_id)
         self.current_worker.finished.connect(self.handle_command_finished) 
+
+        self.waiting_dialog = QMessageBox()
+        self.waiting_dialog.setWindowTitle("Checking ID")
+        self.waiting_dialog.setText("Wait while checking module ID")
+        self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        self.waiting_dialog.show()
+        self.current_worker.finished.connect(self.waiting_dialog.accept)
+
         self.current_worker.start()
 
     def run_light_on_test(self):
@@ -908,6 +923,15 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.current_worker = CommandWorker(self.expand_placeholders(self.lightOnCommandLE.text()))
         self.current_worker.finished.connect(handle_light_on)
         self.current_worker.finished.connect(self.handle_command_finished) 
+        
+        self.waiting_dialog = QMessageBox()
+        self.waiting_dialog.setWindowTitle("Running Ph2_ACF")
+        self.waiting_dialog.setText("test with lights on")
+        self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        self.waiting_dialog.show()
+        self.current_worker.finished.connect(self.waiting_dialog.accept)
+
+        
         self.current_worker.start()
 
     def run_dark_test(self):
@@ -977,7 +1001,21 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.current_worker = CommandWorker(self.expand_placeholders(self.darkTestCommandLE.text()))
         self.current_worker.finished.connect(handle_dark_test)
         self.current_worker.finished.connect(self.handle_command_finished) 
+        self.log_worker = CommandWorker("konsole -e tail -f /home/thermal/BurnIn_moduleTest/logs/Ph2_ACF.log")
+        
+        
+
+                                            
+        self.waiting_dialog = QMessageBox()
+        self.waiting_dialog.setWindowTitle("Running Ph2_ACF")
+        self.waiting_dialog.setText("test with modules in dark")
+        self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        self.waiting_dialog.show()
+        self.current_worker.finished.connect(self.waiting_dialog.accept)
+        self.current_worker.finished.connect(self.log_worker.quit)
+
         self.current_worker.start()
+        self.log_worker.start()
 
     def disconnect_connection(self, cable_id, port):
         """Disconnect a cable's detSide connections"""
