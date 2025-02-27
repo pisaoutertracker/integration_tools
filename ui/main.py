@@ -320,7 +320,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 # #                        "status": "Open" #to be implemented
 #             "modulesList": [],
 #                 }
-    def disable_test_pbs(self):
+    def disable_test_pbs_enable_cancel(self):
         self.pbstatus ={
             self.checkIDPB: self.checkIDPB.isEnabled(),
             self.hvOFFTestPB: self.hvOFFTestPB.isEnabled(),
@@ -330,6 +330,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.hvOFFTestPB.setEnabled(False)
         self.hvONTestPB.setEnabled(False)
         self.cancelPB.setEnabled(True)
+            
 
     def reset_test_pbs(self):
         print("Resetting test PBs")
@@ -895,9 +896,10 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.current_worker.finished.connect(handle_check_id)
         #self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
-        self.disable_test_pbs()
+        self.disable_test_pbs_enable_cancel()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
         self.cancelPB.clicked.connect(self.reset_test_pbs)
+
         # self.waiting_dialog = QMessageBox()
         # self.waiting_dialog.setWindowTitle("Checking ID")
         # self.waiting_dialog.setText("Wait while checking module ID")
@@ -943,12 +945,16 @@ class MainApp(integration_gui.Ui_MainWindow):
                 #     self.resultsLabel.setText(noise_text)
                 # except Exception as e:
                 #     self.log_output(f"Error parsing test results: {e}")
-                    
+                self.log_worker.terminate()        
             else:
                 self.hvOFFTestLED.setStyleSheet("background-color: red;")
                 self.hvOFFTestCB.setChecked(False)
                 self.log_output(f"Light on test error: {stderr}")
                 self.reset_test_pbs()
+            
+
+
+
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.lightOnCommandLE.text()))
@@ -956,7 +962,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.current_worker.finished.connect(handle_light_on)
      #   self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
-        self.disable_test_pbs()
+        self.disable_test_pbs_enable_cancel()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
         self.cancelPB.clicked.connect(self.reset_test_pbs)   
         # self.waiting_dialog = QMessageBox()
@@ -1029,6 +1035,7 @@ class MainApp(integration_gui.Ui_MainWindow):
               #      self.resultsLabel.setText(noise_text[:20])
                 except Exception as e:
                     self.log_output(f"Error parsing test results: {e}")
+                self.log_worker.terminate()
                     
             else:
                 self.hvONTestLED.setStyleSheet("background-color: red;")
@@ -1042,7 +1049,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.current_worker.finished.connect(handle_dark_test)
   #      self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
-        self.disable_test_pbs()
+        self.disable_test_pbs_enable_cancel()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
         self.cancelPB.clicked.connect(self.reset_test_pbs)
         
@@ -1059,7 +1066,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         # self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
         # self.waiting_dialog.show()
         # self.current_worker.finished.connect(self.waiting_dialog.accept)
-        self.current_worker.finished.connect(self.log_worker.quit)
+        #self.current_worker.finished.connect(self.log_worker.quit)
 
         self.current_worker.start()
         self.log_worker.start()
