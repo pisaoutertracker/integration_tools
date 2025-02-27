@@ -869,6 +869,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         def handle_check_id(success, stdout, stderr):
             if success:
                 self.checkIDLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
+
+                self.checkIDPB.setEnabled(True)
                 self.hvOFFTestPB.setEnabled(True)  # Enable test 2
                 
                 # Try to parse module ID from output
@@ -886,12 +888,12 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.checkIDLED.setStyleSheet("background-color: red;")
                 self.hvOFFTestPB.setEnabled(False)  
                 self.hvONTestPB.setEnabled(False)
-        
+                self.reset_test_pbs()
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.checkIDCommandLE.text()))
         self.current_worker.finished.connect(handle_check_id)
-        self.current_worker.finished.connect(self.reset_test_pbs)
+        #self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
         self.disable_test_pbs()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
@@ -915,6 +917,8 @@ class MainApp(integration_gui.Ui_MainWindow):
             if success:
                 self.hvOFFTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
                 self.hvOFFTestCB.setChecked(True)
+                self.checkIDPB.setEnabled(True)
+                self.hvOFFTestPB.setEnabled(True)  # Enable test 2
                 self.hvONTestPB.setEnabled(True)  # Enable test 3
                 self.resultsLabel.setText(stdout[:20])
                 # # Try to parse noise values from output
@@ -944,12 +948,12 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.hvOFFTestLED.setStyleSheet("background-color: red;")
                 self.hvOFFTestCB.setChecked(False)
                 self.log_output(f"Light on test error: {stderr}")
-        
+                self.reset_test_pbs()
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.lightOnCommandLE.text()))
         self.current_worker.finished.connect(handle_light_on)
-        self.current_worker.finished.connect(self.reset_test_pbs)
+     #   self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
         self.disable_test_pbs()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
@@ -1028,12 +1032,13 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.hvONTestLED.setStyleSheet("background-color: red;")
                 self.hvONTestCB.setChecked(False)
                 self.log_output(f"Dark test error: {stderr}")
-        
+                self.reset_test_pbs()
+
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.darkTestCommandLE.text()))
         self.current_worker.finished.connect(handle_dark_test)
-        self.current_worker.finished.connect(self.reset_test_pbs)
+  #      self.current_worker.finished.connect(self.reset_test_pbs)
         self.current_worker.finished.connect(self.handle_command_finished) 
         self.disable_test_pbs()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
