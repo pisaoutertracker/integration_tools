@@ -33,6 +33,7 @@ from caenGUI import CAENControl
 import webbrowser
 import os.path
 import re
+from datetime import datetime
 # Add this class near the top of the file
 class LogEmitter(QObject):
     """Helper class to emit log messages from any thread"""
@@ -294,6 +295,49 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Connect open in browser button
         self.openInBrowserPB.clicked.connect(self.open_results_in_browser)
 
+        self.current_session = None
+        self.current_session_operator = None
+        self.current_session_comments = None
+        self.current_module_id = None
+           #define test session for DB
+#         session = {
+#             "operator": self.BI_Operator_line.text(),
+#             "timestamp": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+#                     "description": self.SeshDescription_db.text(),
+#             "temperatures": {
+#                 "low": self.BI_LowTemp_dsb.value(),
+#                     "high": self.BI_HighTemp_dsb.value(),
+#                     },
+#                         "nCycles": self.BI_NCycles_sb.value(),
+# #                        "status": "Open" #to be implemented
+#             "modulesList": [],
+#                 }
+ 
+    def new_session(self):
+        session={
+            "operator": self.operatorLE.text(),
+            "description": "INTEGRATION: "+self.commentsLE.text(),
+            "timestamp": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+            "modulesList": [ self.moduleLE.text() ],
+        }
+        #create new session in DB
+        success, result = self.make_api_request("sessions", "POST", session)    
+        self.current_session = result["sessionName"]
+        self.current_module_id = self.moduleLE.text()
+        self.current_session_operator = self.operatorLE.text()
+        self.current_session_comments = self.commentsLE.text()
+        print(self.current_session)
+        return self.current_session
+    
+    def get_session(self):
+        if self.current_session is None:
+            return self.new_session()
+        if self.current_session_operator != self.operatorLE.text() or self.current_session_comments != self.commentsLE.text():
+            return self.new_session()
+        if self.moduleLE.text() != self.current_module_id:
+            return self.new_session()
+        return self.current_session
+        
     def setup_thermal_plot(self):
         self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(8, 6))
         
@@ -687,6 +731,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             'fiber': self.fiberCB.currentText(),
             'power': self.powerCB.currentText(),
             'fiber_endpoint': self.fiber_endpoint,
+            'session': self.get_session(),
         }
 
     def expand_placeholders(self, text):
@@ -732,7 +777,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         """Show error dialog with the given message"""
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Warning)
-        msg.setText("API Error")
+        msg.setText("Error")
         msg.setInformativeText(message)
         msg.setWindowTitle("Error")
         msg.exec_()
@@ -753,7 +798,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 json=data if data else None
             )
                 
-            if response.status_code != 200:
+            if response.status_code != 200 and response.status_code != 201:
                 error_msg = f"API Error ({response.status_code}): {response.text}"
                 self.log_output(error_msg)
                 self.show_error_dialog(error_msg)
@@ -786,7 +831,12 @@ class MainApp(integration_gui.Ui_MainWindow):
     def run_check_id(self):
         """Run Check ID test"""
         self.log_output("=== Running Check ID ===")
-        
+        #check that operator, comment and module are not empty
+        if self.operatorLE.text()=="" or self.commentsLE.text()=="" or self.moduleLE.text()=="":
+            self.log_output("Operator, Comments and Module ID must be filled")
+            #open dialog
+            self.show_error_dialog("Operator, Comments and Module ID must be filled")
+            return
         def handle_check_id(success, stdout, stderr):
             if success:
                 self.checkIDLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
