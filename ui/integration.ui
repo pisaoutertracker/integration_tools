@@ -480,9 +480,6 @@ MPA: 2.36&lt;br&gt;
                </widget>
               </item>
               <item>
-               <widget class="QTextEdit" name="textEdit"/>
-              </item>
-              <item>
                <widget class="QPushButton" name="pushButton">
                 <property name="minimumSize">
                  <size>

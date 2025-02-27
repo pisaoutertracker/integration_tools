@@ -876,7 +876,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.waiting_dialog = QMessageBox()
         self.waiting_dialog.setWindowTitle("Checking ID")
         self.waiting_dialog.setText("Wait while checking module ID")
-        self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        #add Cancel
+        self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
+        self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
         self.waiting_dialog.show()
         self.current_worker.finished.connect(self.waiting_dialog.accept)
 
@@ -929,7 +931,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.waiting_dialog = QMessageBox()
         self.waiting_dialog.setWindowTitle("Running Ph2_ACF")
         self.waiting_dialog.setText("test with lights on")
-        self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        #self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
+        self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
         self.waiting_dialog.show()
         self.current_worker.finished.connect(self.waiting_dialog.accept)
 
@@ -1012,7 +1016,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.waiting_dialog = QMessageBox()
         self.waiting_dialog.setWindowTitle("Running Ph2_ACF")
         self.waiting_dialog.setText("test with modules in dark")
-        self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        #self.waiting_dialog.setStandardButtons(QMessageBox.NoButton)
+        self.waiting_dialog.setStandardButtons(QMessageBox.Cancel)
+        self.waiting_dialog.buttonClicked.connect(lambda button: self.current_worker.terminate())
         self.waiting_dialog.show()
         self.current_worker.finished.connect(self.waiting_dialog.accept)
         self.current_worker.finished.connect(self.log_worker.quit)
