@@ -489,6 +489,13 @@ MPA: 2.36&lt;br&gt;
                  </widget>
                 </item>
                 <item>
+                 <widget class="QPushButton" name="logsPB">
+                  <property name="text">
+                   <string>Ph2ACF logs</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
                  <widget class="QPushButton" name="showPB">
                   <property name="minimumSize">
                    <size>

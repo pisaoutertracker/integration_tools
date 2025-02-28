@@ -249,8 +249,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.hvONTestLED.setStyleSheet("background-color: rgb(255, 255, 0);")
         
         # Disable tests 2 and 3 initially
-        self.hvOFFTestPB.setEnabled(False)
-        self.hvONTestPB.setEnabled(False)
+#        self.hvOFFTestPB.setEnabled(False)
+#        self.hvONTestPB.setEnabled(False)
         
         # Track command workers
         self.current_worker = None
@@ -260,6 +260,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Connect module selection to reset test states
         self.selectModulePB.clicked.connect(self.reset_test_states)
+        
+        self.logsPB.clicked.connect(self.open_ph2acf_log)
 
         # Connect module ID changes to load details
         self.moduleLE.textChanged.connect(self.load_module_details)
@@ -890,12 +892,14 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.hvOFFTestPB.setEnabled(False)  
                 self.hvONTestPB.setEnabled(False)
                 self.reset_test_pbs()
+            self.handle_command_finished(success,stdout,stderr)
+
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.checkIDCommandLE.text()))
         self.current_worker.finished.connect(handle_check_id)
         #self.current_worker.finished.connect(self.reset_test_pbs)
-        self.current_worker.finished.connect(self.handle_command_finished) 
+        #self.current_worker.finished.connect(self.handle_command_finished) 
         self.disable_test_pbs_enable_cancel()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
         self.cancelPB.clicked.connect(self.reset_test_pbs)
@@ -945,12 +949,12 @@ class MainApp(integration_gui.Ui_MainWindow):
                 #     self.resultsLabel.setText(noise_text)
                 # except Exception as e:
                 #     self.log_output(f"Error parsing test results: {e}")
-                self.log_worker.terminate()        
             else:
                 self.hvOFFTestLED.setStyleSheet("background-color: red;")
                 self.hvOFFTestCB.setChecked(False)
                 self.log_output(f"Light on test error: {stderr}")
                 self.reset_test_pbs()
+            self.handle_command_finished(success,stdout,stderr)
             
 
 
@@ -958,10 +962,10 @@ class MainApp(integration_gui.Ui_MainWindow):
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.lightOnCommandLE.text()))
-        self.log_worker = CommandWorker("konsole -e tail -f /home/thermal/BurnIn_moduleTest/logs/Ph2_ACF.log")
+#        self.log_worker = CommandWorker("konsole -e tail -f /home/thermal/BurnIn_moduleTest/logs/Ph2_ACF.log")
         self.current_worker.finished.connect(handle_light_on)
      #   self.current_worker.finished.connect(self.reset_test_pbs)
-        self.current_worker.finished.connect(self.handle_command_finished) 
+#        self.current_worker.finished.connect(self.handle_command_finished) 
         self.disable_test_pbs_enable_cancel()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
         self.cancelPB.clicked.connect(self.reset_test_pbs)   
@@ -976,7 +980,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
         
         self.current_worker.start()
-        self.log_worker.start()
+#        self.log_worker.start()
 
     def run_dark_test(self):
         """Run Dark Test"""
@@ -987,6 +991,9 @@ class MainApp(integration_gui.Ui_MainWindow):
                 try:
                     self.hvONTestLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
                     self.hvONTestCB.setChecked(True)
+                    self.checkIDPB.setEnabled(True)
+                    self.hvOFFTestPB.setEnabled(True)  # Enable test 2
+                    self.hvONTestPB.setEnabled(True)  # Enable test 3
                     #{"message": "Entry created", "moduleTestAnalysisName": "Module_PS_26_IPG-10005_Run_run590_Result_Test7"}
                     moduleTestAnalysisName=re.search(r".*moduleTestAnalysisName\": \"(.*?)\"}", stdout).group(1)
                     #query DB from  http://....:5000/module_test_analysis endpoint
@@ -1014,46 +1021,27 @@ class MainApp(integration_gui.Ui_MainWindow):
                         #ensure label is redrawn
                         self.resultsLabel.repaint()
                         self.resultsLabel.setToolTip(str(analysisData[1]["analysisSummary"]))
-                    # Try to parse noise values from output
-                        # Update results label with the output
-    #                   noise_text = "<html><head/><body><p>Noise:</p>"
-                        
-                        # Look for MPA and SSA noise values in the output
-    #                  mpa_noise = "0.0"
-    #                  ssa_noise = "0.0"
-                        
-    #                 for line in stdout.split('\n'):
-    #                    if "MPA noise:" in line:
-        #                       mpa_noise = line.split(":")[-1].strip()
-        #                  elif "SSA noise:" in line:
-        #                     ssa_noise = line.split(":")[-1].strip()
-                        
-        #            noise_text += f"<p>MPA: {mpa_noise}</p>"
-            #           noise_text += f"<p>SSA: {ssa_noise}</p>"
-            #          noise_text += "</body></html>"
-                        
-              #      self.resultsLabel.setText(noise_text[:20])
                 except Exception as e:
                     self.log_output(f"Error parsing test results: {e}")
-                self.log_worker.terminate()
+#                self.log_worker.terminate()
                     
             else:
                 self.hvONTestLED.setStyleSheet("background-color: red;")
                 self.hvONTestCB.setChecked(False)
                 self.log_output(f"Dark test error: {stderr}")
                 self.reset_test_pbs()
+            self.handle_command_finished(success,stdout,stderr)
 
         if self.current_worker:
             self.current_worker.finished.disconnect()
         self.current_worker = CommandWorker(self.expand_placeholders(self.darkTestCommandLE.text()))
         self.current_worker.finished.connect(handle_dark_test)
   #      self.current_worker.finished.connect(self.reset_test_pbs)
-        self.current_worker.finished.connect(self.handle_command_finished) 
+        #self.current_worker.finished.connect(self.handle_command_finished) 
         self.disable_test_pbs_enable_cancel()
         self.cancelPB.clicked.connect(self.current_worker.terminate)
         self.cancelPB.clicked.connect(self.reset_test_pbs)
         
-        self.log_worker = CommandWorker("konsole -e tail -f /home/thermal/BurnIn_moduleTest/logs/Ph2_ACF.log")
         
         
 
@@ -1069,6 +1057,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         #self.current_worker.finished.connect(self.log_worker.quit)
 
         self.current_worker.start()
+    def open_ph2acf_log(self):
+        self.log_worker = CommandWorker("konsole -e tail -f /home/thermal/BurnIn_moduleTest/logs/Ph2_ACF.log")
         self.log_worker.start()
 
     def disconnect_connection(self, cable_id, port):
@@ -1220,9 +1210,9 @@ class MainApp(integration_gui.Ui_MainWindow):
                     module_speed = "10G"
                     
                 # Check hybrid details for speed
-                if module.get("children") is not None:
-                    if module.get("children").get("PS Read-out Hybrid") is not None:
-                        if module.get("children").get("PS Read-out Hybrid").get("details") is not None:
+                if isinstance(module.get("children"),dict) : # is not None:
+                    if isinstance(module.get("children").get("PS Read-out Hybrid"),dict):
+                        if isinstance(module.get("children").get("PS Read-out Hybrid").get("details"),dict):
                             if module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH") is not None:
                                 module_speed = module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH")
                                 if module_speed == "10Gbps":
@@ -1723,8 +1713,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.hvONTestCB.setChecked(False)
         
         # Disable tests 2 and 3
-        self.hvOFFTestPB.setEnabled(False)
-        self.hvONTestPB.setEnabled(False)
+#        self.hvOFFTestPB.setEnabled(False)
+#        self.hvONTestPB.setEnabled(False)
         
         # Clear ID label
         self.checkIDlabel.setText("ID:")
