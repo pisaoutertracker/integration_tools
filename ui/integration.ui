@@ -470,12 +470,7 @@
                  </size>
                 </property>
                 <property name="text">
-                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Noise:&lt;br&gt;SSA: 3.91&lt;br&gt;
-MPA: 2.45&lt;br&gt;
-SSA: 4.36&lt;br&gt;
-MPA: 2.36&lt;br&gt;
-&lt;/body&gt;&lt;/html&gt;
-</string>
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Noise:&lt;br/&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                 </property>
                </widget>
               </item>
