@@ -1402,6 +1402,10 @@ class MainApp(integration_gui.Ui_MainWindow):
             if ";" in power_id:
                 power_id_slot= power_id.split(";")[1]
                 power_id= power_id.split(";")[0]
+            fiber_id_slot=""
+            if ";" in fiber_id:
+                fiber_id_slot= fiber_id.split(";")[1]
+                fiber_id= fiber_id.split(";")[0]
             # Get power connections
             power_status = set()
             if power_id:
@@ -1413,7 +1417,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             # Get fiber connections
             fiber_status = set()
             if fiber_id:
-                det_endpoint, crate_endpoint = self.get_fiber_endpoints(fiber_id)
+                det_endpoint, crate_endpoint = self.get_fiber_endpoints(fiber_id,fiber_id_slot)
                 if det_endpoint and crate_endpoint:
                     fiber_status.add(f"{det_endpoint} <--> {crate_endpoint}")
                     self.fiber_endpoint = crate_endpoint
@@ -1444,7 +1448,10 @@ class MainApp(integration_gui.Ui_MainWindow):
             if ";" in power_id:
                 power_id_slot= power_id.split(";")[1]
                 power_id= power_id.split(";")[0]
-            
+            fiber_id_slot=""
+            if ";" in fiber_id:
+                fiber_id_slot= fiber_id.split(";")[1]
+                fiber_id= fiber_id.split(";")[0]         
             # Get power connection status
             if power_id:
                 det_endpoint, _ = self.get_power_endpoints(power_id,power_id_slot)
@@ -1458,7 +1465,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             
             # Get fiber connection status
             if fiber_id:
-                det_endpoint, _ = self.get_fiber_endpoints(fiber_id)
+                det_endpoint, _ = self.get_fiber_endpoints(fiber_id,fiber_id_slot)
                 if det_endpoint:
                     if self.check_connection_match(det_endpoint):
                         self.connectFiberLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
@@ -1470,13 +1477,16 @@ class MainApp(integration_gui.Ui_MainWindow):
         except Exception as e:
             self.log_output(f"Error updating LEDs: {str(e)}")
 
-    def get_fiber_endpoints(self, fiber_id):
+    def get_fiber_endpoints(self, fiber_id, fiber_id_slot):
         """Get both detSide and crateSide endpoints for a fiber connection"""
         try:
             # Get detSide path
+            data={"cable": fiber_id, "side": "detSide"}
+            if fiber_id_slot != "" :
+                data["port"]=fiber_id_slot
             det_response = requests.post(
                 f"{self.dbEndpointLE.text()}/snapshot",
-                json={"cable": fiber_id, "side": "detSide"}
+                json=data
             )
             if det_response.status_code != 200:
                 return None, None
