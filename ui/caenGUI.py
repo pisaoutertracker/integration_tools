@@ -103,14 +103,14 @@ class CAENControl(QObject):
     def __init__(self, ui):
         super().__init__()
         self.ui = ui
-        self.channels = ["BLV12", "HV012"]
+        self.channels = {"LV": "LV7_1", "HV": "HV0_11"}
         self.led = {
-            'BLV12': self.ui.lvLed,
-            'HV012': self.ui.hvLed
+            'LV': self.ui.lvLed,
+            'HV': self.ui.hvLed
         }
         self.label = {
-            'BLV12': self.ui.lvLabel,
-            'HV012': self.ui.hvLabel
+            'LV': self.ui.lvLabel,
+            'HV': self.ui.hvLabel
         }
         
         # Create query thread
@@ -119,15 +119,21 @@ class CAENControl(QObject):
         self.queryThread.error.connect(self.handle_query_error)
 
         # Connect buttons
-        self.ui.lvOnButton.clicked.connect(lambda: self.on('BLV12'))
-        self.ui.lvOffButton.clicked.connect(lambda: self.off('BLV12'))
-        self.ui.hvOnButton.clicked.connect(lambda: self.on('HV012'))
-        self.ui.hvOffButton.clicked.connect(lambda: self.off('HV012'))
+        self.ui.lvOnButton.clicked.connect(lambda: self.on(self.channels["LV"]))
+        self.ui.lvOffButton.clicked.connect(lambda: self.off( self.channels["LV"]   ))
+        self.ui.hvOnButton.clicked.connect(lambda: self.on(self.channels["HV"] ))
+        self.ui.hvOffButton.clicked.connect(lambda: self.off(self.channels["HV"] ))
 
         # Create timer for periodic update
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update)
         self.timer.start(2000)
+
+    def setLV(self,channel_name):
+        self.channels["LV"]=channel_name
+
+    def setHV(self,channel_name):
+        self.channels["HV"]=channel_name
 
     def __del__(self):
         """Cleanup when widget is destroyed"""
@@ -142,18 +148,18 @@ class CAENControl(QObject):
     def handle_query_response(self, data):
         """Handle the response from query thread"""
         try:
-            for channel in self.channels:
+            for hl,channel in self.channels.items():
                 if data['caen_'+channel+'_IsOn'] > 0.5:
-                    self.led[channel].setStyleSheet("background-color: green")
+                    self.led[hl].setStyleSheet("background-color: green")
                 else:
-                    self.led[channel].setStyleSheet("background-color: red")
-                if "HV" in channel :
-                    self.label[channel].setText(
+                    self.led[hl].setStyleSheet("background-color: red")
+                if hl=="HV":
+                    self.label[hl].setText(
                     f'V: {data["caen_"+channel+"_Voltage"]:3.1f}V '
                     f'C: {data["caen_"+channel+"_Current"]:2.1f}uA '
                 )
                 else:
-                    self.label[channel].setText(
+                    self.label[hl].setText(
                     f'V: {data["caen_"+channel+"_Voltage"]:2.1f}V '
                     f'C: {data["caen_"+channel+"_Current"]:1.1f}A '
                     f'P: {data["caen_"+channel+"_Voltage"]*data["caen_"+channel+"_Current"]:1.1f}W'
@@ -167,11 +173,13 @@ class CAENControl(QObject):
 
     @pyqtSlot()
     def on(self, channel):
+        print(f'TurnOn,PowerSupplyId:caen,ChannelId:{channel}')
         self.queryThread.setup_query(f'TurnOn,PowerSupplyId:caen,ChannelId:{channel}')
         self.queryThread.start()
 
     @pyqtSlot()
     def off(self, channel):
+        print(f'TurnOff,PowerSupplyId:caen,ChannelId:{channel}')
         self.queryThread.setup_query(f'TurnOff,PowerSupplyId:caen,ChannelId:{channel}')
         self.queryThread.start()
 

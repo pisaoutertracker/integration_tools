@@ -140,7 +140,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.mounted_modules = {}
         self.analysisURL=""
         fibers=["SfibA","SfibB"]
+        fibers+=[f"E3;{x}" for x in range(1,6)]
         powers=["BINT1"]
+        powers+=[f"P2;B{x}" for x in range(1,12)]
         self.layers_to_filters = {
             "L1_47": {
                 "spacer": "2.6mm",
@@ -1396,11 +1398,14 @@ class MainApp(integration_gui.Ui_MainWindow):
         try:
             power_id = self.powerCB.currentText()
             fiber_id = self.fiberCB.currentText()
-
+            power_id_slot=""
+            if ";" in power_id:
+                power_id_slot= power_id.split(";")[1]
+                power_id= power_id.split(";")[0]
             # Get power connections
             power_status = set()
             if power_id:
-                det_endpoint, crate_endpoints = self.get_power_endpoints(power_id)
+                det_endpoint, crate_endpoints = self.get_power_endpoints(power_id,power_id_slot)
                 if det_endpoint and crate_endpoints:
                     for crate_endpoint in crate_endpoints:
                         power_status.add(f"{det_endpoint} <--> {crate_endpoint}")
@@ -1435,10 +1440,14 @@ class MainApp(integration_gui.Ui_MainWindow):
         try:
             power_id = self.powerCB.currentText()
             fiber_id = self.fiberCB.currentText()
+            power_id_slot=""
+            if ";" in power_id:
+                power_id_slot= power_id.split(";")[1]
+                power_id= power_id.split(";")[0]
             
             # Get power connection status
             if power_id:
-                det_endpoint, _ = self.get_power_endpoints(power_id)
+                det_endpoint, _ = self.get_power_endpoints(power_id,power_id_slot)
                 if det_endpoint:
                     if self.check_connection_match(det_endpoint):
                         self.connectPowerLED.setStyleSheet("background-color: rgb(85, 170, 0);")  # Green
@@ -1501,13 +1510,16 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.log_output(f"Error getting fiber endpoints: {str(e)}")
             return None, None
 
-    def get_power_endpoints(self, power_id):
+    def get_power_endpoints(self, power_id,power_id_slot=""):
         """Get both detSide and crateSide endpoints for power connections"""
         try:
             # Get detSide path
+            query={"cable": power_id, "side": "detSide"}
+            if power_id_slot != "" :
+                   query["port"]=power_id_slot
             det_response = requests.post(
                 self.get_api_url('snapshot'),
-                json={"cable": power_id, "side": "detSide"}
+                json=query
             )
             if det_response.status_code != 200:
                 return None, []
@@ -1531,11 +1543,18 @@ class MainApp(integration_gui.Ui_MainWindow):
                     crate_endpoints = []
                     # Look at power lines (3,4)
                     for line in ["3", "4"]:
+                        print(crate_snapshot[line]["connections"])
                         if line in crate_snapshot and crate_snapshot[line]["connections"]:
                             last_conn = crate_snapshot[line]["connections"][-1]
-                            ports = last_conn['crate_port'] + last_conn['det_port']
+                            ports = last_conn['crate_port'] + last_conn['det_port'] 
                             port = ports[0] if ports else "?"
-                            crate_endpoints.append(f"{last_conn['cable']}_{port}")
+                            #crate_endpoints.append(f"{last_conn['cable']}_{port}_{last_conn['line']}")
+                            crate_endpoints.append(f"{last_conn['cable']}_{last_conn['line']}")
+                            if "XSLOT" in last_conn['cable'] :
+                                self.caen.setLV("LV"+last_conn['cable'][5:]+f"_{last_conn['line']}")
+                            if "ASLOT" in last_conn['cable'] :
+                                self.caen.setHV("HV"+last_conn['cable'][5:]+f"_{last_conn['line']}")
+
                     return det_endpoint, crate_endpoints
 
             return None, []
