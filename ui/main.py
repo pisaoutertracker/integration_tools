@@ -1490,9 +1490,10 @@ class MainApp(integration_gui.Ui_MainWindow):
                 return None, None 
             det_snapshot = det_response.json()
             det_endpoint = None
+
             if fiber_id_slot != "" :
                 #filter to get only the lines with det_port=fiber_id_slot
-                det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("crate_port") == fiber_id_slot}
+                det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("det_port") == fiber_id_slot}
                 
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
@@ -1546,11 +1547,12 @@ class MainApp(integration_gui.Ui_MainWindow):
 
             det_snapshot = det_response.json()
             det_endpoint = None
+            print("Det_pre",det_snapshot)
             if power_id_slot != "" :
                 #filter to get only the lines with det_port=power_id_slot
                 det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("det_port") == power_id_slot}
                 
-            print("Det",det_snapshot)
+            print("Det_post",det_snapshot)
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
                     # Get the last connection in the detSide path
