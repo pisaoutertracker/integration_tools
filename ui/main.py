@@ -1493,6 +1493,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
             det_snapshot = det_response.json()
             det_endpoint = None
+            print("Det",det_snapshot)
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
                     # Get the last connection in the detSide path
@@ -1500,13 +1501,19 @@ class MainApp(integration_gui.Ui_MainWindow):
                     break
 
             # Get crateSide path from the module
-            if det_endpoint:
+            #f det_endpoint:
+            if True:
+                data={"cable": fiber_id, "side": "crateSide"}
+                if fiber_id_slot != "" :
+                    data["port"]=fiber_id_slot
+
                 crate_response = requests.post(
                     f"{self.dbEndpointLE.text()}/snapshot",
-                    json={"cable": det_endpoint, "side": "crateSide"}
+                    json=data
                 )
                 if crate_response.status_code == 200:
                     crate_snapshot = crate_response.json()
+                    print("Crate",crate_snapshot)
                     # Look at fiber lines (1,2)
                     for line in ["1", "2"]:
                         if line in crate_snapshot and crate_snapshot[line]["connections"]:
@@ -1536,6 +1543,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
             det_snapshot = det_response.json()
             det_endpoint = None
+            print("Det",det_snapshot)
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
                     # Get the last connection in the detSide path
@@ -1543,10 +1551,11 @@ class MainApp(integration_gui.Ui_MainWindow):
                     break
 
             # Get crateSide path from the module
-            if det_endpoint:
+#            if det_endpoint:
+            if True:
                 crate_response = requests.post(
                     self.get_api_url('snapshot'),
-                    json={"cable": det_endpoint, "side": "crateSide"}
+                    json={"cable": power_id, "side": "crateSide"}
                 )
                 if crate_response.status_code == 200:
                     crate_snapshot = crate_response.json()
