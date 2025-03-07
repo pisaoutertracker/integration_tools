@@ -142,7 +142,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         fibers=["SfibA","SfibB"]
         fibers+=[f"E3;{x}" for x in range(1,6)]
         powers=["BINT1"]
-        powers+=[f"P2;B{x}" for x in range(1,12)]
+        powers+=[f"P2;{x}" for x in range(1,12)]
         self.layers_to_filters = {
             "L1_47": {
                 "spacer": "2.6mm",
