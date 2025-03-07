@@ -1490,6 +1490,10 @@ class MainApp(integration_gui.Ui_MainWindow):
                 return None, None 
             det_snapshot = det_response.json()
             det_endpoint = None
+            if fiber_id_slot != "" :
+                #filter to get only the lines with det_port=fiber_id_slot
+                det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("crate_port") == fiber_id_slot}
+                
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
                     # Get the last connection in the detSide path
@@ -1532,8 +1536,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         try:
             # Get detSide path
             query={"cable": power_id, "side": "detSide"}
-            if power_id_slot != "" :
-                   query["port"]=power_id_slot
+
             det_response = requests.post(
                 self.get_api_url('snapshot'),
                 json=query
@@ -1543,6 +1546,10 @@ class MainApp(integration_gui.Ui_MainWindow):
 
             det_snapshot = det_response.json()
             det_endpoint = None
+            if power_id_slot != "" :
+                #filter to get only the lines with det_port=power_id_slot
+                det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("det_port") == power_id_slot}
+                
             print("Det",det_snapshot)
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
@@ -1560,8 +1567,11 @@ class MainApp(integration_gui.Ui_MainWindow):
                 if crate_response.status_code == 200:
                     crate_snapshot = crate_response.json()
                     crate_endpoints = []
+                    if power_id_slot != "" :
+                        #filter to get only the lines with det_port=power_id_slot
+                        crate_snapshot = {k: v for k, v in crate_snapshot.items() if v["det_port"]==power_id_slot}
                     # Look at power lines (3,4)
-                    for line in ["3", "4"]:
+                    for line in crate_snapshot.keys():
                         print(crate_snapshot[line]["connections"])
                         if line in crate_snapshot and crate_snapshot[line]["connections"]:
                             last_conn = crate_snapshot[line]["connections"][-1]
