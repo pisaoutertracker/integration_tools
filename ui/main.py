@@ -1482,18 +1482,14 @@ class MainApp(integration_gui.Ui_MainWindow):
         try:
             # Get detSide path
             data={"cable": fiber_id, "side": "detSide"}
-            if fiber_id_slot != "" :
-                data["port"]=fiber_id_slot
             det_response = requests.post(
                 f"{self.dbEndpointLE.text()}/snapshot",
                 json=data
             )
             if det_response.status_code != 200:
-                return None, None
-
+                return None, None 
             det_snapshot = det_response.json()
             det_endpoint = None
-            print("Det",det_snapshot)
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
                     # Get the last connection in the detSide path
@@ -1504,8 +1500,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             #f det_endpoint:
             if True:
                 data={"cable": fiber_id, "side": "crateSide"}
-                if fiber_id_slot != "" :
-                    data["port"]=fiber_id_slot
+                
 
                 crate_response = requests.post(
                     f"{self.dbEndpointLE.text()}/snapshot",
@@ -1514,8 +1509,13 @@ class MainApp(integration_gui.Ui_MainWindow):
                 if crate_response.status_code == 200:
                     crate_snapshot = crate_response.json()
                     print("Crate",crate_snapshot)
-                    # Look at fiber lines (1,2)
-                    for line in ["1", "2"]:
+                    #     Crate {'1': {'crate_port': 'A', 'det_port': '1', 'connections': [{'cable': 'D3', 'line': 1, 'det_port': ['A'], 'crate_port': ['P12']}, {'cable': 'FC7OT5', 'line': 1, 'det_port': ['OG0'], 'crate_port': []}]}, '2': {'crate_port': 'A', 'det_port': '1', 'connections': [{'cable': 'D3', 'line': 2, 'det_port': ['A'], 'crate_port': ['P12']}, {'cable': 'FC7OT5', 'line': 2, 'det_port': ['OG0'], 'crate_port': []}]}, '3': {'crate_port': 'A', 'det_port': '2', 'connections': [{'cable': 'D3', 'line': 3, 'det_port': ['A'], 'crate_port': ['P34']}, {'cable': 'FC7OT5', 'line': 3, 'det_port': ['OG1'], 'crate_port': []}]}, '4': {'crate_port': 'A', 'det_port': '2', 'connections': [{'cable': 'D3', 'line': 4, 'det_port': ['A'], 'crate_port': ['P34']}, {'cable': 'FC7OT5', 'line': 4, 'det_port': ['OG1'], 'crate_port': []}]}, '5': {'crate_port': 'A', 'det_port': '3', 'connections': [{'cable': 'D3', 'line': 5, 'det_port': ['A'], 'crate_port': ['P56']}, {'cable': 'FC7OT5', 'line': 5, 'det_port': ['OG2'], 'crate_port': []}]}, '6': {'crate_port': 'A', 'det_port': '3', 'connections': [{'cable': 'D3', 'line': 6, 'det_port': ['A'], 'crate_port': ['P56']}, {'cable': 'FC7OT5', 'line': 6, 'det_port': ['OG2'], 'crate_port': []}]}, '7': {'crate_port': 'A', 'det_port': '4', 'connections': [{'cable': 'D3', 'line': 7, 'det_port': ['A'], 'crate_port': ['P78']}, {'cable': 'FC7OT5', 'line': 7, 'det_port': ['OG3'], 'crate_port': []}]}, '8': {'crate_port': 'A', 'det_port': '4', 'connections': [{'cable': 'D3', 'line': 8, 'det_port': ['A'], 'crate_port': ['P78']}, {'cable': 'FC7OT5', 'line': 8, 'det_port': ['OG3'], 'crate_port': []}]}, '9': {'crate_port': 'A', 'det_port': '5', 'connections': [{'cable': 'D3', 'line': 9, 'det_port': ['A'], 'crate_port': ['P910']}, {'cable': 'FC7OT5', 'line': 9, 'det_port': ['OG4'], 'crate_port': []}]}, '10': {'crate_port': 'A', 'det_port': '5', 'connections': [{'cable': 'D3', 'line': 10, 'det_port': ['A'], 'crate_port': ['P910']}, {'cable': 'FC7OT5', 'line': 10, 'det_port': ['OG4'], 'crate_port': []}]}, '11': {'crate_port': 'A', 'det_port': '6', 'connections': [{'cable': 'D3', 'line': 11, 'det_port': ['A'], 'crate_port': ['P1112']}, {'cable': 'FC7OT5', 'line': 11, 'det_port': ['OG5'], 'crate_port': []}]}, '12': {'crate_port': 'A', 'det_port': '6', 'connections': [{'cable': 'D3', 'line': 12, 'det_port': ['A'], 'crate_port': ['P1112']}, {'cable': 'FC7OT5', 'line': 12, 'det_port': ['OG5'], 'crate_port': []}]}}
+
+                    if fiber_id_slot != "" :
+                        #filter to get only the lines with det_port=fiber_id_slot
+                        crate_snapshot = {k: v for k, v in crate_snapshot.items() if v["det_port"]==fiber_id_slot}
+                    
+                    for line in crate_snapshot.keys():
                         if line in crate_snapshot and crate_snapshot[line]["connections"]:
                             last_conn = crate_snapshot[line]["connections"][-1]
                             ports = last_conn['crate_port'] + last_conn['det_port']
