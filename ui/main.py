@@ -1547,12 +1547,12 @@ class MainApp(integration_gui.Ui_MainWindow):
 
             det_snapshot = det_response.json()
             det_endpoint = None
-            print("Det_pre",det_snapshot)
+
+
             if power_id_slot != "" :
                 #filter to get only the lines with det_port=power_id_slot
-                det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("det_port") == power_id_slot}
+                det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("det_port") == "HV%d"%power_id_slot}
                 
-            print("Det_post",det_snapshot)
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
                     # Get the last connection in the detSide path
@@ -1569,9 +1569,11 @@ class MainApp(integration_gui.Ui_MainWindow):
                 if crate_response.status_code == 200:
                     crate_snapshot = crate_response.json()
                     crate_endpoints = []
+                    print("PCrate_pre",crate_snapshot)
                     if power_id_slot != "" :
                         #filter to get only the lines with det_port=power_id_slot
                         crate_snapshot = {k: v for k, v in crate_snapshot.items() if v["det_port"]==power_id_slot}
+                    print("PCrate_post",crate_snapshot)
                     # Look at power lines (3,4)
                     for line in crate_snapshot.keys():
                         print(crate_snapshot[line]["connections"])
