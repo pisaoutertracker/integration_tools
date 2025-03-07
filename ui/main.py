@@ -1572,7 +1572,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                     print("PCrate_pre",crate_snapshot)
                     if power_id_slot != "" :
                         #filter to get only the lines with det_port=power_id_slot
-                        crate_snapshot = {k: v for k, v in crate_snapshot.items() if v["crate_port"]=="HV%s"%power_id_slot}
+                        crate_snapshot = {k: v for k, v in crate_snapshot.items() if v["crate_port"]=="HV%s"%power_id_slot or  v["crate_port"]=="LV%s"%power_id_slot}
                     print("PCrate_post",crate_snapshot)
                     # Look at power lines (3,4)
                     for line in crate_snapshot.keys():
