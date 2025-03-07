@@ -1551,7 +1551,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
             if power_id_slot != "" :
                 #filter to get only the lines with det_port=power_id_slot
-                det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("crate_port") == "HV%d"%power_id_slot}
+                det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("crate_port") == "HV%s"%power_id_slot}
                 
             for line in det_snapshot:
                 if det_snapshot[line]["connections"]:
