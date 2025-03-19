@@ -877,6 +877,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
                 self.checkIDPB.setEnabled(True)
                 self.hvOFFTestPB.setEnabled(True)  # Enable test 2
+                self.hvONTestPB.setEnabled(True)  # Enable test 3
                 
                 # Try to parse module ID from output
                 try:
@@ -1598,9 +1599,9 @@ class MainApp(integration_gui.Ui_MainWindow):
                             #crate_endpoints.append(f"{last_conn['cable']}_{port}_{last_conn['line']}")
                             crate_endpoints.append(f"{last_conn['cable']}_{last_conn['line']}")
                             if "XSLOT" in last_conn['cable'] :
-                                self.caen.setLV("LV"+last_conn['cable'][5:]+f"_{last_conn['line']}")
+                                self.caen.setLV("LV"+last_conn['cable'][5:]+f".{last_conn['line']}")
                             if "ASLOT" in last_conn['cable'] :
-                                self.caen.setHV("HV"+last_conn['cable'][5:]+f"_{last_conn['line']}")
+                                self.caen.setHV("HV"+last_conn['cable'][5:]+f".{last_conn['line']}")
 
                     return det_endpoint, crate_endpoints
 
@@ -1778,9 +1779,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.hvOFFTestCB.setChecked(False)
         self.hvONTestCB.setChecked(False)
         
-        # Disable tests 2 and 3
-#        self.hvOFFTestPB.setEnabled(False)
-#        self.hvONTestPB.setEnabled(False)
+        # Enable tests 2 and 3
+        self.hvOFFTestPB.setEnabled(True)
+        self.hvONTestPB.setEnabled(True)
         
         # Clear ID label
         self.checkIDlabel.setText("ID:")

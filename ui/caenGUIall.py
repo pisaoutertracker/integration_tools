@@ -69,9 +69,9 @@ class caenGUI(QWidget):
 #        self.channels=["BLV11","BLV12","HV012","HV011"]
         self.channels=[]
         for s in [6,7,8,9,10,11]:
-            self.channels +=['LV%d_%d'%(s,x) for x in range(1,9)]
+            self.channels +=['LV%d.%d'%(s,x) for x in range(1,9)]
         for s in [0,1,2,3]:
-            self.channels +=['HV%d_%d'%(s,x) for x in range(1,13)]
+            self.channels +=['HV%d.%d'%(s,x) for x in range(1,13)]
 
         self.led={}
         self.label={}
