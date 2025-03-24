@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import threading
 import integration_gui
 from PyQt5.QtWidgets import (
@@ -1597,7 +1598,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                             ports = last_conn['crate_port'] + last_conn['det_port'] 
                             port = ports[0] if ports else "?"
                             #crate_endpoints.append(f"{last_conn['cable']}_{port}_{last_conn['line']}")
-                            crate_endpoints.append(f"{last_conn['cable']}_{last_conn['line']}")
+                            crate_endpoints.append(f"{last_conn['cable']}.{last_conn['line']}")
                             if "XSLOT" in last_conn['cable'] :
                                 self.caen.setLV("LV"+last_conn['cable'][5:]+f".{last_conn['line']}")
                             if "ASLOT" in last_conn['cable'] :
