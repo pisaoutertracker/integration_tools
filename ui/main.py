@@ -63,10 +63,24 @@ class CommandWorker(QThread):
         except Exception as e:
             self.finished.emit(False, "", str(e))
 
+from module_db import ModuleDB
+
 class MainApp(integration_gui.Ui_MainWindow):
     def __init__(self, window):
         # First call setupUi to create all UI elements from the .ui file
-        self.setupUi(window)    
+        self.setupUi(window)
+        
+        # Create ModuleDB instance
+        self.module_db = ModuleDB()
+        
+        # Replace inventory and details tabs with ModuleDB tabs
+        self.tabWidget.removeTab(self.tabWidget.indexOf(self.tab_2))
+        self.tabWidget.removeTab(self.tabWidget.indexOf(self.moduleDetailsTab))
+        self.tabWidget.insertTab(2,self.module_db.ui.tab_2, "Module Inventory")
+        self.tabWidget.insertTab(3,self.module_db.ui.moduleDetailsTab, "Module Details")
+        
+        # Connect module selection signal
+        self.module_db.module_selected.connect(self.on_module_selected)
         
         # Set stretch factors for the main grid layout to make left side expand more
 #        grid_layout = self.tab.layout()
@@ -1755,7 +1769,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         module_id = selected_items[0].text(0)  # Get module name
         self.moduleLE.setText(module_id)  # This will trigger load_module_details
-        self.tabWidget.setCurrentWidget(self.moduleDetailsTab)
+        self.tabWidget.setCurrentWidget(self.self.module_db.ui.moduleDetailsTab)
 
     def setup_inventory_buttons(self):
         """Setup buttons for inventory tab"""
@@ -2048,6 +2062,11 @@ class MainApp(integration_gui.Ui_MainWindow):
 #           url = os.path.abspath(url)
 #           url = f'file://{url}'
         webbrowser.open(self.analysisURL)
+
+    def on_module_selected(self, module_id):
+        """Handle module selection from inventory"""
+        self.moduleLE.setText(module_id)
+        self.tabWidget.setCurrentIndex(0)  # Switch to first tab
 
 def main():
     app = QApplication(sys.argv)
