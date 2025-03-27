@@ -103,7 +103,7 @@ class CAENControl(QObject):
     def __init__(self, ui):
         super().__init__()
         self.ui = ui
-        self.channels = {"LV": "LV7_1", "HV": "HV0_11"}
+        self.channels = {"LV": "LV7.1", "HV": "HV0.11"}
         self.led = {
             'LV': self.ui.lvLed,
             'HV': self.ui.hvLed
@@ -120,7 +120,7 @@ class CAENControl(QObject):
 
         # Connect buttons
         self.ui.lvOnButton.clicked.connect(lambda: self.on(self.channels["LV"]))
-        self.ui.lvOffButton.clicked.connect(lambda: self.off( self.channels["LV"]   ))
+        self.ui.lvOffButton.clicked.connect(lambda: self.safe_lv_off())
         self.ui.hvOnButton.clicked.connect(lambda: self.on(self.channels["HV"] ))
         self.ui.hvOffButton.clicked.connect(lambda: self.off(self.channels["HV"] ))
 
@@ -128,6 +128,14 @@ class CAENControl(QObject):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update)
         self.timer.start(2000)
+        self.lv_off_when_hv_off=False
+
+    def safe_lv_off(self):
+
+        if self.lv_off_when_hv_off : # if the user insists we switch off
+            self.off(self.channels["LV"])
+        self.off(self.channels["HV"])
+        self.lv_off_when_hv_off=True 
 
     def setLV(self,channel_name):
         self.channels["LV"]=channel_name
@@ -148,22 +156,33 @@ class CAENControl(QObject):
     def handle_query_response(self, data):
         """Handle the response from query thread"""
         try:
+            if data['caen_'+self.channels["LV"]+'_IsOn'] < 0.5:
+                        self.lv_off_when_hv_off = False
+                        
             for hl,channel in self.channels.items():
-                if data['caen_'+channel+'_IsOn'] > 0.5:
-                    self.led[hl].setStyleSheet("background-color: green")
+                if self.lv_off_when_hv_off :
+                        self.led[hl].setStyleSheet("background-color: yellow")
                 else:
-                    self.led[hl].setStyleSheet("background-color: red")
+                    if data['caen_'+channel+'_IsOn'] > 0.5:
+                        self.led[hl].setStyleSheet("background-color: green")
+                    else:
+                        self.led[hl].setStyleSheet("background-color: red")
                 if hl=="HV":
                     self.label[hl].setText(
                     f'V: {data["caen_"+channel+"_Voltage"]:3.1f}V '
                     f'C: {data["caen_"+channel+"_Current"]:2.1f}uA '
-                )
+                    )
+                    # Check if we need to turn off LV based on HV voltage
+                    if self.lv_off_when_hv_off and data["caen_"+channel+"_Voltage"] <= 10.0:
+                        print("Switching OFF LV ")
+                        self.off(self.channels["LV"])
+                        
                 else:
                     self.label[hl].setText(
                     f'V: {data["caen_"+channel+"_Voltage"]:2.1f}V '
                     f'C: {data["caen_"+channel+"_Current"]:1.1f}A '
                     f'P: {data["caen_"+channel+"_Voltage"]*data["caen_"+channel+"_Current"]:1.1f}W'
-                )
+                    )
         except Exception as e:
             print(f"Error handling response: {e}")
 
