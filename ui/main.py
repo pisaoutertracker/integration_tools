@@ -312,6 +312,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.current_session_comments = None
         self.current_module_id = None
         self.pbstatus={}
+        self.airLed.setStyleSheet("background-color: yellow;")
+
            #define test session for DB
 #         session = {
 #             "operator": self.BI_Operator_line.text(),
@@ -545,7 +547,11 @@ class MainApp(integration_gui.Ui_MainWindow):
             # Update max temperature display
             self.max_temperature = max(flo_arr)
             self.tMaxLabel.setText(f"Tmax: {self.max_temperature:.1f}")
-            
+            if self.max_temperature > 45 :
+                self.caenGUI.safe_lv_off()
+            if self.max_temperature > 50 :
+                self.caenGUI.off(self.caenGUI.channels["HV"])
+                self.caenGUI.off(self.caenGUI.channels["LV"])
             # Keep maximum 600 values
             if len(self.time) > 600:
                 self.time.pop(0)
