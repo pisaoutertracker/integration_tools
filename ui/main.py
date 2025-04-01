@@ -81,7 +81,8 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Connect module selection signal
         self.module_db.module_selected.connect(self.on_module_selected)
-        
+        self.module_db.ui.viewDetailsPB.clicked.connect(self.view_module_details)
+
         # Set stretch factors for the main grid layout to make left side expand more
 #        grid_layout = self.tab.layout()
 #        grid_layout.setColumnStretch(0, 2)  # Left column gets 2 parts
@@ -1769,14 +1770,15 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def view_module_details(self):
         """View details for selected module"""
-        selected_items = self.treeWidget.selectedItems()
-        if not selected_items:
-            self.log_output("No module selected")
-            return
+        # selected_items = self.treeWidget.selectedItems()
+        # if not selected_items:
+        #     self.log_output("No module selected")
+        #     return
         
-        module_id = selected_items[0].text(0)  # Get module name
-        self.moduleLE.setText(module_id)  # This will trigger load_module_details
-        self.tabWidget.setCurrentWidget(self.self.module_db.ui.moduleDetailsTab)
+        # module_id = selected_items[0].text(0)  # Get module name
+        # self.moduleLE.setText(module_id)  # This will trigger load_module_details
+        # print("here")
+        self.tabWidget.setCurrentIndex(3)
 
     def setup_inventory_buttons(self):
         """Setup buttons for inventory tab"""
