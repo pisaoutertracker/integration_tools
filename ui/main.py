@@ -1123,9 +1123,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Then make the new connection
         data = {
             "cable1": self.moduleLE.text(),
-            "cable2": self.powerCB.currentText(),
+            "cable2": self.powerCB.currentText().split(";")[0] if ";" in self.powerCB.currentText() else self.powerCB.currentText(),
             "port1": "power",
-            "port2": "power"
+            "port2": ("B"+self.powerCB.currentText().split(";")[1]) if ";" in self.powerCB.currentText() else 'power'
         }
         success, result = self.make_api_request(
             endpoint='connect',  # Simplified endpoint
@@ -1143,11 +1143,12 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.disconnect_connection(self.fiberCB.currentText(), "A")
         
         # Then make the new connection
+        fib=self.fiberCB.currentText()
         data = {
             "cable1": self.moduleLE.text(),
-            "cable2": self.fiberCB.currentText(),
+            "cable2": fib.split(";")[0] if ";" in fib else fib,
             "port1": "fiber",
-            "port2": "A"
+            "port2": fib.split(";")[1] if ";" in fib else  "A"
         }
         success, result = self.make_api_request(
             endpoint='connect',  # Simplified endpoint

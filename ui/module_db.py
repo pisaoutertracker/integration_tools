@@ -81,7 +81,7 @@ class ModuleDB(QWidget):
         self.ui.layertypeCB.addItems(sorted(self.layers_to_filters.keys()))
         
         # Add "any" to status filter
-        self.ui.spacerCB_3.insertItem(0, "any")
+        #self.ui.spacerCB_3.insertItem(0, "any")
         
         # Add grade options
         self.ui.spacerCB_2.addItems(["A++", "A+", "A", "B", "C"])
@@ -118,29 +118,16 @@ class ModuleDB(QWidget):
         self.ui.spacerCB_3.currentTextChanged.connect(self.update_module_list)
         self.ui.layertypeCB.currentTextChanged.connect(self.update_filters_from_layer)
 
-    # Copy relevant methods from main.py:
-    # - get_settings_file()
-    # - load_settings()
-    # - save_settings() 
-    # - get_api_url()
-    # - make_api_request()
-    # - update_module_list()
-    # - filter_modules()
-    # - setup_module_details_tab()
-    # - populate_details_tree()
-    # - tree_to_dict()
-    # - merge_dicts()
-    # - save_module_details()
-    # - view_module_details()
-    # - select_module()
-    # - show_error_dialog()
-
     def get_settings_file(self):
         """Get the settings file path"""
         config_file = os.path.join(os.path.expanduser("~/.config/module_db"), 'settings.yaml')
-        if not os.path.exists(config_file):
-            os.makedirs(os.path.dirname(config_file), exist_ok=True)
-        return config_file
+        bundled_file = os.path.join(os.path.dirname(__file__), 'settings.yaml')
+        if os.path.exists(config_file):
+            return config_file
+        elif os.path.exists(bundled_file):
+            return bundled_file
+        else:
+            return config_file
 
     def load_settings(self):
         """Load settings from YAML file"""
@@ -515,15 +502,12 @@ class ModuleDB(QWidget):
             layout = QVBoxLayout(self.ui.tab_2)
             layout.addLayout(searchLayout)
 
-    def disconnect_module(self):
+    def disconnect_module(self,m):
         """Disconnect the current module"""
-        if not self.current_module_id:
-            self.show_error_dialog("No module selected")
-            return
         
         try:
             # Get current module data
-            success, current_data = self.make_api_request(f'modules/{self.current_module_id}')
+            success, current_data = self.make_api_request(f'modules/{m}')
             if not success:
                 self.show_error_dialog(f"Error fetching module: {current_data}")
                 return
@@ -538,7 +522,7 @@ class ModuleDB(QWidget):
             
             # Update module in database
             success, result = self.make_api_request(
-                endpoint=f'modules/{self.current_module_id}',
+                endpoint=f'modules/{m}',
                 method='PUT',
                 data=current_data
             )
