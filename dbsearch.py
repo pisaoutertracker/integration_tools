@@ -79,11 +79,32 @@ def format_session_details(session):
     output.append("=" * 80)
     return "\n".join(output)
 
+def update_session_comment(session_name, new_comment, base_url="http://cmslabserver:5000"):
+    """Update the description/comment for a specific session."""
+    try:
+        # Prepare the update data
+        update_data = {"description": new_comment}
+        
+        # Send PUT request to update the session
+        response = requests.put(f"{base_url}/sessions/{session_name}", json=update_data)
+        
+        if response.status_code != 200:
+            print(f"Error updating session comment: {response.status_code}")
+            return False
+        
+        return True
+        
+    except requests.RequestException as e:
+        print(f"Error updating session comment: {e}")
+        return False
+
 def main():
     parser = argparse.ArgumentParser(description='Search for run and session details by run number')
     parser.add_argument('run_number', type=str, help='Run number to search for')
     parser.add_argument('--url', default='http://cmslabserver:5000', 
                         help='Base URL for the database API')
+    parser.add_argument('--edit-comment', nargs='?', const=True, metavar='COMMENT',
+                        help='Edit the session comment. If COMMENT is provided, updates directly. If no COMMENT, enters interactive mode')
     
     args = parser.parse_args()
     
@@ -103,6 +124,28 @@ def main():
         session_details = get_session_details(session_name, args.url)
         if session_details:
             print(format_session_details(session_details))
+            
+            # Handle comment editing if requested
+            if args.edit_comment is not None:
+                print("\nCurrent comment:", session_details.get('description', 'No comment'))
+                
+                # If comment was provided via command line, use it directly
+                if isinstance(args.edit_comment, str):
+                    new_comment = args.edit_comment
+                else:
+                    # Otherwise enter interactive mode
+                    new_comment = input("Enter new comment (press Enter to keep current): ").strip()
+                
+                if new_comment:
+                    if update_session_comment(session_name, new_comment, args.url):
+                        print("Comment updated successfully!")
+                        # Show updated session details
+                        updated_session = get_session_details(session_name, args.url)
+                        if updated_session:
+                            print("\nUpdated session details:")
+                            print(format_session_details(updated_session))
+                    else:
+                        print("Failed to update comment")
         else:
             print(f"\nCould not fetch details for session: {session_name}")
     else:
