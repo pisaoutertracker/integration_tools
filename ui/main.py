@@ -74,10 +74,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.module_db = ModuleDB()
         
         # Replace inventory and details tabs with ModuleDB tabs
-        self.tabWidget.removeTab(self.tabWidget.indexOf(self.tab_2))
-        self.tabWidget.removeTab(self.tabWidget.indexOf(self.moduleDetailsTab))
-        self.tabWidget.insertTab(2,self.module_db.ui.tab_2, "Module Inventory")
-        self.tabWidget.insertTab(3,self.module_db.ui.moduleDetailsTab, "Module Details")
+
+        self.tabWidget.insertTab(1,self.module_db.ui.tab_2, "Module Inventory")
+        self.tabWidget.insertTab(2,self.module_db.ui.moduleDetailsTab, "Module Details")
         
         # Connect module selection signal
         self.module_db.module_selected.connect(self.on_module_selected)
@@ -126,27 +125,27 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Store the full module list for filtering - initialize before using
         self.all_modules = []
         
-        # Add search box - move this before connecting signals
-        searchLayout = QHBoxLayout()
-        searchLabel = QLabel("Search:")
-        self.searchBox = QLineEdit()
-        self.searchBox.setPlaceholderText("Search modules...")
-        searchLayout.addWidget(searchLabel)
-        searchLayout.addWidget(self.searchBox)
-        searchLayout.addStretch()
+        # # Add search box - move this before connecting signals
+        # searchLayout = QHBoxLayout()
+        # searchLabel = QLabel("Search:")
+        # self.searchBox = QLineEdit()
+        # self.searchBox.setPlaceholderText("Search modules...")
+        # searchLayout.addWidget(searchLabel)
+        # searchLayout.addWidget(self.searchBox)
+        # searchLayout.addStretch()
         
-        # Insert search layout before the tree widget
-        layout = self.tab_2.layout()
-        layout.insertLayout(1, searchLayout)
+        # # Insert search layout before the tree widget
+        # layout = self.tab_2.layout()
+        # layout.insertLayout(1, searchLayout)
         
         # Enable sorting
-        self.treeWidget.setSortingEnabled(True)
+        # self.treeWidget.setSortingEnabled(True)
         
         # Setup module details tab
-        self.setup_module_details_tab()
+     #   self.setup_module_details_tab()
         
         # Now connect signals after UI elements exist
-        self.searchBox.textChanged.connect(self.filter_modules)
+        # self.searchBox.textChanged.connect(self.filter_modules)
         self.ringLE.returnPressed.connect(self.split_ring_and_position)
         self.positionLE.returnPressed.connect(self.draw_ring)
         self.mountPB.clicked.connect(self.mount_module)
@@ -227,20 +226,20 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Initial MQTT setup
         self.setup_mqtt()
 
-        # Connect filter signals
-        self.speedCB.currentTextChanged.connect(self.update_module_list)
-        self.spacerCB.currentTextChanged.connect(self.update_module_list)
-        self.spacerCB_2.currentTextChanged.connect(self.update_module_list)
-        self.spacerCB_3.currentTextChanged.connect(self.update_module_list)
+        # # Connect filter signals
+        # self.speedCB.currentTextChanged.connect(self.update_module_list)
+        # self.spacerCB.currentTextChanged.connect(self.update_module_list)
+        # self.spacerCB_2.currentTextChanged.connect(self.update_module_list)
+        # self.spacerCB_3.currentTextChanged.connect(self.update_module_list)
         
-        # Initial module list load
+        # # Initial module list load
         self.update_module_list()
 
-        # Connect select module button
-        self.selectModulePB.clicked.connect(self.select_module)
+        # # Connect select module button
+        # self.selectModulePB.clicked.connect(self.select_module)
         
-        # Enable selection mode for tree widget
-        self.treeWidget.setSelectionMode(QTreeWidget.SingleSelection)
+        # # Enable selection mode for tree widget
+        # self.treeWidget.setSelectionMode(QTreeWidget.SingleSelection)
 
         # Connect selection changes
         self.moduleLE.textChanged.connect(self.update_connection_status)
@@ -252,11 +251,11 @@ class MainApp(integration_gui.Ui_MainWindow):
         QTimer.singleShot(100, self.update_connection_status)  # Small delay to ensure UI is ready
 
         # Connect module details buttons
-        self.editDetailsButton.clicked.connect(self.edit_selected_detail)
-        self.saveDetailsButton.clicked.connect(self.save_module_details)
+        # self.editDetailsButton.clicked.connect(self.edit_selected_detail)
+        # self.saveDetailsButton.clicked.connect(self.save_module_details)
         
         # Setup inventory buttons
-        self.setup_inventory_buttons()
+        # self.setup_inventory_buttons()
         
         # Initialize current module tracking
         self.current_module_id = None
@@ -277,7 +276,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.moduleLE.textChanged.connect(self.reset_test_states)
         
         # Connect module selection to reset test states
-        self.selectModulePB.clicked.connect(self.reset_test_states)
+        self.module_db.ui.selectModulePB.clicked.connect(self.reset_test_states)
         
         self.logsPB.clicked.connect(self.open_ph2acf_log)
 
@@ -285,12 +284,12 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.moduleLE.textChanged.connect(self.load_module_details)
 
         # Populate layer type combo box
-        self.layertypeCB.clear()
-        self.layertypeCB.addItem("any")
-        self.layertypeCB.addItems(sorted(self.layers_to_filters.keys()))
+        # self.ui.layertypeCB.clear()
+        # self.ui.layertypeCB.addItem("any")
+        # self.ui.layertypeCB.addItems(sorted(self.layers_to_filters.keys()))
         
         # Connect signals
-        self.layertypeCB.currentTextChanged.connect(self.update_filters_from_layer)
+        #self.ui.layertypeCB.currentTextChanged.connect(self.update_filters_from_layer)
         self.ringLE.textChanged.connect(self.update_layer_from_ring)
 
         # Connect module ID changes to check mounting status
@@ -610,6 +609,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         #draw a ring with number_of_modules modules, each is draw as a rectangle
         # even and odd modules are drawn at different radii
         # draw in graphics view
+        self.update_module_list()
         scene = QGraphicsScene()
         self.graphicsView.setScene(scene)
         
@@ -1176,172 +1176,18 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def update_module_list(self):
         """Update the module list based on current filters"""
-        try:
-            # Get endpoint from settings
-            endpoint = self.dbEndpointLE.text()+"/modules"
-            
-            # Make request to DB
-            response = requests.get(endpoint)
-            if response.status_code != 200:
-                self.log_output(f"Error fetching modules: {response.status_code}")
-                return
-                
-            modules = response.json()
-            
-            # Store full module list
-            self.all_modules = modules
+        self.module_db.update_module_list()
+        # Store full module list
+        self.all_modules = self.module_db.all_modules
             
             # Update mounted modules dict
-            self.mounted_modules = {
+        self.mounted_modules = {
                 m.get("mounted_on", ""): m.get("moduleName", "")
-                for m in modules
+                for m in self.all_modules
                 if m.get("mounted_on")
-            }
+        }
             
-            # Apply filters and update display
-            self.filter_modules()
-            
-        except Exception as e:
-            self.log_output(f"Error updating module list: {str(e)}")
 
-    def filter_modules(self):
-        """Filter modules based on search text and other filters"""
-        try:
-            search_text = self.searchBox.text().lower()
-            speed_filter = self.speedCB.currentText()
-            spacer_filter = self.spacerCB.currentText()
-            spacer_dict = {
-                "4.0mm": "40",
-                "2.6mm": "26",
-                "1.8mm": "18",
-                "any": "any"
-            }
-            spacer_filter = spacer_dict[spacer_filter]
-            
-            grade_filter = self.spacerCB_2.currentText()
-            status_filter = self.spacerCB_3.currentText()
-            
-            # Clear existing items
-            self.treeWidget.clear()
-            
-            for module in self.all_modules:
-                if module is None:
-                    continue
-                
-                # Get module speed
-                module_speed = ""
-                if "_5_" in module.get("moduleName", "") or "_05_" in module.get("moduleName", "") or "_5-" in module.get("moduleName", "") or "_05-" in module.get("moduleName", ""):
-                    module_speed = "5G"
-                if "_10_" in module.get("moduleName", "") or "_10-" in module.get("moduleName", ""):
-                    module_speed = "10G"
-                    
-                # Check hybrid details for speed
-                if isinstance(module.get("children"),dict) : # is not None:
-                    if isinstance(module.get("children").get("PS Read-out Hybrid"),dict):
-                        if isinstance(module.get("children").get("PS Read-out Hybrid").get("details"),dict):
-                            if module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH") is not None:
-                                module_speed = module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_BANDWIDTH")
-                                if module_speed == "10Gbps":
-                                    module_speed = "10G"
-                                if module_speed == "5Gbps":
-                                    module_speed = "5G"
-                
-                module["speed"] = module_speed
-                
-                # Get spacer
-                fields = module.get("moduleName", "").split("_")
-                spacer = fields[1] if len(fields) > 2 else ""
-                module["spacer"] = spacer
-                
-                # Apply filters
-                if speed_filter != "any" and module_speed != speed_filter:
-                    continue
-                if spacer_filter != "any" and spacer != spacer_filter:
-                    continue
-                    
-                # Apply search filter
-                searchable_text = (
-                    str(module.get("moduleName", "")).lower() +
-                    str(module.get("inventorySlot", "")).lower() +
-                    str(module.get("speed", "")).lower() +
-                    str(module.get("spacer", "")).lower() +
-                    str(module.get("status", "")).lower() +
-                    str(module.get("details", {}).get("DESCRIPTION", "")).lower()
-                )
-                
-                if search_text and search_text not in searchable_text:
-                    continue
-                    
-                # Add matching module to tree
-                item = QTreeWidgetItem(self.treeWidget)
-                item.setText(0, module.get("moduleName", ""))
-                item.setText(1, module.get("inventorySlot", ""))
-                item.setText(2, module.get("speed", ""))
-                item.setText(3, str(module.get("spacer", "")))
-                item.setText(4, module.get("status",""))
-                item.setText(6, module.get("details", {}).get("DESCRIPTION", ""))
-                
-                # Handle connections column
-                connections = module.get("crateSide", {})
-                print(connections)
-                connections = [y[0] for x,y in connections.items() if len(y)>0]
-                connections = list(set(connections))  # Make connections entries unique
-                item.setText(5, "/".join(connections))
-                
-                # Add disconnect button if there are connections
-                if len(connections) > 0 :
-                    # Create a widget to hold both connection info and button
-                    container = QWidget()
-                    layout = QVBoxLayout(container)
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setSpacing(0)
-                    
-                    # Create button with connection info
-                    disconnect_button = QPushButton()
-                    # Make button smaller
-                    disconnect_button.setMaximumHeight(20)
-                    font = disconnect_button.font()
-                    font.setPointSize(8)
-                    disconnect_button.setFont(font)
-                    print("conn",connections)
-                    button_text =  "Disconnect "+ ("/".join(connections))
-                    # Get connection info for both sides
-                    # try:
-                    #     connected_to = []
-                    #     for side in ["crateSide", "detSide"]:
-                    #         response = requests.post(
-                    #             f"{self.dbEndpointLE.text()}/snapshot",
-                    #             json={"cable": module.get("moduleName", ""), "side": side}
-                    #         )
-                    #         if response.status_code == 200:
-                    #             snapshot = response.json()
-                    #             for line in snapshot:
-                    #                 if snapshot[line]["connections"]:
-                    #                     conn = snapshot[line]["connections"][-1]
-                    #                     connected_to.append(conn["cable"])
-                        
-                    #     # Create button text with connections
-                    #     if connected_to:
-                    #         button_text = f"Disconnect from: {', '.join(set(connected_to))}"
-                    #     else:
-                    #         button_text = "Disconnect"
-                    # except:
-                    #     button_text = "Disconnect"
-                    
-                    disconnect_button.setText(button_text)
-                    disconnect_button.clicked.connect(lambda checked, m=module.get("moduleName", ""): self.disconnect_module(m))
-                    
-                    layout.addWidget(disconnect_button)
-                    self.treeWidget.setItemWidget(item, 5, container)
-                
-                item.setText(7, module.get("mounted_on", ""))
-                
-            # Resize columns to content
-            for i in range(self.treeWidget.columnCount()):
-                self.treeWidget.resizeColumnToContents(i)
-                
-        except Exception as e:
-            self.log_output(f"Error filtering modules: {str(e)}")
 
     def disconnect_module(self, module_id):
         """Disconnect all connections for a module"""
@@ -1395,27 +1241,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.log_output(f"Error disconnecting module: {str(e)}")
             self.show_error_dialog(f"Failed to disconnect module: {str(e)}")
 
-    def select_module(self):
-        """Handle module selection from inventory"""
-        selected_items = self.treeWidget.selectedItems()
-        if not selected_items:
-            self.log_output("No module selected")
-            return
-        
-        selected_item = selected_items[0]
-        module_id = selected_item.text(0)  # Get module name from first column
-        mounted_on = selected_item.text(7)  # Get mounted_on status
-        
-        # Set the module ID in the first tab
-        self.moduleLE.setText(module_id)
-        
-        # Enable/disable unmount button based on mounted status
-        self.unmountPB.setEnabled(bool(mounted_on))
-        
-        # Switch to first tab
-        self.tabWidget.setCurrentIndex(0)
-        
-        self.log_output(f"Selected module: {module_id}")
+
 
     def update_connection_status(self):
         """Update the connection status labels showing both connection directions"""
@@ -1633,53 +1459,53 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.log_output(f"Error getting power endpoints: {str(e)}")
             return None, []
 
-    def setup_module_details_tab(self):
-        """Setup the module details tab"""
-        # Set up tree widget
-        self.detailsTree.setHeaderLabels(['Field', 'Value'])
-        self.detailsTree.setColumnWidth(0, 200)
+    # def setup_module_details_tab(self):
+    #     """Setup the module details tab"""
+    #     # Set up tree widget
+    #     self.detailsTree.setHeaderLabels(['Field', 'Value'])
+    #     self.detailsTree.setColumnWidth(0, 200)
         
-        # Connect buttons
-        self.editDetailsButton.clicked.connect(self.edit_selected_detail)
-        self.saveDetailsButton.clicked.connect(self.save_module_details)
+    #     # Connect buttons
+    #     self.editDetailsButton.clicked.connect(self.edit_selected_detail)
+    #     self.saveDetailsButton.clicked.connect(self.save_module_details)
 
-    def populate_details_tree(self, data, parent=None):
-        """Recursively populate the details tree with module data"""
-        if parent is None:
-            self.detailsTree.clear()
-            parent = self.detailsTree
+    # def populate_details_tree(self, data, parent=None):
+    #     """Recursively populate the details tree with module data"""
+    #     if parent is None:
+    #         self.detailsTree.clear()
+    #         parent = self.detailsTree
         
-        if isinstance(data, dict):
-            for key, value in sorted(data.items()):
-                item = QTreeWidgetItem([str(key), ''])
-                if parent == self.detailsTree:
-                    parent.addTopLevelItem(item)
-                else:
-                    parent.addChild(item)
-                self.populate_details_tree(value, item)
-        elif isinstance(data, list):
-            for i, value in enumerate(data):
-                if isinstance(value, dict) and 'childName' in value:
-                    # Special handling for child components
-                    item = QTreeWidgetItem([value['childName'], value.get('childType', '')])
-                else:
-                    item = QTreeWidgetItem([f"[{i}]", ''])
-                parent.addChild(item)
-                self.populate_details_tree(value, item)
-        else:
-            parent.setText(1, str(data))
+    #     if isinstance(data, dict):
+    #         for key, value in sorted(data.items()):
+    #             item = QTreeWidgetItem([str(key), ''])
+    #             if parent == self.detailsTree:
+    #                 parent.addTopLevelItem(item)
+    #             else:
+    #                 parent.addChild(item)
+    #             self.populate_details_tree(value, item)
+    #     elif isinstance(data, list):
+    #         for i, value in enumerate(data):
+    #             if isinstance(value, dict) and 'childName' in value:
+    #                 # Special handling for child components
+    #                 item = QTreeWidgetItem([value['childName'], value.get('childType', '')])
+    #             else:
+    #                 item = QTreeWidgetItem([f"[{i}]", ''])
+    #             parent.addChild(item)
+    #             self.populate_details_tree(value, item)
+    #     else:
+    #         parent.setText(1, str(data))
 
-    def edit_selected_detail(self):
-        """Edit the selected detail"""
-        item = self.detailsTree.currentItem()
-        if item and item.text(1):  # Only edit leaf nodes
-            dialog = QInputDialog()
-            dialog.setWindowTitle("Edit Value")
-            dialog.setLabelText(f"Edit value for {item.text(0)}:")
-            dialog.setTextValue(item.text(1))
+    # def edit_selected_detail(self):
+    #     """Edit the selected detail"""
+    #     item = self.detailsTree.currentItem()
+    #     if item and item.text(1):  # Only edit leaf nodes
+    #         dialog = QInputDialog()
+    #         dialog.setWindowTitle("Edit Value")
+    #         dialog.setLabelText(f"Edit value for {item.text(0)}:")
+    #         dialog.setTextValue(item.text(1))
             
-            if dialog.exec_():
-                item.setText(1, dialog.textValue())
+    #         if dialog.exec_():
+    #             item.setText(1, dialog.textValue())
 
     def tree_to_dict(self, item):
         """Convert tree widget items back to dictionary recursively"""
@@ -1729,44 +1555,44 @@ class MainApp(integration_gui.Ui_MainWindow):
                 result[key] = value
         return result
 
-    def save_module_details(self):
-        """Save the modified module details back to the database"""
-        try:
-            # First get current module data to preserve all fields
-            response = requests.get(self.get_api_url(f'modules/{self.current_module_id}'))
-            if response.status_code != 200:
-                self.log_output(f"Error fetching module: {response.text}")
-                return
+    # def save_module_details(self):
+    #     """Save the modified module details back to the database"""
+    #     try:
+    #         # First get current module data to preserve all fields
+    #         response = requests.get(self.get_api_url(f'modules/{self.current_module_id}'))
+    #         if response.status_code != 200:
+    #             self.log_output(f"Error fetching module: {response.text}")
+    #             return
                 
-            current_data = response.json()
+    #         current_data = response.json()
             
-            # Convert tree widget back to dictionary
-            new_data = self.tree_to_dict(self.detailsTree.invisibleRootItem())
-            print(new_data)
-            print(current_data)
-            # Recursively merge the data
-            merged_data = self.merge_dicts(current_data, new_data)
+    #         # Convert tree widget back to dictionary
+    #         new_data = self.tree_to_dict(self.detailsTree.invisibleRootItem())
+    #         print(new_data)
+    #         print(current_data)
+    #         # Recursively merge the data
+    #         merged_data = self.merge_dicts(current_data, new_data)
             
-            # Remove _id from merged data
-            if "_id" in merged_data:
-                del merged_data["_id"]
+    #         # Remove _id from merged data
+    #         if "_id" in merged_data:
+    #             del merged_data["_id"]
             
-            # Make API request to update module
-            print(merged_data)
-            #return #debug check what it would do
-            response = requests.put(
-                self.get_api_url(f'modules/{self.current_module_id}'),
-                json=merged_data
-            )
+    #         # Make API request to update module
+    #         print(merged_data)
+    #         #return #debug check what it would do
+    #         response = requests.put(
+    #             self.get_api_url(f'modules/{self.current_module_id}'),
+    #             json=merged_data
+    #         )
             
-            if response.status_code == 200:
-                self.log_output("Module details updated successfully")
-                self.update_module_list()  # Refresh the module list to show updated data
-            else:
-                self.log_output(f"Error updating module: {response.text}")
+    #         if response.status_code == 200:
+    #             self.log_output("Module details updated successfully")
+    #             self.update_module_list()  # Refresh the module list to show updated data
+    #         else:
+    #             self.log_output(f"Error updating module: {response.text}")
             
-        except Exception as e:
-            self.log_output(f"Error saving module details: {str(e)}")
+    #     except Exception as e:
+    #         self.log_output(f"Error saving module details: {str(e)}")
 
     def view_module_details(self):
         """View details for selected module"""
@@ -1778,7 +1604,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         # module_id = selected_items[0].text(0)  # Get module name
         # self.moduleLE.setText(module_id)  # This will trigger load_module_details
         # print("here")
-        self.tabWidget.setCurrentIndex(3)
+        self.tabWidget.setCurrentIndex(2)
 
     def setup_inventory_buttons(self):
         """Setup buttons for inventory tab"""
@@ -1788,7 +1614,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         buttonLayout.addItem(spacer)
         
         # Add button layout to tab
-        self.tab_2.layout().addLayout(buttonLayout)
+      
         # Connect the "View Details" button signal
         self.viewDetailsPB.clicked.connect(self.view_module_details)
 
@@ -1847,7 +1673,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                     matching_layer = layer
         
         # Update layer type combo box
-        self.layertypeCB.setCurrentText(matching_layer)
+        self.module_db.ui.layertypeCB.setCurrentText(matching_layer)
 
     def mount_module(self):
         """Mount a module at the specified ring position"""
@@ -2000,7 +1826,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         """Load module details in the background when module ID changes"""
         module_id = self.moduleLE.text()
         if not module_id:
-            self.moduleNameLabel.setText("")
+            self.module_db.ui.moduleNameLabel.setText("")
             return
             
         try:
@@ -2008,8 +1834,8 @@ class MainApp(integration_gui.Ui_MainWindow):
             if response.status_code == 200:
                 module_data = response.json()
                 self.current_module_id = module_id
-                self.moduleNameLabel.setText(module_id)
-                self.populate_details_tree(module_data)
+                self.module_db.ui.moduleNameLabel.setText(module_id)
+                self.module_db.populate_details_tree(module_data)
             else:
                 self.log_output(f"Error fetching module details: {response.text}")
         except Exception as e:
