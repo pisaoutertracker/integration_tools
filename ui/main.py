@@ -558,7 +558,10 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.min_values.append(min(flo_arr))
             self.max_values.append(max(flo_arr))
             self.avg_values.append(np.mean(flo_arr))
+            data={ "min": min(flo_arr), "max": max(flo_arr), "avg":np.mean(flo_arr) }
+            ret=client.publish("/integration/thermalcamera",json.dumps(data))
             
+    
             # Update max temperature display
             self.max_temperature = max(flo_arr)
             self.tMaxLabel.setText(f"Tmax: {self.max_temperature:.1f}")
