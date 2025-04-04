@@ -157,7 +157,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         fibers=["SfibA","SfibB"]
         fibers+=[f"E3;{x}" for x in range(1,6)]
         powers=["BINT1"]
-        powers+=[f"P2;{x}" for x in range(1,12)]
+        powers+=[f"P2;B{x}" for x in range(1,12)]
         self.layers_to_filters = {
             "L1_47": {
                 "spacer": "2.6mm",
@@ -242,7 +242,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         # self.treeWidget.setSelectionMode(QTreeWidget.SingleSelection)
 
         # Connect selection changes
-        self.moduleLE.textChanged.connect(self.update_connection_status)
+        self.moduleLE.textChanged.connect(self.module_changed)
         self.powerCB.currentTextChanged.connect(self.update_connection_status)
         self.fiberCB.currentTextChanged.connect(self.update_connection_status)
         self.fiber_endpoint=""
@@ -281,7 +281,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.logsPB.clicked.connect(self.open_ph2acf_log)
 
         # Connect module ID changes to load details
-        self.moduleLE.textChanged.connect(self.load_module_details)
+#        self.moduleLE.textChanged.connect(self.load_module_details)
 
         # Populate layer type combo box
         # self.ui.layertypeCB.clear()
@@ -321,6 +321,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Connect open in browser button
         self.openInBrowserPB.clicked.connect(self.open_results_in_browser)
 
+        self.current_module_data=  None
         self.current_session = None
         self.current_session_operator = None
         self.current_session_comments = None
@@ -1242,6 +1243,41 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.show_error_dialog(f"Failed to disconnect module: {str(e)}")
 
 
+    def module_changed(self):
+
+        self.load_module_details()
+        module_id=self.moduleLE.text()
+        query={"cable": module_id, "side": "crateSide"}
+        response = requests.post(
+                self.get_api_url('snapshot'),
+                json=query
+        )
+        if response.status_code == 200:
+            snapshot = response.json()
+            print("LOADED:",snapshot.get("1",None))
+            print("LOADED:",snapshot.get("3",None))
+            fiber=snapshot.get("1",None)
+            power=snapshot.get("3",None)
+            if fiber :
+                fib=fiber["connections"][0]["cable"]
+                fports=fiber["connections"][0]["det_port"]
+                fports=[x for x in fports if x !=  "A"]
+                self.fiberCB.setCurrentText(fib+(f";{fports[0]}" if len(fports) >0 else '' ))
+                print(fib+(f";{fports[0]}" if len(fports) >0 else '' ))
+            if power :
+                pcable=power["connections"][0]["cable"]
+                pports=power["connections"][0]["det_port"]
+                pports=[x for x in pports if x !=  "power" and x!= "A"]
+                self.powerCB.setCurrentText(pcable+(f";{pports[0]}" if len(pports) >0 else '' ))
+                print(pcable+(f";{pports[0]}" if len(pports) >0 else '' ))
+
+#LOADED: {'crate_port': 'fiber', 'connections': [{'cable': 'SfibA', 'line': 1, 'det_port': ['A'], 'crate_port': ['67']}, {'cable': 'FC7OT8', 'line': 3, 'det_port': ['OG1'], 'crate_port': []}]}
+#LOADED: {'crate_port': 'power', 'connections': [{'cable': 'BINT1', 'line': 3, 'det_port': ['power'], 'crate_port': ['HV', 'HVLV']}, {'cable': 'P001', 'line': 12, 'det_port': ['A', 'B12'], 'crate_port': ['HV12']}, {'cable': 'H48', 'line': 1, 'det_port': ['A'], 'crate_port': ['A']}, {'cable': 'ASLOT0', 'line': 12, 'det_port': ['12'], 'crate_port': []}]}
+# print("LOADED:",self.current_module_data["crateSide"])
+       # fiber=self.current_module_data["crateSide"].get("2","")
+       # power=self.current_module_data["crateSide"].get("3","")
+       # print(str(fiber[0])+";"+str(fiber[1]//2),power[0]+";"+str(power[1]))
+        self.update_connection_status()
 
     def update_connection_status(self):
         """Update the connection status labels showing both connection directions"""
@@ -1286,6 +1322,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
     def check_connection_match(self, det_endpoint):
         """Check if the detected connection matches the selected module"""
+
         selected_module = self.moduleLE.text()
         return selected_module == "" or selected_module == det_endpoint
 
@@ -1401,6 +1438,8 @@ class MainApp(integration_gui.Ui_MainWindow):
 
             if power_id_slot != "" :
                 #filter to get only the lines with det_port=power_id_slot
+                if "B" == power_id_slot[0] :
+                    power_id_slot=power_id_slot[1:]
                 det_snapshot = {k: v for k, v in det_snapshot.items() if v.get("crate_port") == "HV%s"%power_id_slot}
                 
             for line in det_snapshot:
@@ -1419,7 +1458,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 if crate_response.status_code == 200:
                     crate_snapshot = crate_response.json()
                     crate_endpoints = []
-                    print("PCrate_pre",crate_snapshot)
+#                    print("PCrate_pre",crate_snapshot)
 #PCrate_pre {'1': {'crate_port': 'HV1', 'det_port': 'A', 'connections': [{'cable': 'H36', 'line': 1, 'det_port': ['A'], 'crate_port': ['A']}, {'cable': 'ASLOT2', 'line': 1, 'det_port': ['1'], 'crate_port': []}]}, 
 # '2': {'crate_port': 'HV2', 'det_port': 'A', 'connections': [{'cable': 'H37', 'line': 1, 'det_port': ['A'], 'crate_port': ['A']}, {'cable': 'ASLOT2', 'line': 2, 'det_port': ['2'], 'crate_port': []}]}, 
 # '3': {'crate_port': 'HV3', 'det_port': 'A', 'connections': [{'cable': 'H38', 'line': 1, 'det_port': ['A'], 'crate_port': ['A']}, {'cable': 'ASLOT2', 'line': 3, 'det_port': ['3'], 'crate_port': []}]}, 
@@ -1437,7 +1476,7 @@ class MainApp(integration_gui.Ui_MainWindow):
 
                     if power_id_slot != "" :
                         crate_snapshot = {k: v for k, v in crate_snapshot.items() if v["crate_port"]=="HV%s"%power_id_slot or int(k) == int(power_id_slot)+12}
-                    print("PCrate_post",crate_snapshot)
+ #                   print("PCrate_post",crate_snapshot)
                     # Look at power lines (3,4)
                     for line in crate_snapshot.keys():
                         print(crate_snapshot[line]["connections"])
@@ -1777,6 +1816,7 @@ class MainApp(integration_gui.Ui_MainWindow):
     def unmount_module(self):
         """Unmount the currently selected module"""
         module_id = self.moduleLE.text()
+        print("UNMOUNTING", module_id)
         
         if not module_id:
             self.log_output("No module selected")
@@ -1833,6 +1873,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             response = requests.get(self.get_api_url(f'modules/{module_id}'))
             if response.status_code == 200:
                 module_data = response.json()
+                self.current_module_data=module_data
                 self.current_module_id = module_id
                 self.module_db.ui.moduleNameLabel.setText(module_id)
                 self.module_db.populate_details_tree(module_data)

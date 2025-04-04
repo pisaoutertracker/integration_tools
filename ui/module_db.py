@@ -409,6 +409,7 @@ class ModuleDB(QWidget):
         
         try:
             success, module_data = self.make_api_request(f'modules/{self.current_module_id}')
+            self.current_module_data=module_data
             if success:
                 self.populate_details_tree(module_data)
             else:
