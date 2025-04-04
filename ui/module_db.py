@@ -193,7 +193,8 @@ class ModuleDB(QWidget):
     def filter_modules(self, search_text=None):
         """Filter modules based on search text and all filters"""
         if search_text is None:
-            search_text = self.searchBox.text().lower()
+           search_text = self.searchBox.text()
+        search_text=search_text
         
         self.ui.treeWidget.clear()
         
@@ -224,7 +225,7 @@ class ModuleDB(QWidget):
             module["spacer"] = spacer
             
             # Apply all filters
-            if search_text and search_text not in module.get('moduleName', '').lower():
+            if search_text and search_text not in module.get('moduleName', ''):
                 continue
             
             speed = self.ui.speedCB.currentText()
