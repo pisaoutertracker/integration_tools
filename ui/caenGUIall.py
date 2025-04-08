@@ -8,6 +8,59 @@ from PyQt5.QtGui import QFont
 import socket
 import json
 BUFFER_SIZE = 100000
+import sys
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QTextEdit, QHBoxLayout, QFrame, QLabel
+from PyQt5.QtCore import pyqtSlot, QTimer, QThread, pyqtSignal, QObject
+import socket
+import json
+BUFFER_SIZE = 100000
+class CAENQueryThread(QThread):
+    """Thread class for handling CAEN queries"""
+    dataReady = pyqtSignal(dict)  # Signal to emit when data is received
+    error = pyqtSignal(str)  # Signal to emit when error occurs
+
+    def __init__(self, ip='192.168.0.45', port=7000):
+        super().__init__()
+        self.ip = ip
+        self.port = port
+        self.message = None
+        self.receive = False
+        self.running = True
+
+    def setup_query(self, message, receive=False):
+        """Setup the query to be executed"""
+        self.message = message
+        self.receive = receive
+        
+    def stop(self):
+        """Stop the thread"""
+        self.running = False
+        self.wait()
+
+    def run(self):
+        """Thread's main method"""
+#        print("Running query thread",self.message)
+        if not self.message:
+            return
+
+        try:
+            tcpClass = tcp_util(ip=self.ip, port=self.port)
+            tcpClass.sendMessage(self.message)
+            
+            if self.receive:
+                data = tcpClass.socket.recv(BUFFER_SIZE)[8:].decode("utf-8")
+                parsedData = {}
+                for token in data.split(','):
+                    if token.startswith('caen'):
+                        key, value = token.split(":")
+                        value = float(value)
+                        parsedData[key] = value
+                self.dataReady.emit(parsedData)
+            
+            tcpClass.closeSocket()
+            
+        except Exception as e:
+            self.error.emit(str(e))
 
 class tcp_util():
     """Utility class for tcp
@@ -53,11 +106,28 @@ class tcp_util():
 
 from argparse import Namespace
 
-class caenGUI(QWidget):
-    def __init__(self):
+class caenGUIall(QWidget):
+    def __init__(self, ip='192.168.0.45', port=7000):
         super().__init__()
         self.initUI()
+        
+        # Create query thread
+        self.queryThread = CAENQueryThread(ip=ip, port=port)
+        self.queryThread.dataReady.connect(self.handle_query_response)
+        self.queryThread.error.connect(self.handle_query_error)
 
+        
+        # Create timer for periodic update
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update)
+        self.timer.start(2000)
+        
+    def change_host(self, ip, port):
+        """Change host IP and port"""
+        self.queryThread = CAENQueryThread(ip=ip, port=port)
+        self.queryThread.dataReady.connect(self.handle_query_response)
+        self.queryThread.error.connect(self.handle_query_error)
+        
     def initUI(self):
         self.setWindowTitle('CAEN GUI')
 #        self.setGeometry(100, 100, 300, 400)
@@ -119,8 +189,13 @@ class caenGUI(QWidget):
 
     @pyqtSlot()
     def update(self):
+        """Periodic update method"""
+#        print("Update")
+        self.queryThread.setup_query('GetStatus,PowerSupplyId:caen', True)
+        self.queryThread.start()
+        
+    def handle_query_response(self, ret):
       try:
-        ret=self.send('GetStatus,PowerSupplyId:caen',True)
         for channel in self.channels:
             #self.led[channel].setOn(ret['caen_'+channel+'_IsOn']>0.5)
           try:
@@ -139,37 +214,54 @@ class caenGUI(QWidget):
               print("No info for", channel)
       except:
           print("Cannot parse")
+          
+    def handle_query_error(self, error_msg):
+        """Handle errors from query thread"""
+        print(f"Query error: {error_msg}")
+          
     @pyqtSlot()
-    def on(self,channel):
-        self.send('TurnOn,PowerSupplyId:caen,ChannelId:'+channel)
+    def on(self, channel):
+        print(f'TurnOn,PowerSupplyId:caen,ChannelId:{channel}')
+        self.queryThread.setup_query(f'TurnOn,PowerSupplyId:caen,ChannelId:{channel}')
+        self.queryThread.start()
+
     @pyqtSlot()
-    def off(self,channel):
-        self.send('TurnOff,PowerSupplyId:caen,ChannelId:'+channel)
+    def off(self, channel):
+        print(f'TurnOff,PowerSupplyId:caen,ChannelId:{channel}')
+        self.queryThread.setup_query(f'TurnOff,PowerSupplyId:caen,ChannelId:{channel}')
+        self.queryThread.start()
 
-    def send(self,message,receive=False):
-        print(message)
-        tcpClass = tcp_util(ip='192.168.0.45',port=7000)
-        tcpClass.sendMessage(message)
-        try:
-          if receive :
-            data = tcpClass.socket.recv(BUFFER_SIZE)[8:].decode("utf-8")
-            print(data)
-            parsedData={}
-            for token in data.split(',') :
-                if token.startswith('caen'):
-                    key,value=token.split(":")
-                    value=float(value)
-                    parsedData[key]=value
-            print(json.dumps(parsedData,indent=4),flush=True)
-            return parsedData
-        except:
-            print("Cannot parse")
-def main():
-    app = QApplication(sys.argv)
-    ex = caenGUI()
-    sys.exit(app.exec_())
+    # def send(self,message,receive=False):
+    #     print(message)
+    #     tcpClass = tcp_util(ip='192.168.0.45',port=7000)
+    #     tcpClass.sendMessage(message)
+    #     try:
+    #       if receive :
+    #         data = tcpClass.socket.recv(BUFFER_SIZE)[8:].decode("utf-8")
+    #         print(data)
+    #         parsedData={}
+    #         for token in data.split(',') :
+    #             if token.startswith('caen'):
+    #                 key,value=token.split(":")
+    #                 value=float(value)
+    #                 parsedData[key]=value
+    #         print(json.dumps(parsedData,indent=4),flush=True)
+    #         return parsedData
+    #     except:
+    #         print("Cannot parse")
 
+
+import argparse
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description='CAEN GUI')
+    parser.add_argument('--ip', type=str, default='192.168.0.45', help='IP address of the CAEN server')
+    parser.add_argument('--port', type=int, default=7000, help='Port of the CAEN server')
+    args = parser.parse_args()
+    
+    app = QApplication(sys.argv)
+    ex = caenGUIall()
+    ex.change_host(ip=args.ip, port=args.port)
+    
+    sys.exit(app.exec_())
 
 
