@@ -46,9 +46,20 @@ class CAENQueryThread(QThread):
         try:
             tcpClass = tcp_util(ip=self.ip, port=self.port)
             tcpClass.sendMessage(self.message)
-            
             if self.receive:
-                data = tcpClass.socket.recv(BUFFER_SIZE)[8:].decode("utf-8")
+                data = b''
+                while(True) :
+                    try:
+                        chunk = tcpClass.socket.recv(BUFFER_SIZE)
+                        if not chunk:
+                            break
+                        data+=chunk
+                    except:
+                        break
+                data=data[8:]
+        #        print(data[-10:])
+                data=data.decode("utf-8")
+            
                 parsedData = {}
                 for token in data.split(','):
                     if token.startswith('caen'):
@@ -69,6 +80,7 @@ class tcp_util():
         self.ip          = ip
         self.port        = port
         self.socket      = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.settimeout(0.5)
         self.headerBytes = 4
 
         self.connectSocket()
