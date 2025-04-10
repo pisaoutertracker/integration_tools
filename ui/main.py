@@ -1261,13 +1261,13 @@ class MainApp(integration_gui.Ui_MainWindow):
             print("LOADED:",snapshot.get("3",None))
             fiber=snapshot.get("1",None)
             power=snapshot.get("3",None)
-            if fiber :
+            if fiber and len(fiber["connections"])>0:
                 fib=fiber["connections"][0]["cable"]
                 fports=fiber["connections"][0]["det_port"]
                 fports=[x for x in fports if x !=  "A"]
                 self.fiberCB.setCurrentText(fib+(f";{fports[0]}" if len(fports) >0 else '' ))
                 print(fib+(f";{fports[0]}" if len(fports) >0 else '' ))
-            if power :
+            if power and len(power["connections"])>0:
                 pcable=power["connections"][0]["cable"]
                 pports=power["connections"][0]["det_port"]
                 pports=[x for x in pports if x !=  "power" and x!= "A"]
