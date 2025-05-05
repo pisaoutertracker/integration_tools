@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow
-from module_db import ModuleDB
+from db.module_db import ModuleDB
 
 class DBMainWindow(QMainWindow):
     def __init__(self):

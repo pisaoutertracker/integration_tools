@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import threading
-import integration_gui
+import ui.integration_gui as integration_gui
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget, 
     QLineEdit, QLabel, QFormLayout, QTreeWidgetItem,
@@ -18,7 +18,7 @@ import os
 import paho.mqtt.client as mqtt
 import struct
 import numpy as np
-from caenGUI import CAENControl
+from caen.caenGUI import CAENControl
 import json
 # Set matplotlib backend before importing pyplot
 import matplotlib
@@ -29,12 +29,12 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import struct
 import numpy as np
-from caenGUI import CAENControl
 
 import webbrowser
 import os.path
 import re
 from datetime import datetime
+from db.module_db import ModuleDB
 # Add this class near the top of the file
 class LogEmitter(QObject):
     """Helper class to emit log messages from any thread"""
@@ -63,12 +63,13 @@ class CommandWorker(QThread):
         except Exception as e:
             self.finished.emit(False, "", str(e))
 
-from module_db import ModuleDB
 
 class MainApp(integration_gui.Ui_MainWindow):
     def __init__(self, window):
         # First call setupUi to create all UI elements from the .ui file
         self.setupUi(window)
+        # Load settings before setting up connections
+        self.load_settings()
         
         # Create ModuleDB instance
         self.module_db = ModuleDB()
@@ -119,8 +120,6 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Initialize air state
         self.air_state = False
         
-        # Load settings before setting up connections
-        self.load_settings()
         
         # Store the full module list for filtering - initialize before using
         self.all_modules = []
@@ -415,7 +414,7 @@ class MainApp(integration_gui.Ui_MainWindow):
     def get_settings_file(self):
         """Get the settings file path"""
         config_file = os.path.join(os.path.expanduser("~/.config/integration_ui"), 'settings.yaml')
-        bundled_file = os.path.join(os.path.dirname(__file__), 'settings.yaml')
+        bundled_file = os.path.join(os.path.dirname(__file__), 'settings_integration.yaml')
         if os.path.exists(config_file):
             return config_file
         elif os.path.exists(bundled_file):
@@ -430,6 +429,8 @@ class MainApp(integration_gui.Ui_MainWindow):
                 settings = yaml.safe_load(f)
                 
             if settings:
+                print(settings)
+                print(self.get_settings_file())
                 # Load database URL
                 self.dbEndpointLE.setText(settings.get('db_url', 'http://localhost:5000'))
                 

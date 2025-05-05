@@ -6,7 +6,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 import requests
 import yaml
 import os
-from module_db_gui import Ui_ModuleDBWidget
+from db.module_db_gui import Ui_ModuleDBWidget
 
 class ModuleDB(QWidget):
     """Widget for managing module inventory and details"""
@@ -121,7 +121,7 @@ class ModuleDB(QWidget):
     def get_settings_file(self):
         """Get the settings file path"""
         config_file = os.path.join(os.path.expanduser("~/.config/module_db"), 'settings.yaml')
-        bundled_file = os.path.join(os.path.dirname(__file__), 'settings.yaml')
+        bundled_file = os.path.join(os.path.dirname(__file__), 'settings_integration.yaml')
         if os.path.exists(config_file):
             return config_file
         elif os.path.exists(bundled_file):
