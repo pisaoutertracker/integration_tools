@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, QTimer
 from coldroom.system import System
 from coldroom.thermal_camera_gui import ThermalCameraTab
 from coldroom.safety import check_door_safe_to_open, check_dew_point, check_hv_safe, check_light_status, check_door_status
+from caen.caenGUIall import caenGUIall
 
 
 # Configure logging
@@ -122,6 +123,10 @@ class MainApp(QtWidgets.QMainWindow):
         # Add Thermal Camera tab
         self.thermal_camera_tab = ThermalCameraTab(self.system)
         self.tab_widget.addTab(self.thermal_camera_tab, "Thermal Camera")
+
+        # Add CAEN tab
+        caen_tab = caenGUIall()
+        self.tab_widget.addTab(caen_tab, "CAEN")
 
         # Load settings tab from UI file
         self.settings_tab = QtWidgets.QWidget()
