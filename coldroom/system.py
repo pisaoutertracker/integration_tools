@@ -4,8 +4,8 @@ import threading
 import time
 import sys
 import logging
-from thermal_camera import ThermalCameraMQTTClient
-from marta_coldroom import MartaColdRoomMQTTClient
+from .thermal_camera import ThermalCameraMQTTClient
+from .marta_coldroom import MartaColdRoomMQTTClient
 
 # Configure logging
 logging.basicConfig(

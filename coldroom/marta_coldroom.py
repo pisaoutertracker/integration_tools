@@ -3,7 +3,7 @@ import paho.mqtt.client as mqtt
 import sys
 import logging
 
-from safety import *
+from .safety import *
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

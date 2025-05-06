@@ -1,12 +1,13 @@
+#!/bin/env python3
 import sys
 import os
 import yaml
 import logging
 from PyQt5 import QtWidgets, uic, QtGui
 from PyQt5.QtCore import Qt, QTimer
-from system import System
-from thermal_camera_gui import ThermalCameraTab
-from safety import check_door_safe_to_open, check_dew_point, check_hv_safe, check_light_status, check_door_status
+from coldroom.system import System
+from coldroom.thermal_camera_gui import ThermalCameraTab
+from coldroom.safety import check_door_safe_to_open, check_dew_point, check_hv_safe, check_light_status, check_door_status
 
 
 # Configure logging
@@ -102,7 +103,7 @@ class MainApp(QtWidgets.QMainWindow):
         # Load the MARTA Cold Room tab from UI file
         # Create a temporary QMainWindow to load the UI
         temp_window = QtWidgets.QMainWindow()
-        marta_ui_file = os.path.join(os.path.dirname(__file__), "marta_coldroom.ui")
+        marta_ui_file = os.path.join(os.path.dirname(__file__),"coldroom", "marta_coldroom.ui")
         uic.loadUi(marta_ui_file, temp_window)
 
         # Create a QWidget for our tab and get the central widget from temp_window
@@ -124,7 +125,8 @@ class MainApp(QtWidgets.QMainWindow):
 
         # Load settings tab from UI file
         self.settings_tab = QtWidgets.QWidget()
-        uic.loadUi("settings_coldroom.ui", self.settings_tab)
+        settings_ui_file = os.path.join(os.path.dirname(__file__),"coldroom", "settings_coldroom.ui")
+        uic.loadUi(settings_ui_file, self.settings_tab)
         self.tab_widget.addTab(self.settings_tab, "Settings")
 
         # Pre-fill settings with values from system
