@@ -13,6 +13,7 @@ from coldroom.safety import (
     check_hv_safe,
     check_light_status,
     check_door_status,
+    check_light_safe_to_turn_on,
 )
 from caen.caenGUIall import caenGUIall
 from db.module_db import ModuleDB
@@ -132,8 +133,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.tab_widget.addTab(self.thermal_camera_tab, "Thermal Camera")
 
         # Add CAEN tab
-        caen_tab = caenGUIall()
-        self.tab_widget.addTab(caen_tab, "CAEN")
+        self.caen_tab = caenGUIall()
+        self.tab_widget.addTab(self.caen_tab, "CAEN")
 
         # Add Module DB tab
         self.module_db = ModuleDB()
@@ -596,6 +597,17 @@ class MainApp(QtWidgets.QMainWindow):
                             "background-color: yellow;" if coldroom["light"] else "background-color: black;"
                         )  # LED is yellow when ON
                         logger.debug(f"Updated light LED: {'yellow' if coldroom['light'] else 'black'}")
+                    else:
+                        is_safe = check_light_safe_to_turn_on(self.system.status, self.caen_tab.last_response)
+                        button = central.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
+                        if not is_safe:
+                            if button:
+                                button.setEnabled(False)
+                                logger.debug("Disabled light button due to safety check")
+                        else:
+                            if button:
+                                button.setEnabled(True)
+                                logger.debug("Enabled light button after safety check")
 
                 # =========================================================================================== COLDROOM DOOR PROCESS ===========================================================================================
                 # Door status and LED
@@ -610,10 +622,10 @@ class MainApp(QtWidgets.QMainWindow):
                 # Update safe to open LED based on door safety check
                 safe_to_open_led = central.findChild(QtWidgets.QFrame, "safe_to_open_LED")
                 if safe_to_open_led:
-                    is_safe = check_door_safe_to_open(self.system.status)
-                    print(is_safe)
+                    is_safe, door_msg = check_door_safe_to_open(self.system.status, self.caen_tab.last_response)
                     safe_to_open_led.setStyleSheet("background-color: green;" if is_safe else "background-color: red;")
                     logger.debug(f"Updated safe to open LED: {'green' if is_safe else 'red'} (is_safe={is_safe})")
+                    self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "door_safety_msg").setText(door_msg)
 
                 # =========================================================================================== COLDROOM RUN PROCESS ===========================================================================================
                 # Run status

@@ -6,7 +6,11 @@ safety_settings = {
         "TT05_CO2",  # MARTA supply temperature
         "TT06_CO2",  # MARTA return temperature
         "ch_temperature",  # Coldroom temperature
-    ]
+    ],
+    "used_caen_ch": [
+        "0.1",
+        "2.1",
+    ],
 }
 
 ### Safety functions ###
@@ -91,32 +95,27 @@ def check_light_status(system_status):
         return False  # Conservative approach
 
 
-def check_hv_safe(system_status):
+def check_any_hv_on(caen_ch_status):
     try:
-        if "caen" not in system_status:
-            return False  # Conservative approach
-
-        lv_on = True
-        for channel in system_status["caen"]:
-            if channel.endswith("LV"):
-                if system_status["caen"][channel]["isOn"]:
-                    lv_on = False
-                    break
-
-        light_on = check_light_status(system_status)
-        door_open = check_door_status(system_status)
-        is_safe = lv_on and (not light_on) and (not door_open)
-        return is_safe
+        # Check if any used channel is on
+        hv_on = False
+        for channel in safety_settings["used_caen_ch"]:
+            ch_str = f"caen_HV{channel}_IsOn"
+            if bool(caen_ch_status.get(ch_str, False)):
+                hv_on = True
+                break
+        return hv_on
     except Exception as e:
-        print(f"Error in check_hv_safe: {str(e)}")
-        return False  # Conservative approach
+        print(f"Error in check_any_hv_on: {str(e)}")
+        return True
 
 
-def check_door_safe_to_open(system_status):
+def check_door_safe_to_open(system_status, caen_ch_status):
     """
     Check if it's safe to open the door based on multiple safety conditions.
     Returns True if it's safe to open the door, False otherwise.
     """
+    log_msg = ""
     try:
         # Check if we have all necessary data
         if "coldroom" not in system_status:
@@ -124,25 +123,49 @@ def check_door_safe_to_open(system_status):
 
         # 1. Check if dew point conditions are safe
         dew_point_safe = check_dew_point(system_status)
+        log_msg += f"Dew point safe: {dew_point_safe}\n"
 
-        # 2. Check if high voltage is safe
-        # hv_safe = check_hv_safe(system_status)
+        # 2. Check if high voltage is off
+        hv_on = check_any_hv_on(caen_ch_status)
+        log_msg += f"High voltage on: {hv_on}\n"
 
         # 3. Check if light is off (light should be off when opening door)
         # light_off = not check_light_status(system_status)
 
         # 4. Check if door is currently closed (can't open if already open)
         door_closed = not check_door_status(system_status)
+        log_msg += f"Door closed: {door_closed}\n"
 
         # It's safe to open the door if:
         # - Dew point conditions are safe
         # - High voltage is safe
         # - Light is off
         # - Door is currently closed
-        is_safe = dew_point_safe and door_closed
-
-        return is_safe
+        is_safe = dew_point_safe and door_closed and not hv_on
+        return is_safe, log_msg
 
     except Exception as e:
         print(f"Error in check_door_safe_to_open: {str(e)}")
+        return False  # Conservative approach - if we can't check, assume it's unsafe
+
+
+def check_light_safe_to_turn_on(system_status, caen_ch_status):
+    """
+    Check if it's safe to turn on the light based on multiple safety conditions.
+    Returns True if it's safe to turn on the light, False otherwise.
+    """
+    log_msg = ""
+    try:
+        # Check if we have all necessary data
+        if "coldroom" not in system_status:
+            return False  # Conservative approach - if we can't check, assume it's unsafe
+
+        # Check if high voltage is off
+        hv_on = check_any_hv_on(caen_ch_status)
+        log_msg += f"High voltage on: {hv_on}\n"
+
+        return hv_on
+
+    except Exception as e:
+        print(f"Error in check_light_safe_to_turn_on: {str(e)}")
         return False  # Conservative approach - if we can't check, assume it's unsafe
