@@ -7,8 +7,15 @@ from PyQt5 import QtWidgets, uic, QtGui
 from PyQt5.QtCore import Qt, QTimer
 from coldroom.system import System
 from coldroom.thermal_camera_gui import ThermalCameraTab
-from coldroom.safety import check_door_safe_to_open, check_dew_point, check_hv_safe, check_light_status, check_door_status
+from coldroom.safety import (
+    check_door_safe_to_open,
+    check_dew_point,
+    check_hv_safe,
+    check_light_status,
+    check_door_status,
+)
 from caen.caenGUIall import caenGUIall
+from db.module_db import ModuleDB
 
 
 # Configure logging
@@ -104,7 +111,7 @@ class MainApp(QtWidgets.QMainWindow):
         # Load the MARTA Cold Room tab from UI file
         # Create a temporary QMainWindow to load the UI
         temp_window = QtWidgets.QMainWindow()
-        marta_ui_file = os.path.join(os.path.dirname(__file__),"coldroom", "marta_coldroom.ui")
+        marta_ui_file = os.path.join(os.path.dirname(__file__), "coldroom", "marta_coldroom.ui")
         uic.loadUi(marta_ui_file, temp_window)
 
         # Create a QWidget for our tab and get the central widget from temp_window
@@ -128,9 +135,15 @@ class MainApp(QtWidgets.QMainWindow):
         caen_tab = caenGUIall()
         self.tab_widget.addTab(caen_tab, "CAEN")
 
+        # Add Module DB tab
+        module_db = ModuleDB()
+        self.tab_widget.addTab(2, module_db.ui.moduleDetailsTab, "Module Details")
+        self.module_db.ui.viewDetailsPB.clicked.connect(lambda: self.tab_widget.setCurrentIndex(2))
+
+
         # Load settings tab from UI file
         self.settings_tab = QtWidgets.QWidget()
-        settings_ui_file = os.path.join(os.path.dirname(__file__),"coldroom", "settings_coldroom.ui")
+        settings_ui_file = os.path.join(os.path.dirname(__file__), "coldroom", "settings_coldroom.ui")
         uic.loadUi(settings_ui_file, self.settings_tab)
         self.tab_widget.addTab(self.settings_tab, "Settings")
 

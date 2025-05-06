@@ -121,7 +121,7 @@ class ModuleDB(QWidget):
     def get_settings_file(self):
         """Get the settings file path"""
         config_file = os.path.join(os.path.expanduser("~/.config/module_db"), 'settings.yaml')
-        bundled_file = os.path.join(os.path.dirname(__file__), 'settings_integration.yaml')
+        bundled_file = os.path.join(os.path.dirname(__file__), os.pardir, 'settings_integration.yaml')
         if os.path.exists(config_file):
             return config_file
         elif os.path.exists(bundled_file):
