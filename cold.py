@@ -136,10 +136,11 @@ class MainApp(QtWidgets.QMainWindow):
         self.tab_widget.addTab(caen_tab, "CAEN")
 
         # Add Module DB tab
-        module_db = ModuleDB()
-        self.tab_widget.addTab(2, module_db.ui.moduleDetailsTab, "Module Details")
-        self.module_db.ui.viewDetailsPB.clicked.connect(lambda: self.tab_widget.setCurrentIndex(2))
-
+        self.module_db = ModuleDB()
+        self.tab_widget.addTab(self.module_db.ui.tab_2, "Module Inventory")
+        self.tab_widget.addTab(self.module_db.ui.moduleDetailsTab, "Module Details")
+        self.module_db.ui.viewDetailsPB.clicked.connect(lambda: self.tab_widget.setCurrentIndex(4))
+        self.module_db.ui.selectModulePB.setEnabled(False)
 
         # Load settings tab from UI file
         self.settings_tab = QtWidgets.QWidget()
