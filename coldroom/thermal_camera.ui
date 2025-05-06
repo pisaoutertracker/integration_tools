@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1414</width>
+    <height>1059</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="0" rowspan="12">
+     <widget class="QGraphicsView" name="graphicsView"/>
+    </item>
+    <item row="0" column="1" colspan="3">
+     <widget class="QPushButton" name="relse_mtr_PB_2">
+      <property name="text">
+       <string>Start Thermal Camera</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="6" colspan="2">
+     <widget class="QPushButton" name="relse_mtr_PB">
+      <property name="text">
+       <string>Release Stepper Motor</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="10" colspan="2">
+     <widget class="QPushButton" name="get_frms_PB">
+      <property name="text">
+       <string>Get Frames</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1" colspan="2">
+     <widget class="QLabel" name="label_3">
+      <property name="text">
+       <string>Rotate the system</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1">
+     <widget class="QLabel" name="label_8">
+      <property name="text">
+       <string>Direction</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="3" colspan="3">
+     <widget class="QComboBox" name="direction_combo">
+      <item>
+       <property name="text">
+        <string>Clockwise</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Anticlockwise</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="2" column="6" colspan="2">
+     <widget class="QLabel" name="label_9">
+      <property name="text">
+       <string>(Rotate, Calibrate)</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QPushButton" name="rotate_PB">
+      <property name="text">
+       <string>Rotate</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="2">
+     <widget class="QLabel" name="label_4">
+      <property name="text">
+       <string>of</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="5" colspan="2">
+     <widget class="QLineEdit" name="ip_DAngle_LE"/>
+    </item>
+    <item row="3" column="7">
+     <widget class="QLabel" name="label_5">
+      <property name="text">
+       <string>degrees </string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="1">
+     <widget class="QPushButton" name="go_to_PB">
+      <property name="text">
+       <string>Go To</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="2">
+     <widget class="QLabel" name="label_6">
+      <property name="text">
+       <string>angle</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="5" colspan="2">
+     <widget class="QLineEdit" name="ip_angle_LE"/>
+    </item>
+    <item row="4" column="7" colspan="3">
+     <widget class="QLabel" name="label_7">
+      <property name="text">
+       <string>(direction not required)</string>
+      </property>
+     </widget>
+    </item>
+    <item row="5" column="1">
+     <widget class="QLabel" name="label_2">
+      <property name="text">
+       <string>Coordinates</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="1" colspan="3">
+     <widget class="QPushButton" name="set_abs_pos_PB">
+      <property name="text">
+       <string>Set Absolute Position</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="6" colspan="2">
+     <widget class="QLineEdit" name="ip_abs_pos_LE"/>
+    </item>
+    <item row="6" column="8" colspan="4">
+     <widget class="QPushButton" name="export_abs_pos_PB">
+      <property name="text">
+       <string>Export Absolute Position</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="1">
+     <widget class="QPushButton" name="calibrate_PB">
+      <property name="text">
+       <string>Calibrate</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="2">
+     <widget class="QLabel" name="ip_limiting_angle_lbl">
+      <property name="text">
+       <string>within</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="6" colspan="2">
+     <widget class="QLineEdit" name="ip_angle_LE_2">
+      <property name="text">
+       <string>90</string>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="1" colspan="2">
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>Automatic Rotation </string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="1">
+     <widget class="QPushButton" name="run_PB">
+      <property name="text">
+       <string>Run</string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="2" colspan="3">
+     <widget class="QPushButton" name="stop_PB">
+      <property name="text">
+       <string>Stop</string>
+      </property>
+     </widget>
+    </item>
+    <item row="10" column="1">
+     <widget class="QLabel" name="streaming_img_lbl">
+      <property name="text">
+       <string>Streaming</string>
+      </property>
+     </widget>
+    </item>
+    <item row="10" column="4">
+     <widget class="QFrame" name="streamin_image_flag">
+      <property name="styleSheet">
+       <string notr="true">background-color: red;</string>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::NoFrame</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Raised</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="10" column="8">
+     <widget class="QLabel" name="run_stat_flg_lbl">
+      <property name="text">
+       <string>Running</string>
+      </property>
+     </widget>
+    </item>
+    <item row="10" column="9">
+     <widget class="QFrame" name="run_stat_flg">
+      <property name="styleSheet">
+       <string notr="true">background-color: red;</string>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::NoFrame</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Raised</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="10" column="10">
+     <widget class="QLabel" name="pos_lbl">
+      <property name="text">
+       <string>Position</string>
+      </property>
+     </widget>
+    </item>
+    <item row="10" column="11">
+     <widget class="QLabel" name="ip_limiting_angle_lbl_2">
+      <property name="text">
+       <string>0</string>
+      </property>
+     </widget>
+    </item>
+    <item row="11" column="4" colspan="2">
+     <spacer name="horizontalSpacer">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>93</width>
+        <height>17</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item row="11" column="7">
+     <spacer name="verticalSpacer">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>17</width>
+        <height>317</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item row="12" column="0" colspan="11">
+     <widget class="QGraphicsView" name="graphicsView_2"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1414</width>
+     <height>30</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
