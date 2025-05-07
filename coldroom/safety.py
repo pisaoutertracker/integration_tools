@@ -163,8 +163,8 @@ def check_light_safe_to_turn_on(system_status, caen_ch_status):
         # Check if high voltage is off
         hv_on = check_any_hv_on(caen_ch_status)
         log_msg += f"High voltage on: {hv_on}\n"
-
-        return hv_on
+        is_safe = not hv_on
+        return is_safe
 
     except Exception as e:
         print(f"Error in check_light_safe_to_turn_on: {str(e)}")

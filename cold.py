@@ -586,7 +586,7 @@ class MainApp(QtWidgets.QMainWindow):
                     dewpoint = coldroom["dew_point_c"]
                     label.setText(f"{dewpoint:.1f}")
                     logger.debug(f"Updated dewpoint: {dewpoint}")
-
+                
                 # =========================================================================================== COLDROOM LIGHT PROCESS ===========================================================================================
                 # Light status and LED
                 if "light" in coldroom:
@@ -597,14 +597,16 @@ class MainApp(QtWidgets.QMainWindow):
                             "background-color: yellow;" if coldroom["light"] else "background-color: black;"
                         )  # LED is yellow when ON
                         logger.debug(f"Updated light LED: {'yellow' if coldroom['light'] else 'black'}")
-                    else:
-                        is_safe = check_light_safe_to_turn_on(self.system.status, self.caen_tab.last_response)
-                        button = central.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
-                        if not is_safe:
-                            if button:
-                                button.setEnabled(False)
-                                logger.debug("Disabled light button due to safety check")
-                        else:
+                        if bool(coldroom["light"]) is False:
+                           print("Light off, check if it is safe")
+                           is_safe = check_light_safe_to_turn_on(self.system.status, self.caen_tab.last_response)
+                           button = central.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
+                           if not is_safe:
+                               print("not safe")
+                               if button:
+                                   button.setEnabled(False)
+                                   logger.debug("Disabled light button due to safety check")
+                           else:
                             if button:
                                 button.setEnabled(True)
                                 logger.debug("Enabled light button after safety check")
