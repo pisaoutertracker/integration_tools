@@ -17,11 +17,6 @@ class ThermalCameraTab(QtWidgets.QWidget):
         super(ThermalCameraTab, self).__init__()
         self.system = system
 
-        # Create widget to hold the UI
-        # self.widget = QtWidgets.QMainWindow()
-        # self.ui = Ui_MainWindow()
-        # self.ui.setupUi(self.widget)
-
         # Load the UI file into a QMainWindow
         self.widget = QtWidgets.QMainWindow()
         uic.loadUi(os.path.join(os.path.dirname(__file__), "thermal_camera.ui"), self.widget)
@@ -80,26 +75,23 @@ class ThermalCameraTab(QtWidgets.QWidget):
             # Adjust subplot parameters to remove excess whitespace
             self.cameras_fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
 
-            # Create tab widget for stitched views
-            self.stitched_tab_widget = QtWidgets.QTabWidget()
-            self.ui.gridLayout.addWidget(self.stitched_tab_widget, 13, 0, 1, 16)
-
             # Create stitched view for each camera
             self.stitched_figs = []
             self.stitched_canvases = []
             self.stitched_images = []
             self.stitched_axes = []
 
-            tab_names = ["Camera 1", "Camera 2", "Camera 3", "Camera 4"]
-            for tab_name in tab_names:
-                # Create tab widget
-                tab = QtWidgets.QWidget()
-                tab_layout = QtWidgets.QVBoxLayout(tab)
+            # Get the tab widget from the UI
+            self.stitched_tab_widget = self.ui.findChild(QtWidgets.QTabWidget, "tabWidget")
+
+            for graphics_view in [self.ui.graphics_1, self.ui.graphics_2, self.ui.graphics_3, self.ui.graphics_4]:
+                scene = QtWidgets.QGraphicsScene()
+                graphics_view.setScene(scene)
 
                 # Create figure and canvas with proper aspect ratio for 360-degree view
                 fig = Figure(figsize=(12, 3), dpi=100)
                 canvas = FigureCanvas(fig)
-                tab_layout.addWidget(canvas)
+                scene.addWidget(canvas)
 
                 # Create axes and image
                 ax = fig.add_subplot(111)
@@ -129,38 +121,6 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 self.stitched_canvases.append(canvas)
                 self.stitched_images.append(img)
                 self.stitched_axes.append(ax)
-
-                # Add tab
-                self.stitched_tab_widget.addTab(tab, tab_name)
-
-            # Remove the old graphicsView_2 since we're using tabs now
-            self.ui.graphicsView_2.setParent(None)
-
-            # Create and set up position display
-            self.ui.positionLE = QtWidgets.QLineEdit(self.ui.centralwidget)
-            self.ui.positionLE.setObjectName("positionLE")
-            self.ui.positionLE.setReadOnly(True)
-            self.ui.positionLE.setFixedWidth(80)
-            self.ui.gridLayout.addWidget(self.ui.positionLE, 11, 14, 1, 1)
-
-            # Make status LEDs more visible with MARTA style
-            self.ui.streamin_image_flag.setMinimumSize(30, 20)
-            self.ui.streamin_image_flag.setMaximumSize(30, 20)
-            self.ui.run_stat_flg.setMinimumSize(30, 20)
-            self.ui.run_stat_flg.setMaximumSize(30, 20)
-
-            # Update LED style to match MARTA coldroom tab
-            led_style = """
-                QFrame {
-                    border: 1px solid black;
-                    background-color: %s;
-                }
-            """
-            self.ui.streamin_image_flag.setStyleSheet(led_style % "red")
-            self.ui.run_stat_flg.setStyleSheet(led_style % "red")
-
-            # Set the minimum width of the main window to accommodate the cameras
-            self.widget.setMinimumWidth(1600)  # Increased width to avoid scrollbars
 
             logger.info("Camera views initialized")
 
@@ -249,12 +209,12 @@ class ThermalCameraTab(QtWidgets.QWidget):
         # Convert to uint8 for display - use actual temperature range
         if np.isclose(temp_min, temp_max):
             temp_max = temp_min + 1.0  # Add a small difference to avoid division by zero
-        
+
         # Create normalized array with proper handling of NaN values
         panorama_norm = np.zeros_like(panorama)
         valid_mask = ~np.isnan(panorama)
         panorama_norm[valid_mask] = 255 * (panorama[valid_mask] - temp_min) / (temp_max - temp_min)
-        
+
         # Areas without data will be black (0)
         panorama_norm = np.nan_to_num(panorama_norm, nan=0.0)  # Convert NaNs to 0
         panorama_norm = np.clip(panorama_norm, 0, 255)  # Ensure values are in valid range
@@ -274,27 +234,14 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
             # Update position display
             if "position" in status:
-                self.ui.positionLE.setText(f"{status['position']:.2f}")
+                self.ui.ip_limiting_angle_lbl_2.setText(f"{status['position']:.2f}")
 
-            # Update running status with MARTA style LED
-            if "running" in status:
-                led_style = """
-                    QFrame {
-                        border: 1px solid black;
-                        background-color: %s;
-                    }
-                """
-                self.ui.run_stat_flg.setStyleSheet(led_style % ("green" if status["running"] else "red"))
-
-            # Update streaming status with MARTA style LED
-            if "streaming" in status:
-                led_style = """
-                    QFrame {
-                        border: 1px solid black;
-                        background-color: %s;
-                    }
-                """
-                self.ui.streamin_image_flag.setStyleSheet(led_style % ("green" if status["streaming"] else "red"))
+            streaming = status.get("streaming", False)
+            self.ui.streamin_image_flag.setStyleSheet(
+                "background-color: green;" if streaming else "background-color: red;"
+            )
+            running = status.get("running", False)
+            self.ui.run_stat_flg.setStyleSheet("background-color: green;" if running else "background-color: red;")
 
             # Update camera images with proper scaling
             if hasattr(self.system._thermalcamera, "_images"):
@@ -330,7 +277,9 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 try:
                     # Get stitching data from thermal camera
                     if hasattr(self.system._thermalcamera, "_stitching_data"):
-                        for i, (camera_name, camera_data) in enumerate(self.system._thermalcamera._stitching_data.items()):
+                        for i, (camera_name, camera_data) in enumerate(
+                            self.system._thermalcamera._stitching_data.items()
+                        ):
                             if camera_data:  # If we have data for this camera
                                 # Get all images and positions
                                 images = []
@@ -360,6 +309,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
                                     if panorama.shape[1] != 360:
                                         # Resize to 360 degrees if needed
                                         from scipy.ndimage import zoom
+
                                         zoom_factor = (1, 360 / panorama.shape[1])
                                         panorama = zoom(panorama, zoom_factor, order=1)
 
@@ -371,7 +321,9 @@ class ThermalCameraTab(QtWidgets.QWidget):
                                     cbar = self.stitched_images[i].colorbar
                                     if cbar is not None:
                                         cbar.set_ticks(np.linspace(temp_min, temp_max, 5))
-                                        cbar.set_ticklabels([f"{temp:.1f}°C" for temp in np.linspace(temp_min, temp_max, 5)])
+                                        cbar.set_ticklabels(
+                                            [f"{temp:.1f}°C" for temp in np.linspace(temp_min, temp_max, 5)]
+                                        )
 
                                     # Draw canvas
                                     self.stitched_canvases[i].draw()
