@@ -10,7 +10,7 @@ from coldroom.thermal_camera_gui import ThermalCameraTab
 from coldroom.safety import (
     check_door_safe_to_open,
     check_dew_point,
-    check_hv_safe,
+    # check_hv_safe,
     check_light_status,
     check_door_status,
     check_light_safe_to_turn_on,

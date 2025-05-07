@@ -6,449 +6,217 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1153</width>
-    <height>745</height>
+    <width>983</width>
+    <height>672</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout_2">
+   <layout class="QGridLayout" name="gridLayout_12">
     <item row="0" column="0">
-     <widget class="QFrame" name="safe_to_open_LED">
-      <property name="minimumSize">
-       <size>
-        <width>60</width>
-        <height>60</height>
-       </size>
-      </property>
-      <property name="maximumSize">
-       <size>
-        <width>60</width>
-        <height>60</height>
-       </size>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">background-color: red;</string>
-      </property>
-      <property name="frameShape">
-       <enum>QFrame::NoFrame</enum>
-      </property>
-      <property name="frameShadow">
-       <enum>QFrame::Raised</enum>
-      </property>
-     </widget>
+     <layout class="QGridLayout" name="gridLayout_2">
+      <item row="0" column="0">
+       <widget class="QFrame" name="safe_to_open_LED">
+        <property name="minimumSize">
+         <size>
+          <width>60</width>
+          <height>60</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>60</width>
+          <height>60</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">background-color: red;</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="coldroom_runlabel_2">
+        <property name="font">
+         <font>
+          <pointsize>20</pointsize>
+         </font>
+        </property>
+        <property name="text">
+         <string>Safe to open</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0" colspan="2">
+       <widget class="QGroupBox" name="groupBox">
+        <property name="title">
+         <string>Clean Room</string>
+        </property>
+        <layout class="QGridLayout" name="gridLayout_5">
+         <item row="0" column="0">
+          <layout class="QGridLayout" name="gridLayout_4">
+           <item row="1" column="0">
+            <widget class="QLabel" name="cleanroom_humidity_label">
+             <property name="text">
+              <string>Humidity (%) :</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="cleanroom_presure_label">
+             <property name="text">
+              <string>Pressure (milibar)</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLabel" name="cleanroom_temp_value_label">
+             <property name="text">
+              <string>?</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLabel" name="cleanroom_humidity_value_label">
+             <property name="text">
+              <string>?</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QLabel" name="cleanroom_pressure_value_label">
+             <property name="text">
+              <string>?</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLabel" name="cleanroom_dewpoint_value_label">
+             <property name="text">
+              <string>?</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="cleanroom_temp_label">
+             <property name="text">
+              <string>Temperature (C) :</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="cleanroom_dewpoint_label">
+             <property name="text">
+              <string>Dew Point (C) :</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="1" column="0" colspan="2">
+       <widget class="QLabel" name="door_safety_msg">
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </item>
     <item row="0" column="1">
-     <widget class="QLabel" name="coldroom_runlabel_2">
-      <property name="font">
-       <font>
-        <pointsize>20</pointsize>
-       </font>
-      </property>
-      <property name="text">
-       <string>Safe to open</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
-    </item>
-    <item row="0" column="2" rowspan="3">
      <widget class="QGroupBox" name="groupBox_2">
       <property name="title">
        <string>Cold Room</string>
       </property>
-      <layout class="QGridLayout" name="gridLayout">
-       <item row="0" column="0" rowspan="2">
-        <widget class="QLabel" name="coldroom_temp_label">
-         <property name="text">
-          <string>Temperature (C) :</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="1" rowspan="2">
-        <widget class="QLabel" name="coldroom_temp_value_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="2" rowspan="2">
-        <spacer name="horizontalSpacer">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="0" column="4" rowspan="2">
-        <widget class="QPushButton" name="coldroom_temp_ctrl_PB">
-         <property name="text">
-          <string>Ctrl Temp</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="5" rowspan="2">
-        <spacer name="horizontalSpacer_7">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="0" column="6" rowspan="2" colspan="2">
-        <widget class="QLabel" name="coldroom_temp_set_point_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="10" rowspan="2">
-        <widget class="QPushButton" name="coldroom_temp_set_PB">
-         <property name="text">
-          <string>Set Temperature</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="3">
-        <widget class="QFrame" name="ctrl_temp_LED">
-         <property name="minimumSize">
-          <size>
-           <width>30</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>30</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">background-color: red;</string>
-         </property>
-         <property name="frameShape">
-          <enum>QFrame::NoFrame</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="7">
-        <widget class="QLineEdit" name="coldroom_temp_LE"/>
-       </item>
-       <item row="2" column="0" rowspan="2">
-        <widget class="QLabel" name="coldroom_humidity_label">
-         <property name="text">
-          <string>Humidity (%) :</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="1" rowspan="2">
-        <widget class="QLabel" name="coldroom_humidity_value_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="2" rowspan="2">
-        <spacer name="horizontalSpacer_2">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="2" column="4" rowspan="2">
-        <widget class="QPushButton" name="coldroom_humidity_ctrl_PB">
-         <property name="text">
-          <string>Ctrl Humdity</string>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="5" rowspan="2">
-        <spacer name="horizontalSpacer_8">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item row="2" column="6" rowspan="2" colspan="2">
-        <widget class="QLabel" name="coldroom_humidity_set_point_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="10" rowspan="2">
-        <widget class="QPushButton" name="coldroom_humidity_set_PB">
-         <property name="text">
-          <string>Set Humidity</string>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="3">
-        <widget class="QFrame" name="ctrl_humidity_LED">
-         <property name="minimumSize">
-          <size>
-           <width>30</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>30</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">background-color: red;</string>
-         </property>
-         <property name="frameShape">
-          <enum>QFrame::NoFrame</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="7">
-        <widget class="QLineEdit" name="coldroom_humidity_LE"/>
-       </item>
-       <item row="4" column="0">
-        <widget class="QLabel" name="coldroom_dewpoint_label">
-         <property name="text">
-          <string>Dew Point (C) :</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="4" column="1">
-        <widget class="QLabel" name="coldroom_dewpoint_value_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="4" column="8">
-        <widget class="QFrame" name="dryair_LED">
-         <property name="minimumSize">
-          <size>
-           <width>30</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>30</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">background-color: red;</string>
-         </property>
-         <property name="frameShape">
-          <enum>QFrame::NoFrame</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
-         </property>
-        </widget>
-       </item>
-       <item row="4" column="10">
-        <widget class="QPushButton" name="coldroom_dry_toggle_PB">
-         <property name="text">
-          <string>Dry Air </string>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="8">
-        <widget class="QFrame" name="light_LED">
-         <property name="minimumSize">
-          <size>
-           <width>30</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>30</width>
-           <height>30</height>
-          </size>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">background-color: red;</string>
-         </property>
-         <property name="frameShape">
-          <enum>QFrame::NoFrame</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="10">
-        <widget class="QPushButton" name="coldroom_light_toggle_PB">
-         <property name="text">
-          <string>Light </string>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="0">
-        <widget class="QLabel" name="coldroom_co2_label">
-         <property name="text">
-          <string>CO2 (ppm) :</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="1">
-        <widget class="QLabel" name="coldroom_co2_value_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="4">
-        <widget class="QLabel" name="alarm_label">
-         <property name="text">
-          <string>Alarm:</string>
-         </property>
-        </widget>
-       </item>
-       <item row="7" column="0">
-        <widget class="QLabel" name="coldroom_door_label">
-         <property name="text">
-          <string>Door Status :</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="7" column="1">
-        <widget class="QLabel" name="coldroom_door_state_label">
-         <property name="text">
-          <string>OPEN / CLOSE</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="0">
-        <widget class="QLabel" name="coldroom_runlabel">
-         <property name="text">
-          <string>Running state</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="1">
-        <widget class="QLabel" name="coldroom_run_state_label">
-         <property name="text">
-          <string>Stop</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="4">
-        <widget class="QPushButton" name="coldroom_reset_alarms_PB">
-         <property name="text">
-          <string>Reset Alarms</string>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="9">
-        <widget class="QPushButton" name="coldroom_run_start">
-         <property name="text">
-          <string>Start</string>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="10">
-        <widget class="QPushButton" name="coldroom_run_stop">
-         <property name="text">
-          <string>Stop</string>
-         </property>
-        </widget>
-       </item>
-       <item row="7" column="4" colspan="3">
-        <widget class="QLabel" name="alarm_value">
-         <property name="text">
-          <string>None</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
-    <item row="2" column="0" colspan="2">
-     <widget class="QGroupBox" name="groupBox">
-      <property name="title">
-       <string>Clean Room</string>
-      </property>
-      <layout class="QGridLayout" name="gridLayout_5">
-       <item row="0" column="0">
-        <layout class="QGridLayout" name="gridLayout_4">
+      <layout class="QGridLayout" name="gridLayout_13">
+       <item row="0" column="0" colspan="3">
+        <layout class="QGridLayout" name="gridLayout_11">
+         <item row="0" column="3">
+          <widget class="QFrame" name="ctrl_temp_LED">
+           <property name="minimumSize">
+            <size>
+             <width>30</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>30</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">background-color: red;</string>
+           </property>
+           <property name="frameShape">
+            <enum>QFrame::NoFrame</enum>
+           </property>
+           <property name="frameShadow">
+            <enum>QFrame::Raised</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="4">
+          <widget class="QPushButton" name="coldroom_temp_ctrl_PB">
+           <property name="text">
+            <string>Ctrl Temp</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="5">
+          <widget class="QLabel" name="coldroom_temp_set_point_label">
+           <property name="text">
+            <string>?</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="6">
+          <widget class="QLineEdit" name="coldroom_humidity_LE"/>
+         </item>
+         <item row="0" column="6">
+          <widget class="QLineEdit" name="coldroom_temp_LE"/>
+         </item>
          <item row="1" column="0">
-          <widget class="QLabel" name="cleanroom_humidity_label">
+          <widget class="QLabel" name="coldroom_humidity_label">
            <property name="text">
             <string>Humidity (%) :</string>
            </property>
@@ -457,28 +225,8 @@
            </property>
           </widget>
          </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="cleanroom_presure_label">
-           <property name="text">
-            <string>Pressure (milibar)</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="cleanroom_dewpoint_label">
-           <property name="text">
-            <string>Dew Point (C) :</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QLabel" name="cleanroom_dewpoint_value_label">
+         <item row="1" column="5">
+          <widget class="QLabel" name="coldroom_humidity_set_point_label">
            <property name="text">
             <string>?</string>
            </property>
@@ -487,28 +235,35 @@
            </property>
           </widget>
          </item>
-         <item row="3" column="1">
-          <widget class="QLabel" name="cleanroom_pressure_value_label">
-           <property name="text">
-            <string>?</string>
+         <item row="1" column="2">
+          <spacer name="horizontalSpacer_2">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
            </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>98</width>
+             <height>28</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item row="1" column="4">
+          <widget class="QPushButton" name="coldroom_humidity_ctrl_PB">
+           <property name="text">
+            <string>Ctrl Humdity</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="7">
+          <widget class="QPushButton" name="coldroom_humidity_set_PB">
+           <property name="text">
+            <string>Set Humidity</string>
            </property>
           </widget>
          </item>
          <item row="1" column="1">
-          <widget class="QLabel" name="cleanroom_humidity_value_label">
-           <property name="text">
-            <string>?</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QLabel" name="cleanroom_temp_value_label">
+          <widget class="QLabel" name="coldroom_humidity_value_label">
            <property name="text">
             <string>?</string>
            </property>
@@ -518,7 +273,7 @@
           </widget>
          </item>
          <item row="0" column="0">
-          <widget class="QLabel" name="cleanroom_temp_label">
+          <widget class="QLabel" name="coldroom_temp_label">
            <property name="text">
             <string>Temperature (C) :</string>
            </property>
@@ -527,76 +282,300 @@
            </property>
           </widget>
          </item>
+         <item row="0" column="2">
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>78</width>
+             <height>28</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="coldroom_temp_value_label">
+           <property name="text">
+            <string>?</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="7">
+          <widget class="QPushButton" name="coldroom_temp_set_PB">
+           <property name="text">
+            <string>Set Temperature</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QFrame" name="ctrl_humidity_LED">
+           <property name="minimumSize">
+            <size>
+             <width>30</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>30</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">background-color: red;</string>
+           </property>
+           <property name="frameShape">
+            <enum>QFrame::NoFrame</enum>
+           </property>
+           <property name="frameShadow">
+            <enum>QFrame::Raised</enum>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="1" column="0">
+        <layout class="QGridLayout" name="gridLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="coldroom_dewpoint_label">
+           <property name="text">
+            <string>Dew Point (C) :</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="coldroom_co2_label">
+           <property name="text">
+            <string>CO2 (ppm) :</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLabel" name="coldroom_co2_value_label">
+           <property name="text">
+            <string>?</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="coldroom_door_label">
+           <property name="text">
+            <string>Door Status :</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="coldroom_runlabel">
+           <property name="text">
+            <string>Running state</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="coldroom_dewpoint_value_label">
+           <property name="text">
+            <string>?</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="coldroom_door_state_label">
+           <property name="text">
+            <string>OPEN / CLOSE</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QLabel" name="coldroom_run_state_label">
+           <property name="text">
+            <string>Stop</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="1" column="1">
+        <layout class="QGridLayout" name="gridLayout_6">
+         <item row="0" column="0">
+          <widget class="QLabel" name="alarm_label">
+           <property name="text">
+            <string>Alarm:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="alarm_value">
+           <property name="text">
+            <string>None</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QPushButton" name="coldroom_reset_alarms_PB">
+           <property name="text">
+            <string>Reset Alarms</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="1" column="2">
+        <layout class="QGridLayout" name="gridLayout_8">
+         <item row="0" column="0">
+          <widget class="QFrame" name="dryair_LED">
+           <property name="minimumSize">
+            <size>
+             <width>30</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>30</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">background-color: red;</string>
+           </property>
+           <property name="frameShape">
+            <enum>QFrame::NoFrame</enum>
+           </property>
+           <property name="frameShadow">
+            <enum>QFrame::Raised</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QPushButton" name="coldroom_dry_toggle_PB">
+           <property name="text">
+            <string>Dry Air </string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QFrame" name="light_LED">
+           <property name="minimumSize">
+            <size>
+             <width>30</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>30</width>
+             <height>30</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">background-color: red;</string>
+           </property>
+           <property name="frameShape">
+            <enum>QFrame::NoFrame</enum>
+           </property>
+           <property name="frameShadow">
+            <enum>QFrame::Raised</enum>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QPushButton" name="coldroom_light_toggle_PB">
+           <property name="text">
+            <string>Light </string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <layout class="QGridLayout" name="gridLayout_7">
+           <item row="0" column="0">
+            <widget class="QPushButton" name="coldroom_run_start">
+             <property name="text">
+              <string>Start</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QPushButton" name="coldroom_run_stop">
+             <property name="text">
+              <string>Stop</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
         </layout>
        </item>
       </layout>
      </widget>
     </item>
-    <item row="3" column="0" colspan="3">
+    <item row="1" column="0" colspan="2">
      <widget class="QGroupBox" name="groupBox_3">
       <property name="title">
        <string>MARTA : CO2 Plant</string>
       </property>
       <layout class="QGridLayout" name="gridLayout_3">
-       <item row="0" column="8">
-        <widget class="QPushButton" name="marta_temp_set_PB">
+       <item row="4" column="8">
+        <widget class="QPushButton" name="marta_speed_set_PB">
          <property name="text">
-          <string>Set Temperature</string>
+          <string>Set Speed</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="5">
+        <widget class="QPushButton" name="marta_alarms_clear_PB">
+         <property name="text">
+          <string>Clear Alarms</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="marta_temp_return_label">
+         <property name="text">
+          <string>Return Temp (C) :</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1" colspan="2">
+        <widget class="QPushButton" name="marta_co2_start_PB">
+         <property name="text">
+          <string>Start CO2</string>
          </property>
         </widget>
        </item>
        <item row="1" column="1">
         <widget class="QLabel" name="marta_temp_return_value_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="5" colspan="2">
-        <widget class="QLineEdit" name="marta_temp_LE"/>
-       </item>
-       <item row="0" column="0">
-        <widget class="QLabel" name="marta_temp_supply_label">
-         <property name="text">
-          <string>Supply Temp (C) :</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="0">
-        <widget class="QLabel" name="marta_flow_label">
-         <property name="text">
-          <string>Flow Active :</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="1">
-        <widget class="QCheckBox" name="marta_flow_active_CB">
-         <property name="text">
-          <string/>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="0">
-        <widget class="QLabel" name="marta_pressure_supply_label">
-         <property name="text">
-          <string>Supply Pressure (bar) :</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="1">
-        <widget class="QLabel" name="marta_pressure_return_value_label">
          <property name="text">
           <string>?</string>
          </property>
@@ -615,15 +594,8 @@
          </property>
         </widget>
        </item>
-       <item row="5" column="8">
-        <widget class="QPushButton" name="marta_flow_set_PB">
-         <property name="text">
-          <string>Set Flow</string>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="4">
-        <widget class="QLabel" name="marta_flow_set_point_label">
+       <item row="3" column="1">
+        <widget class="QLabel" name="marta_pressure_return_value_label">
          <property name="text">
           <string>?</string>
          </property>
@@ -632,39 +604,55 @@
          </property>
         </widget>
        </item>
-       <item row="3" column="0">
-        <widget class="QLabel" name="marta_pressure_return_label">
+       <item row="0" column="8">
+        <widget class="QPushButton" name="marta_temp_set_PB">
          <property name="text">
-          <string>Return Pressure (bar) :</string>
+          <string>Set Temperature</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="5" colspan="2">
+        <widget class="QLineEdit" name="marta_speed_LE"/>
+       </item>
+       <item row="5" column="8">
+        <widget class="QPushButton" name="marta_flow_set_PB">
+         <property name="text">
+          <string>Set Flow</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="6">
+        <widget class="QPushButton" name="marta_reconnect_PB">
+         <property name="text">
+          <string>Reconnect</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLabel" name="marta_temp_supply_value_label">
+         <property name="text">
+          <string>?</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
        </item>
-       <item row="6" column="1" colspan="2">
-        <widget class="QPushButton" name="marta_co2_start_PB">
-         <property name="text">
-          <string>Start CO2</string>
-         </property>
-        </widget>
+       <item row="5" column="5" colspan="2">
+        <widget class="QLineEdit" name="marta_flow_LE"/>
        </item>
-       <item row="1" column="0">
-        <widget class="QLabel" name="marta_temp_return_label">
+       <item row="2" column="1">
+        <widget class="QLabel" name="marta_pressure_supply_value_label">
          <property name="text">
-          <string>Return Temp (C) :</string>
+          <string>?</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
        </item>
-       <item row="6" column="8">
-        <widget class="QPushButton" name="marta_refresh_PB">
-         <property name="text">
-          <string>Refresh</string>
-         </property>
-        </widget>
+       <item row="0" column="5" colspan="2">
+        <widget class="QLineEdit" name="marta_temp_LE"/>
        </item>
        <item row="6" column="4">
         <widget class="QPushButton" name="marta_chiller_stop_PB">
@@ -673,8 +661,35 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="1">
-        <widget class="QLabel" name="marta_temp_supply_value_label">
+       <item row="6" column="0">
+        <widget class="QPushButton" name="marta_chiller_start_PB">
+         <property name="text">
+          <string>Start Chiller</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0">
+        <widget class="QLabel" name="marta_flow_label">
+         <property name="text">
+          <string>Flow Active :</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLabel" name="marta_speed_value_label">
+         <property name="text">
+          <string>?</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="4">
+        <widget class="QLabel" name="marta_temp_set_point_label">
          <property name="text">
           <string>?</string>
          </property>
@@ -708,46 +723,6 @@
          </property>
         </widget>
        </item>
-       <item row="6" column="3">
-        <widget class="QPushButton" name="marta_co2_stop_PB">
-         <property name="text">
-          <string>Stop CO2</string>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="1">
-        <widget class="QLabel" name="marta_pressure_supply_value_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="6">
-        <widget class="QPushButton" name="marta_reconnect_PB">
-         <property name="text">
-          <string>Reconnect</string>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="5" colspan="2">
-        <widget class="QLineEdit" name="marta_flow_LE"/>
-       </item>
-       <item row="4" column="1">
-        <widget class="QLabel" name="marta_speed_value_label">
-         <property name="text">
-          <string>?</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="4" column="5" colspan="2">
-        <widget class="QLineEdit" name="marta_speed_LE"/>
-       </item>
        <item row="4" column="4">
         <widget class="QLabel" name="marta_speed_set_point_label">
          <property name="text">
@@ -758,22 +733,18 @@
          </property>
         </widget>
        </item>
-       <item row="6" column="0">
-        <widget class="QPushButton" name="marta_chiller_start_PB">
+       <item row="3" column="0">
+        <widget class="QLabel" name="marta_pressure_return_label">
          <property name="text">
-          <string>Start Chiller</string>
+          <string>Return Pressure (bar) :</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
          </property>
         </widget>
        </item>
-       <item row="4" column="8">
-        <widget class="QPushButton" name="marta_speed_set_PB">
-         <property name="text">
-          <string>Set Speed</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="4">
-        <widget class="QLabel" name="marta_temp_set_point_label">
+       <item row="5" column="4">
+        <widget class="QLabel" name="marta_flow_set_point_label">
          <property name="text">
           <string>?</string>
          </property>
@@ -782,22 +753,62 @@
          </property>
         </widget>
        </item>
-       <item row="6" column="5">
-        <widget class="QPushButton" name="marta_alarms_clear_PB">
+       <item row="6" column="3">
+        <widget class="QPushButton" name="marta_co2_stop_PB">
          <property name="text">
-          <string>Clear Alarms</string>
+          <string>Stop CO2</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="8">
+        <widget class="QPushButton" name="marta_refresh_PB">
+         <property name="text">
+          <string>Refresh</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="marta_pressure_supply_label">
+         <property name="text">
+          <string>Supply Pressure (bar) :</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="marta_temp_supply_label">
+         <property name="text">
+          <string>Supply Temp (C) :</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="1">
+        <widget class="QCheckBox" name="marta_flow_active_CB">
+         <property name="text">
+          <string/>
          </property>
         </widget>
        </item>
       </layout>
      </widget>
     </item>
-    <item row="1" column="0" colspan="2">
-     <widget class="QLabel" name="door_safety_msg">
-      <property name="text">
-       <string>-</string>
+    <item row="2" column="1">
+     <spacer name="verticalSpacer">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
       </property>
-     </widget>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>20</width>
+        <height>82</height>
+       </size>
+      </property>
+     </spacer>
     </item>
    </layout>
   </widget>
@@ -806,7 +817,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1153</width>
+     <width>983</width>
      <height>30</height>
     </rect>
    </property>
