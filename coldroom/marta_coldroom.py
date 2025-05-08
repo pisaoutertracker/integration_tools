@@ -286,10 +286,11 @@ class MartaColdRoomMQTTClient:
     def reset_alarms(self, payload):
         self.publish_cmd("reset_alarms", "coldroom", payload)
 
-    def run(self, payload):
+    def run(self, payload=1):
         self.publish_cmd("run", "coldroom", payload)
 
-    def stop(self, payload):
+    def stop(self, payload=1):
+        print("Stopping", payload)
         self.publish_cmd("stop", "coldroom", payload)
 
     def handle_co2_sensor_message(self, payload):

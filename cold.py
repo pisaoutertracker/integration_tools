@@ -199,6 +199,13 @@ class MainApp(QtWidgets.QMainWindow):
         button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_temp_ctrl_PB")
         if button:
             button.clicked.connect(self.toggle_coldroom_temp_control)
+        
+        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_run_start")
+        if button:
+            button.clicked.connect(self.system._martacoldroom.run)
+        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_run_stop")
+        if button:
+            button.clicked.connect(self.system._martacoldroom.stop)
 
         configure_line_edit("coldroom_temp_LE", "-30°C to 30°C")
         configure_line_edit("coldroom_humidity_LE", "0% to 50%")
@@ -935,29 +942,6 @@ class MainApp(QtWidgets.QMainWindow):
             self.statusBar().showMessage(msg)
             logger.error(msg)
 
-    def toggle_coldroom_run(self):
-        coldroom = self.system.status.get("coldroom", {})
-        current_state = coldroom.get("run_state", 0)
-        # current_state = coldroom.get('running', 0)
-        new_state = 0 if current_state else 1
-
-        if self.system._martacoldroom:
-            # Use proper command for run/stop
-            if new_state:
-                self.system._martacoldroom.publish_cmd(
-                    "run", self.system._martacoldroom._coldroom_client, str(new_state)
-                )
-            else:
-                self.system._martacoldroom.publish_cmd(
-                    "stop", self.system._martacoldroom._coldroom_client, str(new_state)
-                )
-            msg = "Started coldroom" if new_state else "Stopped coldroom"
-            self.statusBar().showMessage(msg)
-            logger.info(msg)
-        else:
-            msg = "MARTA Cold Room client not initialized"
-            self.statusBar().showMessage(msg)
-            logger.error(msg)
 
         # if self.system._martacoldroom:
         #     if new_state:

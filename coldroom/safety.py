@@ -8,7 +8,7 @@ safety_settings = {
         "ch_temperature",  # Coldroom temperature
     ],
     "used_caen_ch": [
-        "0.1",
+#        "0.1",
         "2.1",
     ],
 }
