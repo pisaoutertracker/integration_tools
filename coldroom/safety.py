@@ -103,7 +103,7 @@ def check_any_hv_on(caen_ch_status):
 
 
 
-def check_cleanroom_expired(elapsed_time, threshold=10):
+def check_cleanroom_expired(elapsed_time, threshold=600):
     return elapsed_time > threshold
 
 
