@@ -3,6 +3,7 @@ import sys
 import os
 import yaml
 import logging
+import time
 from PyQt5 import QtWidgets, uic, QtGui
 from PyQt5.QtCore import Qt, QTimer
 from coldroom.system import System
@@ -199,7 +200,7 @@ class MainApp(QtWidgets.QMainWindow):
         button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_temp_ctrl_PB")
         if button:
             button.clicked.connect(self.toggle_coldroom_temp_control)
-        
+
         button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_run_start")
         if button:
             button.clicked.connect(self.system._martacoldroom.run)
@@ -430,6 +431,13 @@ class MainApp(QtWidgets.QMainWindow):
     def update_ui(self):
         """Update UI with current system status"""
         try:
+            self.system._martacoldroom._cleanroom_last_update_elapsed_time = (
+                time.time() - self.system._martacoldroom._cleanroom_last_update_timer
+            )
+            self.system.status["cleanroom"][
+                "elapsed_time"
+            ] = self.system._martacoldroom._cleanroom_last_update_elapsed_time
+
             # Get the central widget
             central = self.marta_coldroom_tab
 
@@ -468,6 +476,19 @@ class MainApp(QtWidgets.QMainWindow):
                     pressure = cleanroom["pressure"]
                     label.setText(f"{pressure:.1f}")
                     logger.debug(f"Updated Cleanroom pressure: {pressure}")
+
+                label = central.findChild(QtWidgets.QLabel, "cleanroom_last_update_value_label")
+                if label and "last_update" in cleanroom and cleanroom["last_update"] is not None:
+                    last_update = cleanroom["last_update"]
+                    label.setText(f"{last_update}")
+                    logger.debug(f"Updated Cleanroom last update: {last_update}")
+
+                label = central.findChild(QtWidgets.QLabel, "cleanroom_last_update_value_label_2")
+                if label:
+                    delta_t_update = self.system._martacoldroom._cleanroom_last_update_elapsed_time
+                    delta_t_update = time.strftime("%H:%M:%S", time.gmtime(delta_t_update))
+                    label.setText(delta_t_update)
+                    logger.debug(f"Updated Cleanroom delta t update: {delta_t_update}")
 
             # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             # =========================================================================================== COLDROOM    ===========================================================================================
@@ -593,7 +614,7 @@ class MainApp(QtWidgets.QMainWindow):
                     dewpoint = coldroom["dew_point_c"]
                     label.setText(f"{dewpoint:.1f}")
                     logger.debug(f"Updated dewpoint: {dewpoint}")
-                
+
                 # =========================================================================================== COLDROOM LIGHT PROCESS ===========================================================================================
                 # Light status and LED
                 if "light" in coldroom:
@@ -605,18 +626,18 @@ class MainApp(QtWidgets.QMainWindow):
                         )  # LED is yellow when ON
                         logger.debug(f"Updated light LED: {'yellow' if coldroom['light'] else 'black'}")
                         if bool(coldroom["light"]) is False:
-                           print("Light off, check if it is safe")
-                           is_safe = check_light_safe_to_turn_on(self.system.status, self.caen_tab.last_response)
-                           button = central.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
-                           if not is_safe:
-                               print("not safe")
-                               if button:
-                                   button.setEnabled(False)
-                                   logger.debug("Disabled light button due to safety check")
-                           else:
-                            if button:
-                                button.setEnabled(True)
-                                logger.debug("Enabled light button after safety check")
+                            print("Light off, check if it is safe")
+                            is_safe = check_light_safe_to_turn_on(self.system.status, self.caen_tab.last_response)
+                            button = central.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
+                            if not is_safe:
+                                print("not safe")
+                                if button:
+                                    button.setEnabled(False)
+                                    logger.debug("Disabled light button due to safety check")
+                            else:
+                                if button:
+                                    button.setEnabled(True)
+                                    logger.debug("Enabled light button after safety check")
 
                 # =========================================================================================== COLDROOM DOOR PROCESS ===========================================================================================
                 # Door status and LED
@@ -941,7 +962,6 @@ class MainApp(QtWidgets.QMainWindow):
             msg = "MARTA Cold Room client not initialized"
             self.statusBar().showMessage(msg)
             logger.error(msg)
-
 
         # if self.system._martacoldroom:
         #     if new_state:

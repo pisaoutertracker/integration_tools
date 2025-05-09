@@ -2,6 +2,8 @@ import json
 import paho.mqtt.client as mqtt
 import sys
 import logging
+import datetime
+import time
 
 from .safety import *
 
@@ -46,6 +48,8 @@ class MartaColdRoomMQTTClient:
         self._cleanroom_status = {}
         self._co2_sensor_data = {}
         self._current_topic = None
+        self._cleanroom_last_update_timer = time.time()
+        self._cleanroom_last_update_elapsed_time = 0
 
         # Connect to broker
         try:
@@ -221,7 +225,13 @@ class MartaColdRoomMQTTClient:
 
             # Initialize cleanroom status if empty
             if not self._cleanroom_status:
-                self._cleanroom_status = {"temperature": None, "humidity": None, "dewpoint": None, "pressure": None}
+                self._cleanroom_status = {
+                    "temperature": None,
+                    "humidity": None,
+                    "dewpoint": None,
+                    "pressure": None,
+                    "last_update": None,
+                }
 
             # Update cleanroom status based on topic
             if isinstance(data, dict):
@@ -237,6 +247,10 @@ class MartaColdRoomMQTTClient:
                 if "Pressure" in data:
                     self._cleanroom_status["pressure"] = float(data["Pressure"])
                     logger.info(f"Updated pressure: {self._cleanroom_status['pressure']}")
+
+                self._cleanroom_status["last_update"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self._cleanroom_last_update_timer = time.time()
+                self._cleanroom_last_update_elapsed_time = 0
 
             logger.info(f"Current cleanroom status: {self._cleanroom_status}")
             self._system.update_status({"cleanroom": self._cleanroom_status})

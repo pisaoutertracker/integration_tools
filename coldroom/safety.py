@@ -8,7 +8,7 @@ safety_settings = {
         "ch_temperature",  # Coldroom temperature
     ],
     "used_caen_ch": [
-#        "0.1",
+        #        "0.1",
         "2.1",
     ],
 }
@@ -51,25 +51,17 @@ def check_dew_point(system_status):
         # Get the minimum temperature among the three
         min_temperature = min(internal_temperatures)
 
-        if "coldroom" not in system_status or "CmdDoorUnlock_Reff" not in system_status["coldroom"]:
+        if "coldroom" not in system_status:
             print("Coldroom data not available")
             return False  # Conservative approach - if we can't check, assume it's unsafe
 
-        if system_status["coldroom"]["CmdDoorUnlock_Reff"] == 1:  # Door is open
-            # Check if environment data exists
-            if "cleanroom" not in system_status or "dewpoint" not in system_status["cleanroom"]:
-                return False  # Conservative approach
-            reference_dew_point = system_status["cleanroom"]["dewpoint"]  # External dewpoint
-            print(f"Reference dew point: {reference_dew_point}")
-        else:  # Door is closed
-            if "dew_point_c" not in system_status["coldroom"]:
-                return False  # Conservative approach
-            reference_dew_point = system_status["coldroom"]["dew_point_c"]
-            print(f"Reference dew point: {reference_dew_point}")
-
-        # reference_dew_point = system_status["cleanroom"]["dewpoint"]
-        # print(f"Min temperature: {min_temperature}, Dew point: {reference_dew_point}")
-        return min_temperature > reference_dew_point
+        # Check if environment data exists
+        if "cleanroom" not in system_status or "dewpoint" not in system_status["cleanroom"]:
+            return False  # Conservative approach
+        reference_dew_point = system_status["cleanroom"]["dewpoint"]  # External dewpoint
+        print(f"Reference dew point: {reference_dew_point}")
+        delta = 1  # Allowable delta between dew point and temperature
+        return min_temperature > reference_dew_point + delta
     except Exception as e:
         print(f"Error in check_dew_point: {str(e)}")
         return False  # Conservative approach
@@ -79,7 +71,7 @@ def check_door_status(system_status):
     try:
         if "coldroom" not in system_status or "door_status" not in system_status["coldroom"]:
             return False  # Conservative approach
-        return system_status["coldroom"]["door_status"] == 1  # Door is open
+        return system_status["coldroom"]["CmdDoorUnlock_Reff"] == 1  # Door is open
     except Exception as e:
         print(f"Error in check_door_status: {str(e)}")
         return False  # Conservative approach
@@ -110,6 +102,11 @@ def check_any_hv_on(caen_ch_status):
         return True
 
 
+
+def check_cleanroom_expired(elapsed_time, threshold=10):
+    return elapsed_time > threshold
+
+
 def check_door_safe_to_open(system_status, caen_ch_status):
     """
     Check if it's safe to open the door based on multiple safety conditions.
@@ -122,26 +119,33 @@ def check_door_safe_to_open(system_status, caen_ch_status):
             return False  # Conservative approach - if we can't check, assume it's unsafe
 
         # 1. Check if dew point conditions are safe
-        dew_point_safe = check_dew_point(system_status)
-        log_msg += f"Dew point safe: {dew_point_safe}\n"
+        clean_room_expired = check_cleanroom_expired(system_status["cleanroom"]["elapsed_time"])
+        if clean_room_expired:
+            dew_point_safe = False
+            log_msg += f"!!! Warning: Cleanroom data expired, not able to check dew point !!!\n"
+        else:
+            dew_point_safe = check_dew_point(system_status)
+            log_msg += f"Dew point safe: {dew_point_safe}\n"
 
         # 2. Check if high voltage is off
         hv_on = check_any_hv_on(caen_ch_status)
-        log_msg += f"High voltage on: {hv_on}\n"
+        hv_safe = not hv_on
+        log_msg += f"High voltage safe: {hv_safe}\n"
 
         # 3. Check if light is off (light should be off when opening door)
         # light_off = not check_light_status(system_status)
 
         # 4. Check if door is currently closed (can't open if already open)
         door_closed = not check_door_status(system_status)
-        log_msg += f"Door closed: {door_closed}\n"
+        if not door_closed and not (hv_safe or dew_point_safe):
+            log_msg += f"!!! Warning: Door open when conditions are unsafe !!!\n"
 
         # It's safe to open the door if:
         # - Dew point conditions are safe
         # - High voltage is safe
         # - Light is off
         # - Door is currently closed
-        is_safe = dew_point_safe and door_closed and not hv_on
+        is_safe = dew_point_safe and hv_safe
         return is_safe, log_msg
 
     except Exception as e:
