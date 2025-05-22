@@ -101,6 +101,13 @@ class MainApp(QtWidgets.QMainWindow):
         self.setWindowTitle("Integration MQTT GUI")
         self.resize(1200, 800)
 
+        self.message_box = QtWidgets.QMessageBox(self)
+        self.message_box.setWindowTitle("Message Box")
+        self.message_box.setIcon(QtWidgets.QMessageBox.Information)
+        self.message_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+        self.message_box.setDefaultButton(QtWidgets.QMessageBox.Ok)
+
+
         # Create central widget and layout
         self.central_widget = QtWidgets.QWidget()
         self.setCentralWidget(self.central_widget)
@@ -1111,7 +1118,17 @@ class MainApp(QtWidgets.QMainWindow):
 
         try:
             value = float(lineedit.text())
-            if -30 <= value <= 18:  # Validate range from marta.py
+            if (-30 <= value <= 18):  # Validate range from marta.py
+                if value <= self.system.status["coldroom"]["dew_point_c"]:
+                    msg = "MARTA temperature cannot be lower than the dew point"
+                    self.statusBar().showMessage(msg)
+                    self.message_box.setText(msg)
+                    self.message_box.setWindowTitle("Warning")
+                    self.message_box.setIcon(QtWidgets.QMessageBox.Warning)
+                    self.message_box.exec()
+                    logger.error(msg)
+                    return
+
                 if self.system._martacoldroom:
                     self.system._martacoldroom.set_temperature_setpoint(str(value))
                     # self.system._martacoldroom.publish_cmd("set_temperature", self.system._martacoldroom._marta_client, str(value))
