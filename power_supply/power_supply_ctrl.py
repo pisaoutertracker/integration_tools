@@ -11,7 +11,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('power_supply.log')
+        # logging.FileHandler('power_supply.log')
     ]
 )
 logger = logging.getLogger(__name__)
@@ -24,8 +24,8 @@ class PowerSupplyController(QMainWindow):
         
         # Initialize status dictionary
         self.status = {
-            'voltage': '?',
-            'current': '?',
+            'voltage': 0.000,
+            'current': 0.000,
             'power': 'OFF',
             'set_voltage': 0.0,
             'set_current': 0.0
@@ -74,6 +74,8 @@ class PowerSupplyController(QMainWindow):
         """Update the UI elements with current status"""
         self.powsup_current_value_label.setText(str(self.status['current']))
         self.powsup_voltage_value_label.setText(str(self.status['voltage']))
+        self.powsup_voltage_set_value_label.setText(str(self.status['set_voltage']))
+        self.powsup_current_set_value_label.setText(str(self.status['set_current']))
         # Update power LED color
         if self.status['power'] == 'ON':
             self.power_LED.setStyleSheet("background-color: green;")
@@ -82,22 +84,23 @@ class PowerSupplyController(QMainWindow):
     
     def update_measurements(self):
         """Periodically update the voltage and current measurements"""
-        if self.status['power'] == 'ON':
-            try:
-                # Read actual voltage and current
-                voltage = self.power_supply.query('MEAS:VOLT?\x00').strip()
-                current = self.power_supply.query('MEAS:CURR?\x00').strip()
-                
-                # Update status
-                self.status['voltage'] = voltage
-                self.status['current'] = current
-                
-                # Update UI
-                self.update_ui()
-                self.log_status("Updated measurements")
-            except Exception as e:
-                logger.error(f"Error reading measurements: {e}")
-                print(f"Error reading measurements: {e}")
+        # if self.status['power'] == 'ON':
+        try:
+            # Read actual voltage and current
+            voltage = self.power_supply.query('MEAS:VOLT?\x00').strip()
+            current = self.power_supply.query('MEAS:CURR?\x00').strip()
+            
+            # Update status
+            self.status['voltage'] = voltage
+            self.status['current'] = current
+            
+            # Update UI
+            self.update_ui()
+            self.log_status("Updated measurements")
+        except Exception as e:
+            logger.error(f"Error reading measurements: {e}")
+            QMessageBox.critical(self, "Measurement Error", f"Failed to read measurements: {e}")
+            print(f"Error reading measurements: {e}")
     
     def set_voltage(self):
         """Set the voltage value from the line edit"""
@@ -138,6 +141,7 @@ class PowerSupplyController(QMainWindow):
             self.log_status("Power Supply turned ON")
             print("Power Supply is ON")
         except Exception as e:
+            print(f"Error turning power ON: {e}")
             logger.error(f"Failed to turn power ON: {e}")
             QMessageBox.critical(self, "Error", f"Failed to turn power ON: {e}")
     
@@ -147,11 +151,14 @@ class PowerSupplyController(QMainWindow):
             self.power_supply.write('OUTP:STAT OFF\x00')
             self.status['power'] = 'OFF'
             self.update_ui()
+            # Force a measurement update to show actual off values
+            self.update_measurements()
             logger.info("Power Supply turned OFF")
             print("Power Supply is OFF")
         except Exception as e:
             logger.error(f"Failed to turn power OFF: {e}")
             QMessageBox.critical(self, "Error", f"Failed to turn power OFF: {e}")
+            print(f"Error turning power OFF: {e}")
     
     def closeEvent(self, event):
         """Ensure proper cleanup when closing the application"""
