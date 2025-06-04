@@ -156,7 +156,9 @@ class MainApp(integration_gui.Ui_MainWindow):
         fibers=["SfibA","SfibB"]
         fibers+=[f"E3;{x}" for x in range(1,6)]
         powers=["BINT1"]
-        powers+=[f"P2;B{x}" for x in range(1,12)]
+        powers+=[f"R01;M1.{x}" for x in range(1,13)]
+        powers+=[f"R01;M2.{x}" for x in range(1,13)]
+        powers+=[f"R01;M3.{x}" for x in range(1,13)]
         self.layers_to_filters = {
             "L1_47": {
                 "spacer": "2.6mm",
@@ -1131,7 +1133,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             "cable1": self.moduleLE.text(),
             "cable2": self.powerCB.currentText().split(";")[0] if ";" in self.powerCB.currentText() else self.powerCB.currentText(),
             "port1": "power",
-            "port2": ("B"+self.powerCB.currentText().split(";")[1]) if ";" in self.powerCB.currentText() else 'power'
+            "port2": (""+self.powerCB.currentText().split(";")[1]) if ";" in self.powerCB.currentText() else 'power'
         }
         success, result = self.make_api_request(
             endpoint='connect',  # Simplified endpoint

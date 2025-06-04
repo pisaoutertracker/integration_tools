@@ -186,7 +186,11 @@
               <item>
                <layout class="QGridLayout" name="gridLayout">
                 <item row="2" column="1">
-                 <widget class="QComboBox" name="powerCB"/>
+                 <widget class="QComboBox" name="powerCB">
+                  <property name="editable">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
                 </item>
                 <item row="1" column="0" colspan="2">
                  <widget class="QLabel" name="fiberConnectionLabel">
@@ -239,7 +243,11 @@
                  </widget>
                 </item>
                 <item row="0" column="1">
-                 <widget class="QComboBox" name="fiberCB"/>
+                 <widget class="QComboBox" name="fiberCB">
+                  <property name="editable">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
                 </item>
                 <item row="0" column="3">
                  <widget class="QFrame" name="connectFiberLED">

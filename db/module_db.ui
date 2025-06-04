@@ -176,12 +176,12 @@
          </column>
          <column>
           <property name="text">
-           <string>Description</string>
+           <string>Connections</string>
           </property>
          </column>
          <column>
           <property name="text">
-           <string>Connections</string>
+           <string>Description</string>
           </property>
          </column>
          <column>

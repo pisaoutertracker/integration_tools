@@ -224,6 +224,8 @@ class ModuleDB(QWidget):
             spacer = fields[1] if len(fields) > 2 else ""
             module["spacer"] = spacer
             
+            if not "Pisa" in module.get("Current Center",""):
+                continue 
             # Apply all filters
             if search_text and search_text not in module.get('moduleName', ''):
                 continue
