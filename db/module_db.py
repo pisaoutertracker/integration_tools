@@ -6,6 +6,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 import requests
 import yaml
 import os
+import re
 from db.module_db_gui import Ui_ModuleDBWidget
 
 class ModuleDB(QWidget):
@@ -298,11 +299,14 @@ class ModuleDB(QWidget):
         for i in range(self.ui.treeWidget.columnCount()):
             self.ui.treeWidget.resizeColumnToContents(i)
 
-    def populate_details_tree(self, data, parent=None):
+    def populate_details_tree(self, data, parent=None, path=""):
         """Recursively populate the details tree with module data"""
         if parent is None:
             self.ui.detailsTree.clear()
             parent = self.ui.detailsTree
+            # Store original data structure for reference
+            self.original_data_types = {}
+            self.store_data_types(data, "")
             
             # Add disconnect button if module has connections or is mounted
             if data.get('connections') or data.get('mounted_on'):
@@ -314,23 +318,117 @@ class ModuleDB(QWidget):
         
         if isinstance(data, dict):
             for key, value in sorted(data.items()):
+                current_path = f"{path}.{key}" if path else key
                 item = QTreeWidgetItem([str(key), ''])
+                # Store the path in the item for later reference
+                item.setData(0, Qt.UserRole, current_path)
                 if parent == self.ui.detailsTree:
                     parent.addTopLevelItem(item)
                 else:
                     parent.addChild(item)
-                self.populate_details_tree(value, item)
+                self.populate_details_tree(value, item, current_path)
         elif isinstance(data, list):
             for i, value in enumerate(data):
+                current_path = f"{path}[{i}]"
                 if isinstance(value, dict) and 'childName' in value:
                     # Special handling for child components
                     item = QTreeWidgetItem([value['childName'], value.get('childType', '')])
                 else:
                     item = QTreeWidgetItem([f"[{i}]", ''])
+                item.setData(0, Qt.UserRole, current_path)
                 parent.addChild(item)
-                self.populate_details_tree(value, item)
+                self.populate_details_tree(value, item, current_path)
         else:
             parent.setText(1, str(data))
+            parent.setData(0, Qt.UserRole, path)
+
+    def store_data_types(self, data, path):
+        """Store the original data types for later reconstruction"""
+        if isinstance(data, dict):
+            self.original_data_types[path] = 'dict'
+            for key, value in data.items():
+                current_path = f"{path}.{key}" if path else key
+                self.store_data_types(value, current_path)
+        elif isinstance(data, list):
+            self.original_data_types[path] = 'list'
+            for i, value in enumerate(data):
+                current_path = f"{path}[{i}]"
+                self.store_data_types(value, current_path)
+        else:
+            self.original_data_types[path] = type(data).__name__
+
+    def tree_to_dict_preserving_types(self, item, path=""):
+        """Convert tree widget items back to dictionary/list preserving original types"""
+        if item == self.ui.detailsTree.invisibleRootItem():
+            # Root level - reconstruct the entire structure
+            result = {}
+            for i in range(item.childCount()):
+                child = item.child(i)
+                child_path = child.data(0, Qt.UserRole)
+                if child_path and not child_path.startswith("Actions"):
+                    key = child.text(0)
+                    value = self.get_item_value(child, child_path)
+                    result[key] = value
+            return result
+        else:
+            return self.get_item_value(item, path)
+
+    def get_item_value(self, item, path):
+        """Get the value for a tree item, preserving original type"""
+        if item.childCount() == 0:
+            # Leaf node - convert to appropriate type
+            text_value = item.text(1)
+            original_type = self.original_data_types.get(path, 'str')
+            
+            if original_type == 'bool':
+                return text_value.lower() == 'true'
+            elif original_type == 'int':
+                try:
+                    return int(text_value)
+                except ValueError:
+                    return text_value
+            elif original_type == 'float':
+                try:
+                    return float(text_value)
+                except ValueError:
+                    return text_value
+            else:
+                return text_value
+        else:
+            # Non-leaf node - check if it should be a list or dict
+            original_type = self.original_data_types.get(path, 'dict')
+            
+            if original_type == 'list':
+                # Reconstruct as list
+                result = []
+                children_data = []
+                for i in range(item.childCount()):
+                    child = item.child(i)
+                    child_path = child.data(0, Qt.UserRole)
+                    child_value = self.get_item_value(child, child_path)
+                    children_data.append((child_path, child_value))
+                
+                # Sort by list index and add to result
+                children_data.sort(key=lambda x: self.extract_list_index(x[0]))
+                for _, value in children_data:
+                    result.append(value)
+                return result
+            else:
+                # Reconstruct as dict
+                result = {}
+                for i in range(item.childCount()):
+                    child = item.child(i)
+                    child_path = child.data(0, Qt.UserRole)
+                    key = child.text(0)
+                    value = self.get_item_value(child, child_path)
+                    result[key] = value
+                return result
+
+    def extract_list_index(self, path):
+        """Extract list index from path like 'children[0]' -> 0"""
+        import re
+        match = re.search(r'\[(\d+)\]$', path)
+        return int(match.group(1)) if match else 0
 
     def tree_to_dict(self, item):
         """Convert tree widget items back to dictionary recursively"""
@@ -444,8 +542,8 @@ class ModuleDB(QWidget):
                 self.show_error_dialog(f"Error fetching module: {current_data}")
                 return
             
-            # Convert tree widget back to dictionary
-            new_data = self.tree_to_dict(self.ui.detailsTree.invisibleRootItem())
+            # Convert tree widget back to dictionary preserving types
+            new_data = self.tree_to_dict_preserving_types(self.ui.detailsTree.invisibleRootItem())
             
             # Recursively merge the data
             merged_data = self.merge_dicts(current_data, new_data)
