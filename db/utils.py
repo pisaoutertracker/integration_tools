@@ -20,14 +20,12 @@ def get_module_endpoints(module_id, db_url="http://cmslabserver:5000"):
                 if snapshot[line]["connections"]:
                     last_conn = snapshot[line]["connections"][-1]
                     # Get the last connection in the crateSide path
-                    if "FC" in last_conn["cable"]:
-                        ports = last_conn['crate_port'] + last_conn['det_port']
-                        port = ports[0] if ports else "?"
-                        ret["fiber"] = f"{last_conn['cable']}_{port}"
+                    if "FC7" in last_conn["cable"]:
+                        ret["fiber"] = f"{last_conn['cable']}_{last_conn['det_port'][0]}"
                     elif "XSLOT" in last_conn['cable']:
                         ret["LV"] = f"LV{last_conn['cable'][5:]}.{last_conn['line']}"
                     elif "ASLOT" in last_conn['cable']:
-                        ret["HV"] = f"HV{last_conn['cable'][5:]}.{last_conn['line']}"
+                        ret["HV"] = f"HV{last_conn['cable'][5:]}.{last_conn['det_port'][0]}"
             return ret
         else:
             print(f"Error: Received status code {response.status_code}")
