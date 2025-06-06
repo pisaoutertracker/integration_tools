@@ -1,9 +1,12 @@
 import requests
 def get_modules_on_ring(ring_id, db_url="http://cmslabserver:5000"):
     """Get the modules on a specific ring from the database snapshot."""
-    url = f"{db_url}/modules"
+    url = f"{db_url}/generic_module_query"
     try:
-        response = requests.get(url)
+        response = requests.post(
+                url,
+                json={"mounted_on":  {'$regex': ring_id+".*" } }
+              )
         if response.status_code == 200:
             snapshot = response.json()
             modules = {}
