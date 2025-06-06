@@ -1300,11 +1300,12 @@ class MainApp(integration_gui.Ui_MainWindow):
                 fiber_id= fiber_id.split(";")[0]
             # Get power connections
             power_status = set()
-            if power_id:
-                det_endpoint, crate_endpoints = self.get_power_endpoints(power_id,power_id_slot)
-                if det_endpoint and crate_endpoints:
+            module_id = self.moduleLE.text()
+            if module_id:
+                det_endpoint, crate_endpoints = self.get_power_endpoints_from_module(module_id)
+                if crate_endpoints:
                     for crate_endpoint in crate_endpoints:
-                        power_status.add(f"{det_endpoint} <--> {crate_endpoint}")
+                        power_status.add(f"{module_id} <--> {crate_endpoint}")
 
             # Get fiber connections
             fiber_status = set()
@@ -1424,6 +1425,39 @@ class MainApp(integration_gui.Ui_MainWindow):
         except Exception as e:
             self.log_output(f"Error getting fiber endpoints: {str(e)}")
             return None, None
+    def get_power_endpoints_from_module(self, module_id):
+        """Get the power endpoint from the module's crateSide connections"""
+        ret = (module_id, [])
+        if not module_id:
+            self.log_output("No module ID provided")
+            return ret
+        try:
+            response = requests.post(
+                self.get_api_url('snapshot'),
+                json={"cable": module_id, "side": "crateSide"}
+            )
+            if response.status_code == 200:
+                snapshot = response.json()
+                print("json:",snapshot)
+                for line in snapshot:
+                    if snapshot[line]["connections"]:
+                        last_conn = snapshot[line]["connections"][-1]
+                        print("Last connection:", last_conn)
+                        # Get the last connection in the crateSide path
+                        if "FC" in last_conn["cable"]:
+                            continue
+                        #set LV/HV channels
+                        if "XSLOT" in last_conn['cable'] :
+                                self.caen.setLV("LV"+last_conn['cable'][5:]+f".{last_conn['line']}")
+                        if "ASLOT" in last_conn['cable'] :
+                                self.caen.setHV("HV"+last_conn['cable'][5:]+f".{last_conn['line']}")                    
+                                        
+                        ret[1].append(f"{last_conn['cable']}.{last_conn['line']}")
+            print("ret",ret)                        
+            return ret
+        except Exception as e:
+            self.log_output(f"Error getting power endpoint: {str(e)}")
+            return ret
 
     def get_power_endpoints(self, power_id,power_id_slot=""):
         """Get both detSide and crateSide endpoints for power connections"""
@@ -1441,7 +1475,6 @@ class MainApp(integration_gui.Ui_MainWindow):
             det_snapshot = det_response.json()
             det_endpoint = None
 
-
             if power_id_slot != "" :
                 #filter to get only the lines with det_port=power_id_slot
                 if "B" == power_id_slot[0] :
@@ -1453,7 +1486,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                     # Get the last connection in the detSide path
                     det_endpoint = det_snapshot[line]["connections"][-1]["cable"]
                     break
-
+            print("Det endpoint", det_endpoint)    
             # Get crateSide path from the module
 #            if det_endpoint:
             if True:
@@ -1464,7 +1497,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 if crate_response.status_code == 200:
                     crate_snapshot = crate_response.json()
                     crate_endpoints = []
-#                    print("PCrate_pre",crate_snapshot)
+                    #print("PCrate_pre",crate_snapshot)
 #PCrate_pre {'1': {'crate_port': 'HV1', 'det_port': 'A', 'connections': [{'cable': 'H36', 'line': 1, 'det_port': ['A'], 'crate_port': ['A']}, {'cable': 'ASLOT2', 'line': 1, 'det_port': ['1'], 'crate_port': []}]}, 
 # '2': {'crate_port': 'HV2', 'det_port': 'A', 'connections': [{'cable': 'H37', 'line': 1, 'det_port': ['A'], 'crate_port': ['A']}, {'cable': 'ASLOT2', 'line': 2, 'det_port': ['2'], 'crate_port': []}]}, 
 # '3': {'crate_port': 'HV3', 'det_port': 'A', 'connections': [{'cable': 'H38', 'line': 1, 'det_port': ['A'], 'crate_port': ['A']}, {'cable': 'ASLOT2', 'line': 3, 'det_port': ['3'], 'crate_port': []}]}, 
