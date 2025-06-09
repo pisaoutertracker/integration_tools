@@ -15,6 +15,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.current_worker = None  # Placeholder for the current worker
         self.test_queue = []  # Queue for test commands
         self._show_test_results = True  # Control test result popups
+        self.ring_id = ""  # Placeholder for ring ID
         # Set column widths for better button visibility in Actions
         self.moduleList.setColumnWidth(0, 60)  # Position
         self.moduleList.setColumnWidth(1, 200)  # Module Name
@@ -30,7 +31,6 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.update_timer.timeout.connect(self.update_module_list)
         self.update_interval = 1000  # Update every second
 
-        self.save_ring_id_button.clicked.connect(self.save_ring_id)
         self.select_all_button_2.clicked.connect(self.select_all_modules)
         self.turn_lv_off_all_button.clicked.connect(self.turn_off_lv_for_selected_modules)
         self.turn_lv_on_all_button.clicked.connect(self.turn_on_lv_for_selected_modules)
@@ -115,7 +115,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.current_worker = CommandWorker(self.test_cmd_le.text())
         self.current_worker.placeholders = {
             "module_id": module_name,
-            "ring_id": self.ring_id_LE.text(),
+            "ring_id": self.ring_id,
             "fiber_endpoint": self.mounted_modules[module_name].get("FC7", "N/A").split("_")[0],
             "session": "1",
         }
@@ -174,12 +174,6 @@ class ModulesListTab(QtWidgets.QMainWindow):
             self.test_queue.clear()
 
         print("All tests stopped.")
-
-    def save_ring_id(self):
-        if self.ring_id_LE.text():
-            with open(os.path.join(os.path.dirname(__file__), os.pardir, "ring_history.txt"), "a") as f:
-                f.write(f"{self.ring_id_LE.text()}\n")
-            print(f"Ring ID saved to ring_history.txt: {self.ring_id_LE.text()}")
 
     def select_all_modules(self):
         """Select all modules in the moduleList QTreeWidget."""

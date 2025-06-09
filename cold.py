@@ -138,23 +138,7 @@ class MainApp(QtWidgets.QMainWindow):
         self.tab_widget.addTab(self.marta_coldroom_tab, "MARTA Cold Room")
 
         self.modules_list_tab = ModulesListTab()
-        self.modules_list_tab.enter_ring_id_button.clicked.connect(self.get_mounted_modules)
         self.tab_widget.addTab(self.modules_list_tab, "Modules List")
-        if os.path.exists(os.path.join(os.path.dirname(__file__), "ring_history.txt")):
-            with open(os.path.join(os.path.dirname(__file__), "ring_history.txt"), "r") as f:
-                self.ring_id = f.readlines()[-1].strip()
-                self.mounted_modules = self.get_mounted_modules()
-        else:
-            self.ring_id = None
-        self.modules_list_tab.ring_id_LE.setText(self.ring_id)
-        self.number_of_modules = 0
-        if self.ring_id is not None:
-            if self.ring_id.startswith("L1_"):
-                self.number_of_modules = 18
-            elif self.ring_id.startswith("L2_"):
-                self.number_of_modules = 26
-            elif self.ring_id.startswith("L3_"):
-                self.number_of_modules = 36
 
         # Add Thermal Camera tab
         self.thermal_camera_tab = ThermalCameraTab(self.system)
@@ -163,9 +147,6 @@ class MainApp(QtWidgets.QMainWindow):
         # Add CAEN tab
         self.caen_tab = caenGUIall()
         self.tab_widget.addTab(self.caen_tab, "CAEN")
-
-        if self.mounted_modules:
-            self.modules_list_tab.populate_from_config(self.caen_tab, self.mounted_modules, self.number_of_modules)
 
         # Add Module DB tab
         self.module_db = ModuleDB()
@@ -187,11 +168,43 @@ class MainApp(QtWidgets.QMainWindow):
         self.statusBar().showMessage("Ready")
         logger.info("UI setup completed")
 
-    def get_mounted_modules(self):
-        if self.ring_id is None:
-            return {}
+    def get_ring_id(self):
+        ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
+        if os.path.exists(ring_history_file):
+            with open(ring_history_file, "r") as f:
+                lines = f.readlines()
+                if lines:
+                    self.ring_id = lines[-1].strip()
+                    self.ring_id_LE.setText(self.ring_id)
+                    logger.info(f"Loaded ring ID from history: {self.ring_id}")
+                    self.get_mounted_modules()
+                    if self.ring_id.startswith("L1_"):
+                        self.number_of_modules = 18
+                    elif self.ring_id.startswith("L2_"):
+                        self.number_of_modules = 26
+                    elif self.ring_id.startswith("L3_"):
+                        self.number_of_modules = 36
+                else:
+                    self.ring_id = None
         else:
-            self.ring_id = self.modules_list_tab.ring_id_LE.text().strip()
+            self.ring_id = None
+        return self.ring_id
+
+    def setup_ring_id(self):
+        self.ring_id = self.ring_id_LE.text().strip()
+        if not self.ring_id:
+            self.message_box.setText("Please enter a valid ring ID.")
+            self.message_box.exec_()
+            return
+        self.get_mounted_modules()
+
+    def save_ring_id(self):
+        ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
+        with open(ring_history_file, "a") as f:
+            f.write(f"{self.ring_id}\n")
+        logger.info(f"Ring ID {self.ring_id} saved successfully.")
+
+    def get_mounted_modules(self):
         self.mounted_modules = get_modules_on_ring(self.ring_id)
         for module_name in self.mounted_modules:
             self.mounted_modules[module_name].update(get_module_endpoints(module_name))
@@ -209,6 +222,10 @@ class MainApp(QtWidgets.QMainWindow):
         self.settings_tab.cleanroomTopicLineEdit.setText(self.system.settings["Cleanroom"]["mqtt_topic"])
 
     def connect_signals(self):
+        # Module list
+        self.modules_list_tab.enter_ring_id_button.clicked.connect(self.setup_ring_id)
+        self.modules_list_tab.save_ring_id_button.clicked.connect(self.save_ring_id)
+
         # Connect settings tab
         self.settings_tab.saveButton.clicked.connect(self.save_settings)
 
