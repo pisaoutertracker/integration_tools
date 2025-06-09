@@ -188,6 +188,8 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info("UI setup completed")
 
     def get_mounted_modules(self):
+        if self.ring_id is None:
+            return {}
         self.mounted_modules = get_modules_on_ring(self.ring_id)
         for module_name in self.mounted_modules:
             self.mounted_modules[module_name].update(get_module_endpoints(module_name))
