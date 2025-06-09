@@ -175,7 +175,7 @@ class MainApp(QtWidgets.QMainWindow):
                 lines = f.readlines()
                 if lines:
                     self.ring_id = lines[-1].strip()
-                    self.ring_id_LE.setText(self.ring_id)
+                    self.modules_list_tab.ring_id_LE.setText(self.ring_id)
                     logger.info(f"Loaded ring ID from history: {self.ring_id}")
                     self.get_mounted_modules()
                     if self.ring_id.startswith("L1_"):
@@ -191,7 +191,7 @@ class MainApp(QtWidgets.QMainWindow):
         return self.ring_id
 
     def setup_ring_id(self):
-        self.ring_id = self.ring_id_LE.text().strip()
+        self.ring_id = self.modules_list_tab.ring_id_LE.text().strip()
         if not self.ring_id:
             self.message_box.setText("Please enter a valid ring ID.")
             self.message_box.exec_()
