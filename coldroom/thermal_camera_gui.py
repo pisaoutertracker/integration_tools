@@ -380,7 +380,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
         try:
             position = float(self.ui.ip_abs_pos_LE.text())
             if self.system._thermalcamera:
-                self.system._thermalcamera.set_absolute_position({"position": position})
+                self.system._thermalcamera.set_absolute_position({"value": position})
                 logger.info(f"Setting absolute position to {position}")
         except ValueError:
             logger.error("Invalid position value")
