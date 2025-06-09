@@ -139,6 +139,7 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.modules_list_tab = ModulesListTab()
         self.tab_widget.addTab(self.modules_list_tab, "Modules List")
+        self.get_ring_id()
 
         # Add Thermal Camera tab
         self.thermal_camera_tab = ThermalCameraTab(self.system)
@@ -184,6 +185,9 @@ class MainApp(QtWidgets.QMainWindow):
                         self.number_of_modules = 26
                     elif self.ring_id.startswith("L3_"):
                         self.number_of_modules = 36
+                    self.modules_list_tab.populate_from_config(
+                        self.caen_tab, self.mounted_modules, self.number_of_modules
+                    )
                 else:
                     self.ring_id = None
         else:
@@ -197,6 +201,18 @@ class MainApp(QtWidgets.QMainWindow):
             self.message_box.exec_()
             return
         self.get_mounted_modules()
+        if self.ring_id.startswith("L1_"):
+            self.number_of_modules = 18
+        elif self.ring_id.startswith("L2_"):
+            self.number_of_modules = 26
+        elif self.ring_id.startswith("L3_"):
+            self.number_of_modules = 36
+        else:
+            self.message_box.setText("Invalid ring ID format. Must start with L1_, L2_, or L3_.")
+            self.message_box.exec_()
+        self.modules_list_tab.populate_from_config(
+            self.caen_tab, self.mounted_modules, self.number_of_modules
+        )
 
     def save_ring_id(self):
         ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
