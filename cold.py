@@ -190,6 +190,8 @@ class MainApp(QtWidgets.QMainWindow):
     def get_mounted_modules(self):
         if self.ring_id is None:
             return {}
+        else:
+            self.ring_id = self.modules_list_tab.ring_id_LE.text().strip()
         self.mounted_modules = get_modules_on_ring(self.ring_id)
         for module_name in self.mounted_modules:
             self.mounted_modules[module_name].update(get_module_endpoints(module_name))
