@@ -139,7 +139,6 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.modules_list_tab = ModulesListTab()
         self.tab_widget.addTab(self.modules_list_tab, "Modules List")
-        self.get_ring_id()
 
         # Add Thermal Camera tab
         self.thermal_camera_tab = ThermalCameraTab(self.system)
@@ -164,6 +163,7 @@ class MainApp(QtWidgets.QMainWindow):
 
         # Pre-fill settings with values from system
         self.load_settings_to_ui()
+        self.get_ring_id()
 
         # Setup status bar
         self.statusBar().showMessage("Ready")
