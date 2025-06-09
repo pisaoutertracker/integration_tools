@@ -116,7 +116,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.current_worker.placeholders = {
             "module_id": module_name,
             "ring_id": self.ring_id,
-            "fiber_endpoint": self.mounted_modules[module_name].get("FC7", "N/A").split("_")[0],
+            "fiber_endpoint": self.mounted_modules[module_name].get("FC7", "N/A"),
             "session": "1",
         }
 

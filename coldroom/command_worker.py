@@ -39,25 +39,31 @@ class CommandWorker(QThread):
     def run(self):
         try:
             expanded_command = self.expand_placeholders(self.placeholders)
-            
+            print(f"Running command: {expanded_command}")
             # Use Popen instead of run() to get process control
-            self.process = subprocess.Popen(
+            # self.process = subprocess.Popen(
+            #     expanded_command, 
+            #     shell=True, 
+            #     stdout=subprocess.PIPE, 
+            #     stderr=subprocess.PIPE,
+            #     text=True,
+            #     preexec_fn=os.setsid  # Create new process group for proper cleanup
+            # )
+            self.process = subprocess.run(
                 expanded_command, 
                 shell=True, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE,
+                # stdout=subprocess.PIPE, 
+                # stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
-                preexec_fn=os.setsid  # Create new process group for proper cleanup
+                # preexec_fn=os.setsid  # Create new process group for proper cleanup
             )
-            
-            # Wait for process to complete or be terminated
-            stdout, stderr = self.process.communicate()
             
             if self._should_terminate:
                 self.finished.emit(False, "", "Process was terminated by user")
             else:
                 success = self.process.returncode == 0
-                self.finished.emit(success, stdout, stderr)
+                self.finished.emit(success, self.process.stdout, self.process.stderr)
                 
         except Exception as e:
             self.finished.emit(False, "", str(e))
