@@ -258,6 +258,9 @@ class ModulesListTab(QtWidgets.QMainWindow):
     def populate_from_config(self, caen, modules, number_of_modules):
         print("Populating module list from config...")
         """Populate the moduleList QTreeWidget with module data from a config list."""
+        if number_of_modules < 1:
+            print("Number of modules must be at least 1.")
+            return
         self.moduleList.clear()
         # Create all items first
         values = {str(i): [str(i), "", "", "", "", "", "", "", ""] for i in range(1, number_of_modules + 1)}

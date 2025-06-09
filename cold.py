@@ -148,12 +148,13 @@ class MainApp(QtWidgets.QMainWindow):
             self.ring_id = None
         self.modules_list_tab.ring_id_LE.setText(self.ring_id)
         self.number_of_modules = 0
-        if self.ring_id.startswith("L1_"):
-            self.number_of_modules = 18
-        elif self.ring_id.startswith("L2_"):
-            self.number_of_modules = 26
-        elif self.ring_id.startswith("L3_"):
-            self.number_of_modules = 36
+        if self.ring_id is not None:
+            if self.ring_id.startswith("L1_"):
+                self.number_of_modules = 18
+            elif self.ring_id.startswith("L2_"):
+                self.number_of_modules = 26
+            elif self.ring_id.startswith("L3_"):
+                self.number_of_modules = 36
 
         # Add Thermal Camera tab
         self.thermal_camera_tab = ThermalCameraTab(self.system)
