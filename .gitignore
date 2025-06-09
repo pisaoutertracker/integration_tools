@@ -169,3 +169,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# UI history files
+ring_history.txt
+test_command_history.txt
