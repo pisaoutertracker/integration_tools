@@ -6,11 +6,7 @@ safety_settings = {
         "TT05_CO2",  # MARTA supply temperature
         "TT06_CO2",  # MARTA return temperature
         "ch_temperature",  # Coldroom temperature
-    ],
-    "used_caen_ch": [
-        #        "0.1",
-        "2.1",
-    ],
+    ]
 }
 
 ### Safety functions ###
@@ -87,12 +83,12 @@ def check_light_status(system_status):
         return False  # Conservative approach
 
 
-def check_any_hv_on(caen_ch_status):
+def check_any_hv_on(caen_ch_status, used_channels):
     try:
         # Check if any used channel is on
         hv_on = False
-        for channel in safety_settings["used_caen_ch"]:
-            ch_str = f"caen_HV{channel}_IsOn"
+        for channel in used_channels["HV"]:
+            ch_str = f"caen_{channel}_IsOn"
             if bool(caen_ch_status.get(ch_str, False)):
                 hv_on = True
                 break
@@ -102,12 +98,11 @@ def check_any_hv_on(caen_ch_status):
         return True
 
 
-
 def check_cleanroom_expired(elapsed_time, threshold=600):
     return elapsed_time > threshold
 
 
-def check_door_safe_to_open(system_status, caen_ch_status):
+def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
     """
     Check if it's safe to open the door based on multiple safety conditions.
     Returns True if it's safe to open the door, False otherwise.
@@ -128,7 +123,7 @@ def check_door_safe_to_open(system_status, caen_ch_status):
             log_msg += f"Dew point safe: {dew_point_safe}\n"
 
         # 2. Check if high voltage is off
-        hv_on = check_any_hv_on(caen_ch_status)
+        hv_on = check_any_hv_on(caen_ch_status, used_channels)
         hv_safe = not hv_on
         log_msg += f"High voltage safe: {hv_safe}\n"
 
@@ -153,7 +148,7 @@ def check_door_safe_to_open(system_status, caen_ch_status):
         return False  # Conservative approach - if we can't check, assume it's unsafe
 
 
-def check_light_safe_to_turn_on(system_status, caen_ch_status):
+def check_light_safe_to_turn_on(system_status, caen_ch_status, used_channels):
     """
     Check if it's safe to turn on the light based on multiple safety conditions.
     Returns True if it's safe to turn on the light, False otherwise.
@@ -165,7 +160,7 @@ def check_light_safe_to_turn_on(system_status, caen_ch_status):
             return False  # Conservative approach - if we can't check, assume it's unsafe
 
         # Check if high voltage is off
-        hv_on = check_any_hv_on(caen_ch_status)
+        hv_on = check_any_hv_on(caen_ch_status, used_channels)
         log_msg += f"High voltage on: {hv_on}\n"
         is_safe = not hv_on
         return is_safe

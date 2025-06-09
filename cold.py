@@ -8,6 +8,7 @@ from PyQt5 import QtWidgets, uic, QtGui
 from PyQt5.QtCore import Qt, QTimer
 from coldroom.system import System
 from coldroom.thermal_camera_gui import ThermalCameraTab
+from coldroom.modules_list_gui import ModulesListTab
 from coldroom.safety import (
     check_door_safe_to_open,
     check_dew_point,
@@ -18,6 +19,7 @@ from coldroom.safety import (
 )
 from caen.caenGUIall import caenGUIall
 from db.module_db import ModuleDB
+from db.utils import get_modules_on_ring, get_module_endpoints
 
 
 # Configure logging
@@ -31,7 +33,7 @@ class MainApp(QtWidgets.QMainWindow):
 
         # Create system instance to hold references to all components
         self.system = System()
-
+        self.mounted_modules = None
         # Set up the main UI
         self.setup_ui()
 
@@ -102,11 +104,10 @@ class MainApp(QtWidgets.QMainWindow):
         self.resize(1200, 800)
 
         self.message_box = QtWidgets.QMessageBox(self)
-        self.message_box.setWindowTitle("Message Box")
+        self.message_box.setWindowTitle("Safety Warning")
         self.message_box.setIcon(QtWidgets.QMessageBox.Information)
         self.message_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
         self.message_box.setDefaultButton(QtWidgets.QMessageBox.Ok)
-
 
         # Create central widget and layout
         self.central_widget = QtWidgets.QWidget()
@@ -136,6 +137,24 @@ class MainApp(QtWidgets.QMainWindow):
         # Add the tab to the tab widget
         self.tab_widget.addTab(self.marta_coldroom_tab, "MARTA Cold Room")
 
+        self.modules_list_tab = ModulesListTab()
+        self.modules_list_tab.enter_ring_id_button.clicked.connect(self.get_mounted_modules)
+        self.tab_widget.addTab(self.modules_list_tab, "Modules List")
+        if os.path.exists(os.path.join(os.path.dirname(__file__), "ring_history.txt")):
+            with open(os.path.join(os.path.dirname(__file__), "ring_history.txt"), "r") as f:
+                self.ring_id = f.readlines()[-1].strip()
+                self.mounted_modules = self.get_mounted_modules()
+        else:
+            self.ring_id = None
+        self.modules_list_tab.ring_id_LE.setText(self.ring_id)
+        self.number_of_modules = 0
+        if self.ring_id.startswith("L1_"):
+            self.number_of_modules = 18
+        elif self.ring_id.startswith("L2_"):
+            self.number_of_modules = 26
+        elif self.ring_id.startswith("L3_"):
+            self.number_of_modules = 36
+
         # Add Thermal Camera tab
         self.thermal_camera_tab = ThermalCameraTab(self.system)
         self.tab_widget.addTab(self.thermal_camera_tab, "Thermal Camera")
@@ -143,6 +162,9 @@ class MainApp(QtWidgets.QMainWindow):
         # Add CAEN tab
         self.caen_tab = caenGUIall()
         self.tab_widget.addTab(self.caen_tab, "CAEN")
+
+        if self.mounted_modules:
+            self.modules_list_tab.populate_from_config(self.caen_tab, self.mounted_modules, self.number_of_modules)
 
         # Add Module DB tab
         self.module_db = ModuleDB()
@@ -163,6 +185,13 @@ class MainApp(QtWidgets.QMainWindow):
         # Setup status bar
         self.statusBar().showMessage("Ready")
         logger.info("UI setup completed")
+
+    def get_mounted_modules(self):
+        self.mounted_modules = get_modules_on_ring(self.ring_id)
+        for module_name in self.mounted_modules:
+            self.mounted_modules[module_name].update(get_module_endpoints(module_name))
+        print(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
+        return self.mounted_modules
 
     def load_settings_to_ui(self):
         # Fill settings UI with current values
@@ -444,7 +473,7 @@ class MainApp(QtWidgets.QMainWindow):
             self.system.status["cleanroom"][
                 "elapsed_time"
             ] = self.system._martacoldroom._cleanroom_last_update_elapsed_time
-
+            self.modules_list_tab.light_on = check_light_status(self.system.status)
             # Get the central widget
             central = self.marta_coldroom_tab
 
@@ -634,7 +663,10 @@ class MainApp(QtWidgets.QMainWindow):
                         logger.debug(f"Updated light LED: {'yellow' if coldroom['light'] else 'black'}")
                         if bool(coldroom["light"]) is False:
                             print("Light off, check if it is safe")
-                            is_safe = check_light_safe_to_turn_on(self.system.status, self.caen_tab.last_response)
+                            used_caen_channels = self.modules_list_tab.get_used_channels()
+                            is_safe = check_light_safe_to_turn_on(
+                                self.system.status, self.caen_tab.last_response, used_caen_channels
+                            )
                             button = central.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
                             if not is_safe:
                                 print("not safe")
@@ -659,7 +691,10 @@ class MainApp(QtWidgets.QMainWindow):
                 # Update safe to open LED based on door safety check
                 safe_to_open_led = central.findChild(QtWidgets.QFrame, "safe_to_open_LED")
                 if safe_to_open_led:
-                    is_safe, door_msg = check_door_safe_to_open(self.system.status, self.caen_tab.last_response)
+                    used_caen_channels = self.modules_list_tab.get_used_channels()
+                    is_safe, door_msg = check_door_safe_to_open(
+                        self.system.status, self.caen_tab.last_response, used_caen_channels
+                    )
                     safe_to_open_led.setStyleSheet("background-color: green;" if is_safe else "background-color: red;")
                     logger.debug(f"Updated safe to open LED: {'green' if is_safe else 'red'} (is_safe={is_safe})")
                     self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "door_safety_msg").setText(door_msg)
@@ -1118,7 +1153,7 @@ class MainApp(QtWidgets.QMainWindow):
 
         try:
             value = float(lineedit.text())
-            if (-30 <= value <= 18):  # Validate range from marta.py
+            if -30 <= value <= 18:  # Validate range from marta.py
                 if value <= self.system.status["coldroom"]["dew_point_c"]:
                     msg = "MARTA temperature cannot be lower than the dew point"
                     self.statusBar().showMessage(msg)
