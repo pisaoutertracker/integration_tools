@@ -40,9 +40,9 @@ def check_dew_point(system_status):
         # print(f"Available temperatures: {internal_temperatures}")
 
         # Only proceed if we have all three temperatures
-        if len(internal_temperatures) != 3:
-            print(f"Not all temperatures available. Found {len(internal_temperatures)} out of 3")
-            return False
+        # if len(internal_temperatures) != 3:
+        #     print(f"Not all temperatures available. Found {len(internal_temperatures)} out of 3")
+        #     return False
 
         # Get the minimum temperature among the three
         min_temperature = min(internal_temperatures)

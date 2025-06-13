@@ -1191,7 +1191,7 @@ class MainApp(QtWidgets.QMainWindow):
 
         try:
             value = float(lineedit.text())
-            if -30 <= value <= 18:  # Validate range from marta.py
+            if -35 <= value <= 25:  # Validate range from marta.py
                 if value <= self.system.status["coldroom"]["dew_point_c"]:
                     msg = "MARTA temperature cannot be lower than the dew point"
                     self.statusBar().showMessage(msg)
