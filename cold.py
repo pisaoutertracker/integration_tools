@@ -186,7 +186,7 @@ class MainApp(QtWidgets.QMainWindow):
                     elif self.ring_id.startswith("L3_"):
                         self.number_of_modules = 36
                     self.modules_list_tab.populate_from_config(
-                        self.caen_tab, self.mounted_modules, self.number_of_modules
+                        self.caen_tab, self.mounted_modules, self.number_of_modules, self.thermal_camera_tab
                     )
                 else:
                     self.ring_id = None

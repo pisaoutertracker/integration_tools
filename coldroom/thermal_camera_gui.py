@@ -4,6 +4,7 @@ import logging
 import json
 import os
 import numpy as np
+import yaml
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -22,6 +23,10 @@ class ThermalCameraTab(QtWidgets.QWidget):
         uic.loadUi(os.path.join(os.path.dirname(__file__), "thermal_camera.ui"), self.widget)
         self.ui = self.widget  # Assign the loaded UI to self.ui
 
+        # Initialize camera positions from config file
+        self.config_file = os.path.join(os.path.dirname(__file__), "camera_config.yaml")
+        self.camera_positions = self.load_camera_config()
+
         # Create layout for this widget and add the UI
         self.layout = QtWidgets.QVBoxLayout(self)
         self.layout.addWidget(self.widget)
@@ -31,7 +36,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
         # Connect signals
         self.connect_signals()
-
+        self.update_camera_displays()
         # Setup update timer
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_status)
@@ -41,6 +46,84 @@ class ThermalCameraTab(QtWidgets.QWidget):
         self.enable_controls(False)
 
         logger.info("Thermal camera tab initialized")
+
+    def load_camera_config(self):
+        """Load camera positions from YAML config file"""
+        default_config = {
+            "camera1": {"position": 0, "side": "Back"},
+            "camera2": {"position": 90, "side": "Front"},
+            "camera3": {"position": 180, "side": "Back"},
+            "camera4": {"position": 270, "side": "Front"},
+        }
+        
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r') as f:
+                    config = yaml.safe_load(f)
+                    
+                # Validate the config structure
+                if self.validate_camera_config(config):
+                    logger.info(f"Camera config loaded from {self.config_file}")
+                    return config
+                else:
+                    logger.warning("Invalid camera config structure, using defaults")
+                    # Save default config to file
+                    self.save_camera_config(default_config)
+                    return default_config
+            else:
+                logger.info(f"Config file not found at {self.config_file}, creating with defaults")
+                # Save default config to file
+                self.save_camera_config(default_config)
+                return default_config
+                
+        except yaml.YAMLError as e:
+            logger.error(f"Error parsing YAML config file: {e}")
+            # Save default config to file
+            self.save_camera_config(default_config)
+            return default_config
+        except Exception as e:
+            logger.error(f"Error loading camera config: {e}")
+            # Save default config to file
+            self.save_camera_config(default_config)
+            return default_config
+
+    def validate_camera_config(self, config):
+        """Validate the camera config structure"""
+        try:
+            if not isinstance(config, dict):
+                return False
+                
+            required_cameras = ["camera1", "camera2", "camera3", "camera4"]
+            for camera in required_cameras:
+                if camera not in config:
+                    return False
+                if not isinstance(config[camera], dict):
+                    return False
+                if "position" not in config[camera] or "side" not in config[camera]:
+                    return False
+                if not isinstance(config[camera]["position"], (int, float)):
+                    return False
+                if not isinstance(config[camera]["side"], str):
+                    return False
+                    
+            return True
+        except Exception as e:
+            logger.error(f"Error validating config: {e}")
+            return False
+
+    def save_camera_config(self, config=None):
+        """Save camera positions to YAML config file"""
+        try:
+            if config is None:
+                config = self.camera_positions
+                
+            with open(self.config_file, 'w') as f:
+                yaml.safe_dump(config, f, default_flow_style=False, indent=2)
+                
+            logger.info(f"Camera config saved to {self.config_file}")
+            
+        except Exception as e:
+            logger.error(f"Error saving camera config: {e}")
 
     def setup_camera_views(self):
         """Setup matplotlib figures for camera views"""
@@ -152,7 +235,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
         """Connect UI signals to their handlers"""
         try:
             # Connect buttons to their respective functions
-            self.ui.relse_mtr_PB_2.clicked.connect(self.start_thermal_camera)  # This is the Start Thermal Camera button
+            self.ui.relse_mtr_PB_2.clicked.connect(self.start_thermal_camera)
             self.ui.rotate_PB.clicked.connect(self.rotate)
             self.ui.go_to_PB.clicked.connect(self.go_to)
             self.ui.calibrate_PB.clicked.connect(self.calibrate)
@@ -163,9 +246,169 @@ class ThermalCameraTab(QtWidgets.QWidget):
             self.ui.run_PB.clicked.connect(self.run)
             self.ui.stop_PB.clicked.connect(self.stop)
 
+            # Connect camera coordinate setting buttons
+            self.ui.camera_set_pos_button_1.clicked.connect(lambda: self.set_camera_position(1))
+            self.ui.camera_set_pos_button_2.clicked.connect(lambda: self.set_camera_position(2))
+            self.ui.camera_set_pos_button_3.clicked.connect(lambda: self.set_camera_position(3))
+            self.ui.camera_set_pos_button_4.clicked.connect(lambda: self.set_camera_position(4))
+
             logger.info("Thermal camera signals connected")
         except Exception as e:
             logger.error(f"Error connecting signals: {e}")
+
+    def set_camera_position(self, camera_id):
+        """Set the position for a specific camera"""
+        try:
+            # Get the line edit widget for this camera
+            pos_le = getattr(self.ui, f"camera_pos_le_{camera_id}")
+            
+            # Parse the new position
+            try:
+                new_position = float(pos_le.text())
+            except ValueError:
+                logger.error(f"Invalid position value for camera {camera_id}: {pos_le.text()}")
+                return
+
+            # Validate position range (0-360 degrees)
+            if not (0 <= new_position <= 360):
+                logger.error(f"Position out of range for camera {camera_id}: {new_position}. Must be 0-360°")
+                return
+
+            # Update camera position offset in our data structure
+            camera_name = f"camera{camera_id}"
+            if camera_name in self.camera_positions:
+                old_offset = self.camera_positions[camera_name]["position"]
+                self.camera_positions[camera_name]["position"] = new_position
+                
+                # Save the updated config to file
+                self.save_camera_config()
+                
+                # Update the display labels immediately to reflect the new offset
+                self.update_camera_displays()
+                
+                logger.info(f"Camera {camera_id} offset updated from {old_offset}° to {new_position}° and saved to config")
+
+        except Exception as e:
+            logger.error(f"Error setting position for camera {camera_id}: {e}")
+
+    def update_camera_displays(self):
+        """Update the camera position and side display labels"""
+        try:
+            # Get current system position (either from status or from our tracking)
+            current_system_pos = self.get_current_system_position()
+            
+            for i, (camera_name, camera_info) in enumerate(self.camera_positions.items(), 1):
+                # Calculate effective position based on current system position and camera offset
+                camera_offset = camera_info["position"]
+                effective_position = (current_system_pos + camera_offset) % 360
+                
+                # Update position label with effective position
+                pos_label = getattr(self.ui, f"camera_pos_label_{i}")
+                pos_label.setText(f"{effective_position:.1f}°")
+                
+                # Update side label  
+                side_label = getattr(self.ui, f"camera_side_label_{i}")
+                side_label.setText(camera_info['side'])
+
+        except Exception as e:
+            logger.error(f"Error updating camera displays: {e}")
+
+    def move_camera(self, camera_id, target_angle):
+        """Move a specific camera to a target angular position using go_to function"""
+        try:
+            camera_name = f"camera{camera_id}"
+            if camera_name not in self.camera_positions:
+                logger.error(f"Invalid camera ID: {camera_id}")
+                return False
+
+            # Get the current camera position offset
+            camera_offset = self.camera_positions[camera_name]["position"]
+            
+            # Calculate the absolute position needed for the system
+            # Since camera1 has the same absolute position as the system,
+            # other cameras need to account for their offset
+            if camera_id == 1:
+                # Camera 1: target angle = absolute position
+                absolute_position = target_angle
+            else:
+                # Other cameras: need to calculate based on their offset from camera1
+                # The system needs to move to (target_angle - camera_offset) 
+                # so that this camera ends up at target_angle
+                absolute_position = target_angle - camera_offset
+                
+            # Normalize to 0-360 range
+            absolute_position = absolute_position % 360
+            
+            logger.info(f"Moving camera {camera_id} to target {target_angle}°")
+            logger.info(f"Camera offset: {camera_offset}°, calculated absolute position: {absolute_position}°")
+            
+            # Use the go_to function to move to the calculated absolute position
+            if self.system._thermalcamera:
+                self.system._thermalcamera.go_to({"position": absolute_position})
+                
+                # After movement, calculate and display actual positions for all cameras
+                # Wait a moment for the system to update (you might want to make this more robust)
+                self._update_all_camera_positions_after_move(absolute_position)
+                    
+                logger.info(f"Camera {camera_id} moved to target position {target_angle}°")
+                return True
+            else:
+                logger.error("Thermal camera system not available")
+                return False
+                
+        except ValueError as e:
+            logger.error(f"Invalid target angle for camera {camera_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error moving camera {camera_id} to {target_angle}°: {e}")
+            return False
+
+    def _update_all_camera_positions_after_move(self, new_system_position):
+        """Update all camera position displays after a system movement"""
+        try:
+            # Calculate actual effective positions for all cameras based on new system position
+            for camera_name, camera_info in self.camera_positions.items():
+                camera_offset = camera_info["position"]
+                # Calculate the actual effective position of this camera
+                effective_position = (new_system_position + camera_offset) % 360
+                
+                # Log the calculated position for verification
+                camera_id = camera_name.replace("camera", "")
+                logger.debug(f"Camera {camera_id}: system_pos={new_system_position}°, offset={camera_offset}°, effective={effective_position}°")
+            
+            # Update the display with calculated positions
+            self.update_camera_displays()
+            
+        except Exception as e:
+            logger.error(f"Error updating camera positions after move: {e}")
+
+    def get_current_system_position(self):
+        """Get the current absolute position of the thermal camera system"""
+        try:
+            if self.system and hasattr(self.system, "status"):
+                status = self.system.status.get("thermal_camera", {})
+                return status.get("position", 0.0)
+            return 0.0
+        except Exception as e:
+            logger.error(f"Error getting current system position: {e}")
+            return 0.0
+
+    def get_camera_effective_position(self, camera_id):
+        """Get the effective angular position of a specific camera"""
+        try:
+            system_position = self.get_current_system_position()
+            camera_name = f"camera{camera_id}"
+            
+            if camera_name in self.camera_positions:
+                camera_offset = self.camera_positions[camera_name]["position"]
+                effective_position = (system_position + camera_offset) % 360
+                return effective_position
+            else:
+                logger.error(f"Invalid camera ID: {camera_id}")
+                return None
+        except Exception as e:
+            logger.error(f"Error calculating effective position for camera {camera_id}: {e}")
+            return None
 
     def stitch_multiple_images(self, images, positions, temp_min, temp_max, full_coverage=360):
         """Stitch multiple images from different positions into a panorama"""
@@ -246,7 +489,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             switch_state = status.get("switch_state", False)
             self.ui.switch_state_flag.setStyleSheet(
                 "background-color: green;" if switch_state else "background-color: red;"
-            ) 
+            )
 
             # Update camera images with proper scaling
             if hasattr(self.system._thermalcamera, "_images"):
