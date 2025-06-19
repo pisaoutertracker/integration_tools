@@ -243,6 +243,11 @@ class ThermalCameraTab(QtWidgets.QWidget):
             running = status.get("running", False)
             self.ui.run_stat_flg.setStyleSheet("background-color: green;" if running else "background-color: red;")
 
+            switch_state = status.get("switch_state", False)
+            self.ui.switch_state_flag.setStyleSheet(
+                "background-color: green;" if switch_state else "background-color: red;"
+            ) 
+
             # Update camera images with proper scaling
             if hasattr(self.system._thermalcamera, "_images"):
                 # First update individual camera views
@@ -442,7 +447,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 # Try using init method instead of initialize
                 self.system._thermalcamera.init({})
                 self.enable_controls(True)
-                self.ui.relse_mtr_PB_2.setEnabled(False)  # Disable start button
+                # self.ui.relse_mtr_PB_2.setEnabled(False)  # Disable start button
                 logger.info("Thermal camera initialized")
         except Exception as e:
             logger.error(f"Error using alternative init method: {e}")
