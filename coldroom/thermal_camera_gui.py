@@ -50,10 +50,10 @@ class ThermalCameraTab(QtWidgets.QWidget):
     def load_camera_config(self):
         """Load camera positions from YAML config file"""
         default_config = {
-            "camera1": {"position": 0, "side": "Back"},
-            "camera2": {"position": 90, "side": "Front"},
-            "camera3": {"position": 180, "side": "Back"},
-            "camera4": {"position": 270, "side": "Front"},
+            "camera1": {"position": 0, "side": "Front"},
+            "camera2": {"position": 0, "side": "Back"},
+            "camera3": {"position": 180, "side": "Front"},
+            "camera4": {"position": 180, "side": "Back"},
         }
         
         try:

@@ -197,7 +197,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.mounted_modules = modules.copy()
         self.update_module_list()
 
-        self.MODULE_ANGULAR_WIDTH = 360 / number_of_modules
+        self.MODULE_ANGULAR_WIDTH = 360 / number_of_modules / 2
 
         # Now update items with module info and add buttons
         for module_name, module_info in modules.items():
@@ -207,8 +207,8 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 module_side = "Undefined"
             else:
                 # Calculate angular position based on module position
-                module_angular_position = (int(module_position) - 1) * self.MODULE_ANGULAR_WIDTH
-                module_side = "12" if int(module_position) % 2 == 0 else "34"
+                module_angular_position = (int(module_position) - 1) % (number_of_modules / 2 ) * self.MODULE_ANGULAR_WIDTH
+                module_side = "13" if int(module_position) <= (number_of_modules / 2 )  else "24"
 
             self.mounted_modules[module_name]["angular_position"] = module_angular_position
             self.mounted_modules[module_name]["side"] = module_side
@@ -606,16 +606,14 @@ class ModulesListTab(QtWidgets.QMainWindow):
         """Get the camera pair based on the module side."""
         # Camera pairs mapping - adjust based on your actual camera setup
         camera_pairs = {
-            "12": {"camera1": 1, "camera2": 2},  # Side 12 uses cameras 1 and 2
-            "34": {"camera3": 3, "camera4": 4},  # Side 34 uses cameras 3 and 4
+            "13": {"camera1": 1, "camera3": 3},  # Side 12 uses cameras 1 and 2
+            "24": {"camera2": 2, "camera4": 4},  # Side 34 uses cameras 3 and 4
         }
 
         return camera_pairs.get(side, None)
 
     def _select_camera_for_position(self, camera_pair, angular_position):
         """Select the appropriate camera based on angular position within the pair."""
-        # Cameras are 90 degrees apart, so we can determine which one to use
-        # based on the angular position
 
         # Normalize angular position to 0-360 range
         normalized_angle = angular_position % 360
