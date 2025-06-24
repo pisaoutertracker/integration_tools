@@ -26,6 +26,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
         # Initialize camera positions from config file
         self.config_file = os.path.join(os.path.dirname(__file__), "camera_config.yaml")
         self.camera_positions = self.load_camera_config()
+        self.camera_fov = 20  # Field of view in degrees for each camera
 
         # Create layout for this widget and add the UI
         self.layout = QtWidgets.QVBoxLayout(self)
@@ -55,12 +56,12 @@ class ThermalCameraTab(QtWidgets.QWidget):
             "camera3": {"position": 180, "side": "Front"},
             "camera4": {"position": 180, "side": "Back"},
         }
-        
+
         try:
             if os.path.exists(self.config_file):
-                with open(self.config_file, 'r') as f:
+                with open(self.config_file, "r") as f:
                     config = yaml.safe_load(f)
-                    
+
                 # Validate the config structure
                 if self.validate_camera_config(config):
                     logger.info(f"Camera config loaded from {self.config_file}")
@@ -75,7 +76,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 # Save default config to file
                 self.save_camera_config(default_config)
                 return default_config
-                
+
         except yaml.YAMLError as e:
             logger.error(f"Error parsing YAML config file: {e}")
             # Save default config to file
@@ -92,7 +93,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
         try:
             if not isinstance(config, dict):
                 return False
-                
+
             required_cameras = ["camera1", "camera2", "camera3", "camera4"]
             for camera in required_cameras:
                 if camera not in config:
@@ -105,7 +106,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
                     return False
                 if not isinstance(config[camera]["side"], str):
                     return False
-                    
+
             return True
         except Exception as e:
             logger.error(f"Error validating config: {e}")
@@ -116,12 +117,12 @@ class ThermalCameraTab(QtWidgets.QWidget):
         try:
             if config is None:
                 config = self.camera_positions
-                
-            with open(self.config_file, 'w') as f:
+
+            with open(self.config_file, "w") as f:
                 yaml.safe_dump(config, f, default_flow_style=False, indent=2)
-                
+
             logger.info(f"Camera config saved to {self.config_file}")
-            
+
         except Exception as e:
             logger.error(f"Error saving camera config: {e}")
 
@@ -142,12 +143,14 @@ class ThermalCameraTab(QtWidgets.QWidget):
             self.camera_images = []
 
             # Initialize camera images with proper sizing
+            camera_index = 0  # Add counter for sequential numbering
             for i in range(2):
                 for j in range(2):
                     ax = self.cameras_axes[i, j]
                     img = ax.imshow(np.zeros((24, 32)), cmap="plasma", aspect="equal", interpolation="nearest")
                     self.camera_images.append(img)
-                    ax.set_title(f"Camera {i*2+j+1}")
+                    camera_index += 1  # Increment for each camera
+                    ax.set_title(f"Camera {camera_index}")
                     ax.set_xticks([])
                     ax.set_yticks([])
 
@@ -205,10 +208,147 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 self.stitched_images.append(img)
                 self.stitched_axes.append(ax)
 
+            # Setup temperature plot tab
+            self.setup_temperature_plot()
+
             logger.info("Camera views initialized")
 
         except Exception as e:
             logger.error(f"Error setting up camera views: {e}")
+
+    def setup_temperature_plot(self):
+        """Setup temperature plotting tab"""
+        try:
+            # Get the existing tab widget
+            tab_widget = self.ui.findChild(QtWidgets.QTabWidget, "tabWidget")
+            
+            if tab_widget is None:
+                logger.warning("Tab widget not found in UI")
+                return
+
+            # Create a new tab for temperature plot
+            temp_tab = QtWidgets.QWidget()
+            temp_layout = QtWidgets.QVBoxLayout(temp_tab)
+            
+            # Create graphics view for temperature plot
+            temp_graphics_view = QtWidgets.QGraphicsView()
+            temp_layout.addWidget(temp_graphics_view)
+            
+            # Add the new tab to the tab widget
+            tab_widget.addTab(temp_tab, "Temperature Plot")
+
+            # Create scene and canvas for temperature plot
+            temp_scene = QtWidgets.QGraphicsScene()
+            temp_graphics_view.setScene(temp_scene)
+
+            # Create matplotlib figure for temperature plot
+            self.temp_fig = Figure(figsize=(12, 3), dpi=100)
+            self.temp_canvas = FigureCanvas(self.temp_fig)
+            temp_scene.addWidget(self.temp_canvas)
+
+            # Create axes for temperature plot
+            self.temp_ax = self.temp_fig.add_subplot(111)
+            self.temp_ax.set_xlabel("Angle (degrees)")
+            self.temp_ax.set_ylabel("Temperature (°C)")
+            self.temp_ax.set_title("Camera Temperature Readings vs Position")
+            self.temp_ax.grid(True, alpha=0.3)
+            self.temp_ax.set_xlim(0, 360)
+
+            # Initialize empty line plots for each camera (max and min)
+            self.temp_lines = {}
+            colors = ["red", "blue", "green", "orange"]
+
+            for i in range(4):
+                camera_name = f"camera{i+1}"
+                color = colors[i]
+
+                # Create lines for max and min temperatures
+                (max_line,) = self.temp_ax.plot([], [], "o-", color=color, label=f"{camera_name} Max", markersize=3)
+                (min_line,) = self.temp_ax.plot(
+                    [], [], "s--", color=color, label=f"{camera_name} Min", markersize=3, alpha=0.7
+                )
+
+                self.temp_lines[f"{camera_name}_max"] = max_line
+                self.temp_lines[f"{camera_name}_min"] = min_line
+
+            # Add legend
+            self.temp_ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+
+            # Adjust layout to make room for legend
+            self.temp_fig.subplots_adjust(right=0.85)
+
+            logger.info("Temperature plot tab added successfully")
+
+        except Exception as e:
+            logger.error(f"Error setting up temperature plot: {e}")
+
+    def update_temperature_plot(self):
+        """Update the temperature plot with current data"""
+        try:
+            if not hasattr(self, "temp_ax"):
+                return
+
+            # Get temperature data from thermal camera
+            if hasattr(self.system._thermalcamera, "_stitching_max_temperature") and hasattr(
+                self.system._thermalcamera, "_stitching_min_temperature"
+            ):
+
+                for i in range(4):
+                    camera_name = f"camera{i}"  # This matches the thermal_camera.py naming
+                    camera_display_name = f"camera{i+1}"  # This matches the GUI naming
+
+                    if (
+                        camera_name in self.system._thermalcamera._stitching_max_temperature
+                        and camera_name in self.system._thermalcamera._stitching_min_temperature
+                    ):
+
+                        max_temp_data = self.system._thermalcamera._stitching_max_temperature[camera_name]
+                        min_temp_data = self.system._thermalcamera._stitching_min_temperature[camera_name]
+
+                        if max_temp_data and min_temp_data:
+                            # Extract positions and temperatures
+                            positions = []
+                            max_temps = []
+                            min_temps = []
+
+                            # Get all positions that have both max and min data
+                            common_positions = set(max_temp_data.keys()) & set(min_temp_data.keys())
+
+                            for pos in sorted(common_positions, key=float):
+                                # Apply camera position offset to get effective position
+                                effective_position = (
+                                    float(pos) + self.camera_positions[camera_display_name]["position"]
+                                ) % 360
+
+                                positions.append(effective_position)
+                                max_temps.append(max_temp_data[pos])
+                                min_temps.append(min_temp_data[pos])
+
+                            if positions:
+                                # Update the plot lines
+                                self.temp_lines[f"{camera_display_name}_max"].set_data(positions, max_temps)
+                                self.temp_lines[f"{camera_display_name}_min"].set_data(positions, min_temps)
+
+                # Auto-scale the y-axis based on all temperature data
+                all_temps = []
+                for line in self.temp_lines.values():
+                    y_data = line.get_ydata()
+                    if len(y_data) > 0:
+                        all_temps.extend(y_data)
+
+                if all_temps:
+                    temp_min = min(all_temps)
+                    temp_max = max(all_temps)
+                    temp_range = temp_max - temp_min
+                    margin = temp_range * 0.1 if temp_range > 0 else 1.0
+
+                    self.temp_ax.set_ylim(temp_min - margin, temp_max + margin)
+
+                # Redraw the canvas
+                self.temp_canvas.draw()
+
+        except Exception as e:
+            logger.error(f"Error updating temperature plot: {e}")
 
     def enable_controls(self, enabled=True):
         """Enable or disable all controls except Start Thermal Camera button"""
@@ -261,7 +401,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
         try:
             # Get the line edit widget for this camera
             pos_le = getattr(self.ui, f"camera_pos_le_{camera_id}")
-            
+
             # Parse the new position
             try:
                 new_position = float(pos_le.text())
@@ -279,14 +419,16 @@ class ThermalCameraTab(QtWidgets.QWidget):
             if camera_name in self.camera_positions:
                 old_offset = self.camera_positions[camera_name]["position"]
                 self.camera_positions[camera_name]["position"] = new_position
-                
+
                 # Save the updated config to file
                 self.save_camera_config()
-                
+
                 # Update the display labels immediately to reflect the new offset
                 self.update_camera_displays()
-                
-                logger.info(f"Camera {camera_id} offset updated from {old_offset}° to {new_position}° and saved to config")
+
+                logger.info(
+                    f"Camera {camera_id} offset updated from {old_offset}° to {new_position}° and saved to config"
+                )
 
         except Exception as e:
             logger.error(f"Error setting position for camera {camera_id}: {e}")
@@ -296,19 +438,19 @@ class ThermalCameraTab(QtWidgets.QWidget):
         try:
             # Get current system position (either from status or from our tracking)
             current_system_pos = self.get_current_system_position()
-            
+
             for i, (camera_name, camera_info) in enumerate(self.camera_positions.items(), 1):
                 # Calculate effective position based on current system position and camera offset
                 camera_offset = camera_info["position"]
                 effective_position = (current_system_pos + camera_offset) % 360
-                
+
                 # Update position label with effective position
                 pos_label = getattr(self.ui, f"camera_pos_label_{i}")
                 pos_label.setText(f"{effective_position:.1f}°")
-                
-                # Update side label  
+
+                # Update side label
                 side_label = getattr(self.ui, f"camera_side_label_{i}")
-                side_label.setText(camera_info['side'])
+                side_label.setText(camera_info["side"])
 
         except Exception as e:
             logger.error(f"Error updating camera displays: {e}")
@@ -323,7 +465,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
             # Get the current camera position offset
             camera_offset = self.camera_positions[camera_name]["position"]
-            
+
             # Calculate the absolute position needed for the system
             # Since camera1 has the same absolute position as the system,
             # other cameras need to account for their offset
@@ -332,30 +474,30 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 absolute_position = target_angle
             else:
                 # Other cameras: need to calculate based on their offset from camera1
-                # The system needs to move to (target_angle - camera_offset) 
+                # The system needs to move to (target_angle - camera_offset)
                 # so that this camera ends up at target_angle
                 absolute_position = target_angle - camera_offset
-                
+
             # Normalize to 0-360 range
             absolute_position = absolute_position % 360
-            
+
             logger.info(f"Moving camera {camera_id} to target {target_angle}°")
             logger.info(f"Camera offset: {camera_offset}°, calculated absolute position: {absolute_position}°")
-            
+
             # Use the go_to function to move to the calculated absolute position
             if self.system._thermalcamera:
                 self.system._thermalcamera.go_to({"position": absolute_position})
-                
+
                 # After movement, calculate and display actual positions for all cameras
                 # Wait a moment for the system to update (you might want to make this more robust)
                 self._update_all_camera_positions_after_move(absolute_position)
-                    
+
                 logger.info(f"Camera {camera_id} moved to target position {target_angle}°")
                 return True
             else:
                 logger.error("Thermal camera system not available")
                 return False
-                
+
         except ValueError as e:
             logger.error(f"Invalid target angle for camera {camera_id}: {e}")
             return False
@@ -371,14 +513,16 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 camera_offset = camera_info["position"]
                 # Calculate the actual effective position of this camera
                 effective_position = (new_system_position + camera_offset) % 360
-                
+
                 # Log the calculated position for verification
                 camera_id = camera_name.replace("camera", "")
-                logger.debug(f"Camera {camera_id}: system_pos={new_system_position}°, offset={camera_offset}°, effective={effective_position}°")
-            
+                logger.debug(
+                    f"Camera {camera_id}: system_pos={new_system_position}°, offset={camera_offset}°, effective={effective_position}°"
+                )
+
             # Update the display with calculated positions
             self.update_camera_displays()
-            
+
         except Exception as e:
             logger.error(f"Error updating camera positions after move: {e}")
 
@@ -398,7 +542,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
         try:
             system_position = self.get_current_system_position()
             camera_name = f"camera{camera_id}"
-            
+
             if camera_name in self.camera_positions:
                 camera_offset = self.camera_positions[camera_name]["position"]
                 effective_position = (system_position + camera_offset) % 360
@@ -416,7 +560,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
         h, w = images[0].shape
 
         # Calculate total width based on full coverage and FOV
-        total_width = int(w * full_coverage / 20)
+        total_width = int(w * full_coverage / self.camera_fov)
 
         # Create canvas and count arrays for tracking overlaps
         panorama = np.zeros((h, total_width), dtype=np.float32)
@@ -427,7 +571,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             # Calculate x offset based on absolute angle position in the full range
             # Normalize angle to 0-360 range if needed
             norm_angle = angle % full_coverage
-            x_offset = int(norm_angle * w / 20)
+            x_offset = int(norm_angle * w / self.camera_fov)
 
             # Make sure offset is within bounds
             if x_offset + w <= total_width:
@@ -528,6 +672,9 @@ class ThermalCameraTab(QtWidgets.QWidget):
                         for i, (camera_name, camera_data) in enumerate(
                             self.system._thermalcamera._stitching_data.items()
                         ):
+                            # add +1 to the camera name to match the UI naming
+                            camera_index = int(camera_name[-1]) + 1
+                            camera_name = f"camera{camera_index}"
                             if camera_data:  # If we have data for this camera
                                 # Get all images and positions
                                 images = []
@@ -538,14 +685,15 @@ class ThermalCameraTab(QtWidgets.QWidget):
                                 # Collect all images and positions
                                 for pos, pos_images in camera_data.items():
                                     if pos_images:  # If we have images at this position
-                                        # Average all images at this position
-                                        avg_img = np.mean(pos_images, axis=0)
-                                        images.append(avg_img)
-                                        positions.append(float(pos))
+                                        # Keep only the last image at this position
+                                        last_img = pos_images[-1]
+                                        images.append(last_img)
+                                        # positions.append(float(pos))
+                                        positions.append(float(pos) + self.camera_positions[camera_name]["position"])
 
                                         # Update temperature range
-                                        temp_min = min(temp_min, avg_img.min())
-                                        temp_max = max(temp_max, avg_img.max())
+                                        temp_min = min(temp_min, last_img.min())
+                                        temp_max = max(temp_max, last_img.max())
 
                                 if images:  # If we have any images to stitch
                                     # Create stitched panorama
@@ -562,11 +710,11 @@ class ThermalCameraTab(QtWidgets.QWidget):
                                         panorama = zoom(panorama, zoom_factor, order=1)
 
                                     # Update the stitched view
-                                    self.stitched_images[i].set_array(panorama)
-                                    self.stitched_images[i].set_clim(temp_min, temp_max)
+                                    self.stitched_images[camera_index - 1].set_array(panorama)
+                                    self.stitched_images[camera_index - 1].set_clim(temp_min, temp_max)
 
                                     # Update colorbar
-                                    cbar = self.stitched_images[i].colorbar
+                                    cbar = self.stitched_images[camera_index - 1].colorbar
                                     if cbar is not None:
                                         cbar.set_ticks(np.linspace(temp_min, temp_max, 5))
                                         cbar.set_ticklabels(
@@ -574,7 +722,10 @@ class ThermalCameraTab(QtWidgets.QWidget):
                                         )
 
                                     # Draw canvas
-                                    self.stitched_canvases[i].draw()
+                                    self.stitched_canvases[camera_index - 1].draw()
+
+                    # Update temperature plot
+                    self.update_temperature_plot()
 
                 except Exception as e:
                     logger.error(f"Error creating stitched images: {e}")

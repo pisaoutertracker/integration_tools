@@ -66,6 +66,12 @@ class ModulesListTab(QtWidgets.QMainWindow):
                     self.test_command = lines[-1].strip()
             self.test_cmd_le.setText(self.test_command)
 
+        # Create a message box for displaying the camera status
+        self.camera_status_message_box = QtWidgets.QMessageBox()
+        self.camera_status_message_box.setWindowTitle("Camera Status")
+        self.camera_status_message_box.setIcon(QtWidgets.QMessageBox.Information)
+        self.camera_status_message_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+
     # CAEN Queue Management Methods
     def _add_caen_command_to_queue(self, command_type, channel, module_name=None):
         """Add a CAEN command to the queue."""
@@ -197,7 +203,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.mounted_modules = modules.copy()
         self.update_module_list()
 
-        self.MODULE_ANGULAR_WIDTH = 360 / number_of_modules / 2
+        self.MODULE_ANGULAR_WIDTH = 360 / (number_of_modules / 2)
 
         # Now update items with module info and add buttons
         for module_name, module_info in modules.items():
@@ -207,8 +213,12 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 module_side = "Undefined"
             else:
                 # Calculate angular position based on module position
-                module_angular_position = (int(module_position) - 1) % (number_of_modules / 2 ) * self.MODULE_ANGULAR_WIDTH
-                module_side = "13" if int(module_position) <= (number_of_modules / 2 )  else "24"
+                module_angular_position = (int(module_position) - 1) % (
+                    number_of_modules / 2
+                ) * self.MODULE_ANGULAR_WIDTH + (self.MODULE_ANGULAR_WIDTH / 2) * (
+                    1 if int(module_position) <= (number_of_modules / 2) else 0
+                )
+                module_side = "13" if int(module_position) <= (number_of_modules / 2) else "24"
 
             self.mounted_modules[module_name]["angular_position"] = module_angular_position
             self.mounted_modules[module_name]["side"] = module_side
@@ -598,7 +608,10 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
         # Move the camera to the angular position using the thermal camera system
         if thermal_camera_system:
-            self._move_camera_to_angular_position(thermal_camera_system, selected_camera, angular_position)
+            self.message_box.setText(
+                f"Moving camera {selected_camera} to angular position {angular_position}° for module {module_name}"
+            )
+            # self._move_camera_to_angular_position(thermal_camera_system, selected_camera, angular_position)
         else:
             print(f"No thermal camera system available")
 

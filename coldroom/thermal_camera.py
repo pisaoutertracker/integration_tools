@@ -20,6 +20,8 @@ class ThermalCameraMQTTClient:
         # Initialize data structures
         self._status = {}
         self._stitching_data = {}
+        self._stitching_max_temperature = {}
+        self._stitching_min_temperature = {}
         self._images = {f"camera{i}": np.zeros((24, 32)) for i in range(4)}
         self._figure_data = None
         self._circular_data = None
@@ -108,6 +110,15 @@ class ThermalCameraMQTTClient:
 
             # Update current image
             self._images[camera_name] = processed_image
+
+            max_temperature = float(data["max_temperature"])
+            min_temperature = float(data["min_temperature"])
+            if camera_name not in self._stitching_max_temperature:
+                self._stitching_max_temperature[camera_name] = {}
+            if camera_name not in self._stitching_min_temperature:
+                self._stitching_min_temperature[camera_name] = {}
+            self._stitching_max_temperature[camera_name][position] = max_temperature
+            self._stitching_min_temperature[camera_name][position] = min_temperature
 
             # Try to stitch images
             # self.__stitch_images()
