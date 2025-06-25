@@ -72,7 +72,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             for camera_name, camera_offset in self.camera_positions.items():
                 camera_position = (absolute_position + camera_offset["position"]) % 360
                 module_slot = str(module_info.get("mounted_on", "-").split(";")[1])
-                if abs(module_position - camera_position) <= 20:
+                if abs(module_position - camera_position) <= 20 and module_side == camera_offset["side"]:
                     camera_modules[camera_name] = f"{module_slot};{module_name}"
                     close_camera = True
                     break
@@ -251,6 +251,47 @@ class ThermalCameraTab(QtWidgets.QWidget):
         except Exception as e:
             logger.error(f"Error setting up camera views: {e}")
 
+    def reset_camera_views(self):
+        """Reset camera views to initial state"""
+        try:
+            # Clear all axes and images
+            for ax in self.cameras_axes.flatten():
+                ax.clear()
+            for img in self.camera_images:
+                img.set_array(np.zeros((24, 32)))
+
+            # Clear stitched images
+            for ax in self.stitched_axes:
+                ax.clear()
+            for img in self.stitched_images:
+                img.set_array(np.zeros((24, 360)))
+
+            # Redraw canvases
+            self.cameras_canvas.draw()
+            for canvas in self.stitched_canvases:
+                canvas.draw()
+
+            logger.info("Camera views reset successfully")
+
+            self.system._thermalcamera._stitching_data = {}  # Clear stitching data
+            self.system._thermalcamera._stitching_max_temperature = {}
+            self.system._thermalcamera._stitching_min_temperature = {}
+
+            # Remove the temperature plot tab if it exists
+            tab_widget = self.ui.findChild(QtWidgets.QTabWidget, "tabWidget")
+            if tab_widget is not None:
+                # Find the Temperature Plot tab by iterating through tabs
+                for i in range(tab_widget.count()):
+                    if tab_widget.tabText(i) == "Temperature Plot":
+                        tab_widget.removeTab(i)
+                        logger.info("Removed existing Temperature Plot tab")
+                        break
+
+            self.setup_camera_views()  # Re-setup views to ensure everything is initialized correctly
+
+        except Exception as e:
+            logger.error(f"Error resetting camera views: {e}")
+
     def setup_temperature_plot(self):
         """Setup temperature plotting tab"""
         try:
@@ -359,9 +400,12 @@ class ThermalCameraTab(QtWidgets.QWidget):
                                 max_temps.append(max_temp_data[pos])
                                 min_temps.append(min_temp_data[pos])
 
-                            if positions:
+                            if positions and max_temps:
+                                # Filter spikes from max temperatures using simple method
+                                filtered_max_temps = self.simple_spike_filter(max_temps)
+                                
                                 # Update the plot lines
-                                self.temp_lines[f"{camera_display_name}_max"].set_data(positions, max_temps)
+                                self.temp_lines[f"{camera_display_name}_max"].set_data(positions, filtered_max_temps)
                                 self.temp_lines[f"{camera_display_name}_min"].set_data(positions, min_temps)
 
                 # Auto-scale the y-axis based on all temperature data
@@ -384,6 +428,26 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
         except Exception as e:
             logger.error(f"Error updating temperature plot: {e}")
+
+    def simple_spike_filter(self, temps, max_change=5.0):
+        """Simple spike filter - replaces values that change too much from neighbors"""
+        if len(temps) < 3:
+            return temps
+        
+        filtered = temps.copy()
+        
+        for i in range(1, len(temps) - 1):
+            prev_temp = filtered[i-1]
+            curr_temp = temps[i]
+            next_temp = temps[i+1]
+            
+            # Check if current value is very different from both neighbors
+            if (abs(curr_temp - prev_temp) > max_change and 
+                abs(curr_temp - next_temp) > max_change):
+                # Replace with average of neighbors
+                filtered[i] = (prev_temp + next_temp) / 2
+        
+        return filtered
 
     def enable_controls(self, enabled=True):
         """Enable or disable all controls except Start Thermal Camera button"""
@@ -420,7 +484,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             self.ui.relse_mtr_PB.clicked.connect(self.release_motor)
             self.ui.run_PB.clicked.connect(self.run)
             self.ui.stop_PB.clicked.connect(self.stop)
-            self.ui.reset_figures_PB.clicked.connect(self.setup_camera_views)
+            self.ui.reset_figures_PB.clicked.connect(self.reset_camera_views)
 
             # Connect camera coordinate setting buttons
             self.ui.camera_set_pos_button_1.clicked.connect(lambda: self.set_camera_position(1))
@@ -612,23 +676,38 @@ class ThermalCameraTab(QtWidgets.QWidget):
             # Calculate x offset based on absolute angle position in the full range
             # Normalize angle to 0-360 range if needed
             norm_angle = angle % full_coverage
-            x_offset = int(norm_angle * w / self.camera_fov)
+            
+            # Center the FOV around the camera position by subtracting half FOV
+            # This makes the camera position the center of the image rather than the left edge
+            centered_angle = (norm_angle - self.camera_fov / 2) % full_coverage
+            x_offset = int(centered_angle * w / self.camera_fov)
 
             # Make sure offset is within bounds
-            if x_offset + w <= total_width:
+            if x_offset >= 0 and x_offset + w <= total_width:
                 # Add image to panorama (accumulate values)
                 panorama[:, x_offset : x_offset + w] += img
                 # Increment counter for overlapping pixels
                 overlap_count[:, x_offset : x_offset + w] += 1
             else:
                 # Handle case where image would wrap around
-                wrap_width = total_width - x_offset
-                # Add first part
-                panorama[:, x_offset:] += img[:, :wrap_width]
-                overlap_count[:, x_offset:] += 1
-                # Add second part (wrap around)
-                panorama[:, : w - wrap_width] += img[:, wrap_width:]
-                overlap_count[:, : w - wrap_width] += 1
+                if x_offset < 0:
+                    # Image starts before 0, wrap around to the end
+                    wrap_width = abs(x_offset)
+                    # Add wrapped part at the end
+                    panorama[:, total_width - wrap_width:] += img[:, :wrap_width]
+                    overlap_count[:, total_width - wrap_width:] += 1
+                    # Add remaining part at the beginning
+                    panorama[:, :w - wrap_width] += img[:, wrap_width:]
+                    overlap_count[:, :w - wrap_width] += 1
+                elif x_offset + w > total_width:
+                    # Image extends beyond total_width, wrap around to the beginning
+                    wrap_width = total_width - x_offset
+                    # Add first part
+                    panorama[:, x_offset:] += img[:, :wrap_width]
+                    overlap_count[:, x_offset:] += 1
+                    # Add second part (wrap around)
+                    panorama[:, : w - wrap_width] += img[:, wrap_width:]
+                    overlap_count[:, : w - wrap_width] += 1
 
         # Compute mean for overlapping regions (avoid division by zero)
         mask = overlap_count > 0
@@ -756,15 +835,36 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
                                     # Clear previous annotations and add module names
                                     ax = self.stitched_axes[camera_index - 1]
-                                    # Remove previous text annotations
+                                    # Remove previous text annotations and lines (but keep camera position lines)
                                     for txt in ax.texts[:]:
-                                        txt.remove()
+                                        if hasattr(txt, '_module_annotation'):
+                                            txt.remove()
+                                    
+                                    # Remove previous annotation lines (both module and camera position)
+                                    for line in ax.lines[:]:
+                                        if hasattr(line, '_module_annotation') or hasattr(line, '_camera_position'):
+                                            line.remove()
+
+                                    # Add camera position line (red dashed line showing current camera position)
+                                    current_camera_pos = self.get_camera_effective_position(camera_index)
+                                    if current_camera_pos is not None:
+                                        camera_line = ax.axvline(
+                                            x=current_camera_pos, 
+                                            color='red', 
+                                            linestyle='--', 
+                                            alpha=0.8, 
+                                            linewidth=2,
+                                            label=f'Camera {camera_index} Position'
+                                        )
+                                        # Mark as camera position line for easy removal
+                                        camera_line._camera_position = True
 
                                     # Add module annotations if we have mounted modules
                                     if self.mounted_modules is not None:
                                         self.add_module_annotations_to_stitched_image(ax, camera_name)
                                     else:
                                         logger.debug(f"No mounted modules available for {camera_name}")
+
                                     # Update colorbar
                                     cbar = self.stitched_images[camera_index - 1].colorbar
                                     if cbar is not None:
@@ -797,7 +897,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
             # Get camera side for filtering
             camera_side = self.camera_positions[camera_name]["side"]
-            
+
             # Convert side format for comparison
             if camera_side == "Front":
                 target_side = "13"
@@ -811,12 +911,12 @@ class ThermalCameraTab(QtWidgets.QWidget):
             # Clear previous annotations
             # Remove previous text annotations and lines
             for txt in ax.texts[:]:
-                if hasattr(txt, '_module_annotation'):
+                if hasattr(txt, "_module_annotation"):
                     txt.remove()
-            
+
             # Remove previous module annotation lines
             for line in ax.lines[:]:
-                if hasattr(line, '_module_annotation'):
+                if hasattr(line, "_module_annotation"):
                     line.remove()
 
             # Add annotations for modules on the same side as this camera
@@ -824,72 +924,67 @@ class ThermalCameraTab(QtWidgets.QWidget):
             for module_name, module_info in self.mounted_modules.items():
                 module_side = module_info["side"]
                 module_position = module_info["angular_position"]
-                
+
                 logger.debug(f"Module {module_name}: side={module_side}, position={module_position}")
-                
+
                 # Only show modules on the same side as the camera
                 if module_side == target_side:
                     # Calculate the module's position relative to the camera's view
                     # The stitched image shows 360 degrees with 0 at the left edge
                     module_x_pos = module_position
-                    
+
                     # Get module slot information if available
                     if "mounted_on" in module_info and ";" in str(module_info["mounted_on"]):
                         module_slot = str(module_info["mounted_on"]).split(";")[1]
                     else:
                         module_slot = "-"
-                    
+
                     # Create annotation text
                     annotation_text = f"{module_slot}:{module_name}"
-                    
+
                     logger.debug(f"Adding annotation '{annotation_text}' at x={module_x_pos}")
-                    
+
                     # Add text annotation on the top x-axis with 45-degree rotation
                     text_obj = ax.text(
-                        module_x_pos, 
+                        module_x_pos,
                         ax.get_ylim()[1],  # Position at the top of the plot
                         annotation_text,
                         fontsize=6,
-                        color='black',
-                        ha='left',  # Right-align for better readability with rotation
-                        va='bottom',
+                        color="black",
+                        ha="left",  # Right-align for better readability with rotation
+                        va="bottom",
                         rotation=45,
                         # weight='bold',
-                        clip_on=False  # Allow text to extend beyond plot area
+                        clip_on=False,  # Allow text to extend beyond plot area
                     )
-                    
+
                     # Mark as module annotation for easy removal
                     text_obj._module_annotation = True
-                    
+
                     # Add a dashed vertical line to mark the exact position
-                    line_obj = ax.axvline(
-                        x=module_x_pos, 
-                        color='black', 
-                        linestyle='--', 
-                        alpha=0.7, 
-                        linewidth=1.5
-                    )
-                    
+                    line_obj = ax.axvline(x=module_x_pos, color="black", linestyle="--", alpha=0.7, linewidth=1.5)
+
                     # Mark as module annotation for easy removal
                     line_obj._module_annotation = True
-                    
+
                     annotation_count += 1
                     logger.debug(f"Added annotation {annotation_count}: {annotation_text} at position {module_x_pos}")
 
             logger.info(f"Added {annotation_count} module annotations for {camera_name} on side {camera_side}")
-            
+
             # Adjust the top margin to make room for the angled text
             # Get current subplot parameters
             current_top = ax.figure.subplotpars.top
             if current_top > 0.85:  # Only adjust if not already adjusted
                 ax.figure.subplots_adjust(top=0.85)
-            
+
             # Force redraw
             ax.figure.canvas.draw_idle()
 
         except Exception as e:
             logger.error(f"Error adding module annotations: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
 
     def rotate(self):
