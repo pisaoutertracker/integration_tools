@@ -19,7 +19,7 @@ from coldroom.safety import (
 )
 from caen.caenGUIall import caenGUIall
 from db.module_db import ModuleDB
-from db.utils import get_modules_on_ring, get_module_endpoints
+from db.utils import get_modules_on_ring, get_module_endpoints, get_module_speed
 
 
 # Configure logging
@@ -224,6 +224,7 @@ class MainApp(QtWidgets.QMainWindow):
         self.mounted_modules = get_modules_on_ring(self.ring_id)
         for module_name in self.mounted_modules:
             self.mounted_modules[module_name].update(get_module_endpoints(module_name))
+            self.mounted_modules[module_name].update({"speed": get_module_speed(module_name)})
         print(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
         return self.mounted_modules
 
@@ -733,6 +734,15 @@ class MainApp(QtWidgets.QMainWindow):
                     is_safe, door_msg = check_door_safe_to_open(
                         self.system.status, self.caen_tab.last_response, used_caen_channels
                     )
+                    # Check co2 values
+                    if "co2_sensor" in self.system.status:
+                        co2_data = self.system.status["co2_sensor"]
+                        if "CO2" in co2_data: 
+                            if co2_data["CO2"] > 800:
+                                is_safe = False
+                                door_msg += "CO2 levels safe: False"
+                            else:
+                                door_msg += "CO2 levels safe: True"
                     safe_to_open_led.setStyleSheet("background-color: green;" if is_safe else "background-color: red;")
                     logger.debug(f"Updated safe to open LED: {'green' if is_safe else 'red'} (is_safe={is_safe})")
                     self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "door_safety_msg").setText(door_msg)
@@ -768,6 +778,12 @@ class MainApp(QtWidgets.QMainWindow):
                     co2_value = co2_data["CO2"]
                     label.setText(f"{co2_value:.1f}")
                     logger.debug(f"Updated CO2 level: {co2_value}")
+                    if co2_value > 800 and co2_value <= 1000:
+                        label.setStyleSheet("color: yellow;")
+                    elif co2_value > 1000 and co2_value <= 2500:
+                        label.setStyleSheet("color: orange;")
+                    elif co2_value > 2500:
+                        label.setStyleSheet("color: red;")
 
             # check alarms
             if "alarm" in self.system.status:

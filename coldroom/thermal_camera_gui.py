@@ -45,6 +45,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
         # Disable controls until thermal camera is started
         self.enable_controls(False)
+        self.mounted_modules = None
 
         logger.info("Thermal camera tab initialized")
 
@@ -755,6 +756,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             if self.system._thermalcamera:
                 self.system._thermalcamera.go_to({"position": angle})
                 logger.info(f"Moving camera to {angle} degrees")
+                self.update_camera_displays()
         except ValueError:
             logger.error("Invalid angle value")
         except Exception as e:
@@ -769,6 +771,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 direction = "bw" if self.ui.direction_combo.currentText() == "Clockwise" else "fw"
                 self.system._thermalcamera.calibrate({"prudence": limit, "direction": direction})
                 logger.info(f"Calibrating camera with limit {limit} degrees")
+                self.update_camera_displays()
         except ValueError:
             logger.error("Invalid angle limit value")
         except Exception as e:
@@ -781,6 +784,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             if self.system._thermalcamera:
                 self.system._thermalcamera.set_absolute_position({"value": position})
                 logger.info(f"Setting absolute position to {position}")
+                self.update_camera_displays()
         except ValueError:
             logger.error("Invalid position value")
         except Exception as e:
@@ -828,6 +832,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             if self.system._thermalcamera:
                 self.system._thermalcamera.stop({})
                 logger.info("Stopping thermal camera process")
+                self.update_camera_displays()
         except Exception as e:
             logger.error(f"Error stopping process: {e}")
 
@@ -843,6 +848,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 self.enable_controls(True)
                 # self.ui.relse_mtr_PB_2.setEnabled(False)  # Disable start button
                 logger.info("Thermal camera initialized")
+                self.update_camera_displays()
         except Exception as e:
             logger.error(f"Error using alternative init method: {e}")
             self.enable_controls(False)

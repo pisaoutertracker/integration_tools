@@ -24,14 +24,16 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
         # Set column widths for better button visibility in Actions
         self.moduleList.setColumnWidth(0, 60)  # Position
-        self.moduleList.setColumnWidth(1, 200)  # Module Name
-        self.moduleList.setColumnWidth(2, 60)  # LV
-        self.moduleList.setColumnWidth(3, 60)  # LV I
-        self.moduleList.setColumnWidth(4, 60)  # HV
-        self.moduleList.setColumnWidth(5, 60)  # HV I (μA)
-        self.moduleList.setColumnWidth(6, 60)  # T (C)
-        self.moduleList.setColumnWidth(7, 60)  # Testing
-        self.moduleList.setColumnWidth(8, 430)  # Actions
+        self.moduleList.setColumnWidth(1, 150)  # Module Name
+        self.moduleList.setColumnWidth(2, 150)  # Module Info
+        self.moduleList.setColumnWidth(3, 140)  # Channels
+        self.moduleList.setColumnWidth(4, 60)  # LV V
+        self.moduleList.setColumnWidth(5, 60)  # LV I
+        self.moduleList.setColumnWidth(6, 60)  # HV
+        self.moduleList.setColumnWidth(7, 60)  # HV I (μA)
+        self.moduleList.setColumnWidth(8, 60)  # T (C)
+        self.moduleList.setColumnWidth(9, 60)  # Testing
+        self.moduleList.setColumnWidth(10, 430)  # Actions
 
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_module_list)
@@ -192,7 +194,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.thermal_camera_system = thermal_camera_system
 
         # Create all items first
-        values = {str(i): [str(i), "", "", "", "", "", "", "", ""] for i in range(1, number_of_modules + 1)}
+        values = {str(i): [str(i), "", "", "", "", "", "", "", "", ""] for i in range(1, number_of_modules + 1)}
 
         # Fill the moduleList with the values first
         for i in values:
@@ -223,16 +225,22 @@ class ModulesListTab(QtWidgets.QMainWindow):
             self.mounted_modules[module_name]["angular_position"] = module_angular_position
             self.mounted_modules[module_name]["side"] = module_side
             item_index = int(module_position) - 1
+            fc7 = module_info.get("FC7", "")
+            speed = module_info.get("speed", "Unknown")    
+            hv_channel = module_info.get("HV", "")
+            lv_channel = module_info.get("LV", "")    
 
             if item_index < self.moduleList.topLevelItemCount():
                 item = self.moduleList.topLevelItem(item_index)
                 item.setText(1, module_name)
-                item.setText(2, str(module_info.get("LV_value", "")))
-                item.setText(3, str(module_info.get("LV_I_value", "")))
-                item.setText(4, str(module_info.get("HV_value", "")))
-                item.setText(5, str(module_info.get("HV_I_value", "")))
-                item.setText(6, str(module_info.get("temperature", "")))
-                item.setText(7, module_info.get("testing", ""))
+                item.setText(2, str(f"{speed};{fc7}"))
+                item.setText(3, str(f"{hv_channel};{lv_channel}"))
+                item.setText(4, str(module_info.get("LV_value", "")))
+                item.setText(5, str(module_info.get("LV_I_value", "")))
+                item.setText(6, str(module_info.get("HV_value", "")))
+                item.setText(7, str(module_info.get("HV_I_value", "")))
+                item.setText(8, str(module_info.get("temperature", "")))
+                item.setText(9, module_info.get("testing", ""))
 
                 # Create action buttons
                 actions_widget = QtWidgets.QWidget()
@@ -278,7 +286,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                     btn.setFixedWidth(60)
                     layout.addWidget(btn)
 
-                self.moduleList.setItemWidget(item, 8, actions_widget)
+                self.moduleList.setItemWidget(item, 10, actions_widget)
 
         self.update_timer.start(self.update_interval)
 
@@ -498,17 +506,17 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 module_info = self.mounted_modules[module_name]
 
                 # Update all data columns
-                item.setText(2, str(module_info.get("LV_value", "")))
-                item.setText(3, str(module_info.get("LV_I_value", "")))
-                item.setText(4, str(module_info.get("HV_value", "")))
-                item.setText(5, str(module_info.get("HV_I_value", "")))
-                item.setText(6, str(module_info.get("temperature", "")))
+                item.setText(4, str(module_info.get("LV_value", "")))
+                item.setText(5, str(module_info.get("LV_I_value", "")))
+                item.setText(6, str(module_info.get("HV_value", "")))
+                item.setText(7, str(module_info.get("HV_I_value", "")))
+                item.setText(8, str(module_info.get("temperature", "")))
 
                 # Update testing status with visual indicators
                 self._update_testing_status_display(item, module_info.get("testing", ""))
             else:
                 # Clear testing status for empty slots
-                item.setText(7, "")
+                item.setText(9, "")
         print("Module list updated.")
 
     def _update_testing_status_display(self, item, testing_status):
@@ -523,7 +531,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
             "Removed": "Removed",
         }
         display_text = status_map.get(testing_status, testing_status)
-        item.setText(7, display_text)
+        item.setText(9, display_text)
 
     def update_module_info(self, module_name):
         """Update the module information in the moduleList QTreeWidget."""
@@ -608,9 +616,10 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
         # Move the camera to the angular position using the thermal camera system
         if thermal_camera_system:
-            self.message_box.setText(
-                f"Moving camera {selected_camera} to angular position {angular_position}° for module {module_name}"
+            self.camera_status_message_box.setText(
+                f"Moving camera {selected_camera} to {angular_position}° for module {module_name} (side {side})"
             )
+            self.camera_status_message_box.exec_()
             # self._move_camera_to_angular_position(thermal_camera_system, selected_camera, angular_position)
         else:
             print(f"No thermal camera system available")
