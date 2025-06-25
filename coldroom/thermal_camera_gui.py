@@ -210,7 +210,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 graphics_view.setScene(scene)
 
                 # Create figure and canvas with proper aspect ratio for 360-degree view
-                fig = Figure(figsize=(12, 3), dpi=100)
+                fig = Figure(figsize=(12, 5), dpi=100)
                 canvas = FigureCanvas(fig)
                 scene.addWidget(canvas)
 
@@ -754,6 +754,17 @@ class ThermalCameraTab(QtWidgets.QWidget):
                                     self.stitched_images[camera_index - 1].set_array(panorama)
                                     self.stitched_images[camera_index - 1].set_clim(temp_min, temp_max)
 
+                                    # Clear previous annotations and add module names
+                                    ax = self.stitched_axes[camera_index - 1]
+                                    # Remove previous text annotations
+                                    for txt in ax.texts[:]:
+                                        txt.remove()
+
+                                    # Add module annotations if we have mounted modules
+                                    if self.mounted_modules is not None:
+                                        self.add_module_annotations_to_stitched_image(ax, camera_name)
+                                    else:
+                                        logger.debug(f"No mounted modules available for {camera_name}")
                                     # Update colorbar
                                     cbar = self.stitched_images[camera_index - 1].colorbar
                                     if cbar is not None:
@@ -767,6 +778,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
                     # Update temperature plot
                     self.update_temperature_plot()
+                    self.update_camera_displays()
 
                 except Exception as e:
                     logger.error(f"Error creating stitched images: {e}")
@@ -775,6 +787,110 @@ class ThermalCameraTab(QtWidgets.QWidget):
         except Exception as e:
             logger.error(f"Error updating status: {e}")
             logger.error(f"Error details: {str(e)}", exc_info=True)
+
+    def add_module_annotations_to_stitched_image(self, ax, camera_name):
+        """Add module name annotations to the stitched image"""
+        try:
+            if self.mounted_modules is None:
+                logger.debug(f"No mounted modules available for {camera_name}")
+                return
+
+            # Get camera side for filtering
+            camera_side = self.camera_positions[camera_name]["side"]
+            
+            # Convert side format for comparison
+            if camera_side == "Front":
+                target_side = "13"
+            elif camera_side == "Back":
+                target_side = "24"
+            else:
+                target_side = camera_side
+
+            logger.debug(f"Camera {camera_name} side: {camera_side}, target_side: {target_side}")
+
+            # Clear previous annotations
+            # Remove previous text annotations and lines
+            for txt in ax.texts[:]:
+                if hasattr(txt, '_module_annotation'):
+                    txt.remove()
+            
+            # Remove previous module annotation lines
+            for line in ax.lines[:]:
+                if hasattr(line, '_module_annotation'):
+                    line.remove()
+
+            # Add annotations for modules on the same side as this camera
+            annotation_count = 0
+            for module_name, module_info in self.mounted_modules.items():
+                module_side = module_info["side"]
+                module_position = module_info["angular_position"]
+                
+                logger.debug(f"Module {module_name}: side={module_side}, position={module_position}")
+                
+                # Only show modules on the same side as the camera
+                if module_side == target_side:
+                    # Calculate the module's position relative to the camera's view
+                    # The stitched image shows 360 degrees with 0 at the left edge
+                    module_x_pos = module_position
+                    
+                    # Get module slot information if available
+                    if "mounted_on" in module_info and ";" in str(module_info["mounted_on"]):
+                        module_slot = str(module_info["mounted_on"]).split(";")[1]
+                    else:
+                        module_slot = "-"
+                    
+                    # Create annotation text
+                    annotation_text = f"{module_slot}:{module_name}"
+                    
+                    logger.debug(f"Adding annotation '{annotation_text}' at x={module_x_pos}")
+                    
+                    # Add text annotation on the top x-axis with 45-degree rotation
+                    text_obj = ax.text(
+                        module_x_pos, 
+                        ax.get_ylim()[1],  # Position at the top of the plot
+                        annotation_text,
+                        fontsize=6,
+                        color='black',
+                        ha='left',  # Right-align for better readability with rotation
+                        va='bottom',
+                        rotation=45,
+                        # weight='bold',
+                        clip_on=False  # Allow text to extend beyond plot area
+                    )
+                    
+                    # Mark as module annotation for easy removal
+                    text_obj._module_annotation = True
+                    
+                    # Add a dashed vertical line to mark the exact position
+                    line_obj = ax.axvline(
+                        x=module_x_pos, 
+                        color='black', 
+                        linestyle='--', 
+                        alpha=0.7, 
+                        linewidth=1.5
+                    )
+                    
+                    # Mark as module annotation for easy removal
+                    line_obj._module_annotation = True
+                    
+                    annotation_count += 1
+                    logger.debug(f"Added annotation {annotation_count}: {annotation_text} at position {module_x_pos}")
+
+            logger.info(f"Added {annotation_count} module annotations for {camera_name} on side {camera_side}")
+            
+            # Adjust the top margin to make room for the angled text
+            # Get current subplot parameters
+            current_top = ax.figure.subplotpars.top
+            if current_top > 0.85:  # Only adjust if not already adjusted
+                ax.figure.subplots_adjust(top=0.85)
+            
+            # Force redraw
+            ax.figure.canvas.draw_idle()
+
+        except Exception as e:
+            logger.error(f"Error adding module annotations: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     def rotate(self):
         """Rotate the thermal camera by the specified angle"""
@@ -824,7 +940,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             if self.system._thermalcamera:
                 self.system._thermalcamera.set_absolute_position({"value": position})
                 logger.info(f"Setting absolute position to {position}")
-                self.update_camera_displays()
+            self.update_camera_displays()
         except ValueError:
             logger.error("Invalid position value")
         except Exception as e:
