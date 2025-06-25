@@ -49,6 +49,40 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
         logger.info("Thermal camera tab initialized")
 
+    def get_camera_modules_map(self):
+        if self.mounted_modules is None:
+            print("Mounted modules not set, returning default camera modules map")
+            return {
+                "camera1": "Unknown",
+                "camera2": "Unknown",
+                "camera3": "Unknown",
+                "camera4": "Unknown",
+            }
+        # For each module and camera position, get the closest module within 20 degrees
+        camera_modules = {}
+        absolute_position = self.get_current_system_position()
+        for module_name, module_info in self.mounted_modules.items():
+            module_position = module_info["angular_position"]
+            module_side = module_info["side"]
+            if module_side == "13":
+                module_side = "Front"
+            elif module_side == "24":
+                module_side = "Back"
+            close_camera = False
+            for camera_name, camera_offset in self.camera_positions.items():
+                camera_position = (absolute_position + camera_offset["position"]) % 360
+                module_slot = str(module_info.get("mounted_on", "-").split(";")[1])
+                if abs(module_position - camera_position) <= 20:
+                    camera_modules[camera_name] = f"{module_slot};{module_name}"
+                    close_camera = True
+                    break
+            if not close_camera:
+                # Use Unknown if no close camera found
+                for camera_name in self.camera_positions.keys():
+                    if camera_name not in camera_modules:
+                        camera_modules[camera_name] = "Unknown"
+        return camera_modules
+
     def load_camera_config(self):
         """Load camera positions from YAML config file"""
         default_config = {
@@ -222,7 +256,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
         try:
             # Get the existing tab widget
             tab_widget = self.ui.findChild(QtWidgets.QTabWidget, "tabWidget")
-            
+
             if tab_widget is None:
                 logger.warning("Tab widget not found in UI")
                 return
@@ -230,11 +264,11 @@ class ThermalCameraTab(QtWidgets.QWidget):
             # Create a new tab for temperature plot
             temp_tab = QtWidgets.QWidget()
             temp_layout = QtWidgets.QVBoxLayout(temp_tab)
-            
+
             # Create graphics view for temperature plot
             temp_graphics_view = QtWidgets.QGraphicsView()
             temp_layout.addWidget(temp_graphics_view)
-            
+
             # Add the new tab to the tab widget
             tab_widget.addTab(temp_tab, "Temperature Plot")
 
@@ -386,6 +420,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             self.ui.relse_mtr_PB.clicked.connect(self.release_motor)
             self.ui.run_PB.clicked.connect(self.run)
             self.ui.stop_PB.clicked.connect(self.stop)
+            self.ui.reset_figures_PB.clicked.connect(self.setup_camera_views)
 
             # Connect camera coordinate setting buttons
             self.ui.camera_set_pos_button_1.clicked.connect(lambda: self.set_camera_position(1))
@@ -439,6 +474,8 @@ class ThermalCameraTab(QtWidgets.QWidget):
         try:
             # Get current system position (either from status or from our tracking)
             current_system_pos = self.get_current_system_position()
+            camera_modules_map = self.get_camera_modules_map()
+            print(f"Camera modules map: {camera_modules_map}")
 
             for i, (camera_name, camera_info) in enumerate(self.camera_positions.items(), 1):
                 # Calculate effective position based on current system position and camera offset
@@ -452,6 +489,9 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 # Update side label
                 side_label = getattr(self.ui, f"camera_side_label_{i}")
                 side_label.setText(camera_info["side"])
+
+                module_label = getattr(self.ui, f"camera_module_label_{i}")
+                module_label.setText(camera_modules_map.get(camera_name, "Unknown"))
 
         except Exception as e:
             logger.error(f"Error updating camera displays: {e}")

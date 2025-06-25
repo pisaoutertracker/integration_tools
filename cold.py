@@ -164,6 +164,7 @@ class MainApp(QtWidgets.QMainWindow):
         # Pre-fill settings with values from system
         self.load_settings_to_ui()
         self.get_ring_id()
+        self.thermal_camera_tab.mounted_modules = self.mounted_modules
 
         # Setup status bar
         self.statusBar().showMessage("Ready")
@@ -210,9 +211,7 @@ class MainApp(QtWidgets.QMainWindow):
         else:
             self.message_box.setText("Invalid ring ID format. Must start with L1_, L2_, or L3_.")
             self.message_box.exec_()
-        self.modules_list_tab.populate_from_config(
-            self.caen_tab, self.mounted_modules, self.number_of_modules
-        )
+        self.modules_list_tab.populate_from_config(self.caen_tab, self.mounted_modules, self.number_of_modules)
 
     def save_ring_id(self):
         ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
@@ -221,10 +220,12 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info(f"Ring ID {self.ring_id} saved successfully.")
 
     def get_mounted_modules(self):
-        self.mounted_modules = get_modules_on_ring(self.ring_id)
+        self.mounted_modules = get_modules_on_ring(self.ring_id, db_url=self.module_db.db_url)
         for module_name in self.mounted_modules:
-            self.mounted_modules[module_name].update(get_module_endpoints(module_name))
-            self.mounted_modules[module_name].update({"speed": get_module_speed(module_name)})
+            self.mounted_modules[module_name].update(get_module_endpoints(module_name, db_url=self.module_db.db_url))
+            self.mounted_modules[module_name].update(
+                {"speed": get_module_speed(module_name, db_url=self.module_db.db_url)}
+            )
         print(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
         return self.mounted_modules
 
@@ -737,7 +738,7 @@ class MainApp(QtWidgets.QMainWindow):
                     # Check co2 values
                     if "co2_sensor" in self.system.status:
                         co2_data = self.system.status["co2_sensor"]
-                        if "CO2" in co2_data: 
+                        if "CO2" in co2_data:
                             if co2_data["CO2"] > 800:
                                 is_safe = False
                                 door_msg += "CO2 levels safe: False"
