@@ -31,11 +31,14 @@ class CAENQueryThread(QThread):
         self.message = None
         self.receive = False
         self.running = True
+        self.queue =[]
+        self.receiveQueue = []
 
     def setup_query(self, message, receive=False):
         """Setup the query to be executed"""
-        self.message = message
-        self.receive = receive
+        self.queue.append(message)
+        self.receiveQueue.append(receive)
+        
 
     def stop(self):
         """Stop the thread"""
@@ -45,38 +48,39 @@ class CAENQueryThread(QThread):
     def run(self):
         """Thread's main method"""
         #        print("Running query thread",self.message)
-        if not self.message:
-            return
 
-        try:
-            tcpClass = tcp_util(ip=self.ip, port=self.port)
-            tcpClass.sendMessage(self.message)
-            if self.receive:
-                data = b""
-                while True:
-                    try:
-                        chunk = tcpClass.socket.recv(BUFFER_SIZE)
-                        if not chunk:
+        while self.queue:
+            self.message = self.queue.pop(0)
+            self.receive = self.receiveQueue.pop(0)
+            try:
+                tcpClass = tcp_util(ip=self.ip, port=self.port)
+                tcpClass.sendMessage(self.message)
+                if self.receive:
+                    data = b""
+                    while True:
+                        try:
+                            chunk = tcpClass.socket.recv(BUFFER_SIZE)
+                            if not chunk:
+                                break
+                            data += chunk
+                        except:
                             break
-                        data += chunk
-                    except:
-                        break
-                data = data[8:]
-                #        print(data[-10:])
-                data = data.decode("utf-8")
+                    data = data[8:]
+                    #        print(data[-10:])
+                    data = data.decode("utf-8")
 
-                parsedData = {}
-                for token in data.split(","):
-                    if token.startswith("caen"):
-                        key, value = token.split(":")
-                        value = float(value)
-                        parsedData[key] = value
-                self.dataReady.emit(parsedData)
+                    parsedData = {}
+                    for token in data.split(","):
+                        if token.startswith("caen"):
+                            key, value = token.split(":")
+                            value = float(value)
+                            parsedData[key] = value
+                    self.dataReady.emit(parsedData)
 
-            tcpClass.closeSocket()
+                tcpClass.closeSocket()
 
-        except Exception as e:
-            self.error.emit(str(e))
+            except Exception as e:
+                self.error.emit(str(e))
 
 
 class tcp_util:
@@ -211,9 +215,14 @@ class caenGUIall(QWidget):
     @pyqtSlot()
     def update(self):
         """Periodic update method"""
-        #        print("Update")
+        print("Update")
+            
         self.queryThread.setup_query("GetStatus,PowerSupplyId:caen", True)
-        self.queryThread.start()
+        # if thread not running, start it
+        if not self.queryThread.isRunning():
+            self.queryThread.start()
+        else:
+            print("Query thread already running, skipping update")
 
     def handle_query_response(self, ret):
         self.last_response = ret.copy()
@@ -249,13 +258,20 @@ class caenGUIall(QWidget):
     def on(self, channel):
         print(f"TurnOn,PowerSupplyId:caen,ChannelId:{channel}")
         self.queryThread.setup_query(f"TurnOn,PowerSupplyId:caen,ChannelId:{channel}")
-        self.queryThread.start()
+        #if thread not running, start it
+        if not self.queryThread.isRunning():
+            print("Starting query thread")
+            self.queryThread.start()    
 
     @pyqtSlot()
     def off(self, channel):
         print(f"TurnOff,PowerSupplyId:caen,ChannelId:{channel}")
         self.queryThread.setup_query(f"TurnOff,PowerSupplyId:caen,ChannelId:{channel}")
-        self.queryThread.start()
+        if not self.queryThread.isRunning():
+            print("Starting query thread")
+            self.queryThread.start()    
+
+#        self.queryThread.start()
 
     # def send(self,message,receive=False):
     #     print(message)
