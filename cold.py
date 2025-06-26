@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt, QTimer
 from coldroom.system import System
 from coldroom.thermal_camera_gui import ThermalCameraTab
 from coldroom.modules_list_gui import ModulesListTab
+from coldroom.module_temperatures_gui import ModuleTemperaturesTAB
 from coldroom.safety import (
     check_door_safe_to_open,
     check_dew_point,
@@ -19,7 +20,7 @@ from coldroom.safety import (
 )
 from caen.caenGUIall import caenGUIall
 from db.module_db import ModuleDB
-from db.utils import get_modules_on_ring, get_module_endpoints, get_module_speed
+from db.utils import get_modules_on_ring, get_module_endpoints, get_module_speed, get_module_fuse_id
 
 
 # Configure logging
@@ -144,6 +145,9 @@ class MainApp(QtWidgets.QMainWindow):
         self.thermal_camera_tab = ThermalCameraTab(self.system)
         self.tab_widget.addTab(self.thermal_camera_tab, "Thermal Camera")
 
+        self.module_temperatures_tab = ModuleTemperaturesTAB(self.system)
+        self.tab_widget.addTab(self.module_temperatures_tab, "Module Temperatures")
+
         # Add CAEN tab
         self.caen_tab = caenGUIall()
         self.tab_widget.addTab(self.caen_tab, "CAEN")
@@ -165,6 +169,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.load_settings_to_ui()
         self.get_ring_id()
         self.thermal_camera_tab.mounted_modules = self.mounted_modules
+        self.module_temperatures_tab.mounted_modules = self.mounted_modules
+        self.module_temperatures_tab.number_of_modules = self.number_of_modules
 
         # Setup status bar
         self.statusBar().showMessage("Ready")
@@ -226,6 +232,7 @@ class MainApp(QtWidgets.QMainWindow):
             self.mounted_modules[module_name].update(
                 {"speed": get_module_speed(module_name, db_url=self.module_db.db_url)}
             )
+            self.mounted_modules[module_name].update({"fuseId": get_module_fuse_id(module_name, db_url=self.module_db.db_url)})
         print(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
         return self.mounted_modules
 
