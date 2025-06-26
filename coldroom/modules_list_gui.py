@@ -7,6 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class ModulesListTab(QtWidgets.QMainWindow):
     def __init__(self):
         super(ModulesListTab, self).__init__()
@@ -20,6 +21,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self._show_test_results = True  # Control test result popups
         self.ring_id = ""  # Placeholder for ring ID
         self.thermal_camera = None  # Placeholder for thermal camera system
+        self.module_temperature_tab = None  # Placeholder for module temperature tab
 
         # Set column widths for better button visibility in Actions
         self.moduleList.setColumnWidth(0, 60)  # Position
@@ -50,6 +52,12 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.start_test_all_button.clicked.connect(self.run_test_for_selected_modules)
         self.cancel_test_all_button.clicked.connect(self.stop_all_tests)
         self.enter_test_cmd_button.clicked.connect(self.set_test_command)
+        self.start_t_monitor_button.clicked.connect(
+            lambda: self.start_temperature_monitoring(self.module_temperature_tab)
+        )
+        self.stop_t_monitor_button.clicked.connect(
+            lambda: self.stop_temperature_monitoring(self.module_temperature_tab)
+        )
 
         # Message box setup (keep for HV safety warnings)
         self.message_box = QtWidgets.QMessageBox()
@@ -182,9 +190,9 @@ class ModulesListTab(QtWidgets.QMainWindow):
             self.mounted_modules[module_name]["side"] = module_side
             item_index = int(module_position) - 1
             fc7 = module_info.get("FC7", "")
-            speed = module_info.get("speed", "Unknown")    
+            speed = module_info.get("speed", "Unknown")
             hv_channel = module_info.get("HV", "")
-            lv_channel = module_info.get("LV", "")    
+            lv_channel = module_info.get("LV", "")
 
             if item_index < self.moduleList.topLevelItemCount():
                 item = self.moduleList.topLevelItem(item_index)
@@ -637,3 +645,15 @@ class ModulesListTab(QtWidgets.QMainWindow):
             "camera_pair": camera_pair,
             "selected_camera": selected_camera,
         }
+
+    def start_temperature_monitoring(self, module_temperature_tab):
+        module_temperature_tab.start_temperature_monitoring()
+        command = "runCalibration -f PS_Module_fc7ot6_og345.xml -c monitoronly -b"
+        self.monitoring_worker = CommandWorker(command)
+        self.monitoring_worker.start()
+
+    def stop_temperature_monitoring(self, module_temperature_tab):
+        module_temperature_tab.stop_temperature_monitoring()
+        if hasattr(self, "monitoring_worker") and self.monitoring_worker:
+            self.monitoring_worker.terminate_process()
+            self.monitoring_worker = None

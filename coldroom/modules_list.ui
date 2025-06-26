@@ -212,6 +212,20 @@
         </property>
        </widget>
       </item>
+      <item row="2" column="3">
+       <widget class="QPushButton" name="start_t_monitor_button">
+        <property name="text">
+         <string>Start T Monitor</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="4">
+       <widget class="QPushButton" name="stop_t_monitor_button">
+        <property name="text">
+         <string>Stop T Monitor</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </item>
     <item row="2" column="5" rowspan="2" colspan="2">

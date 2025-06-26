@@ -7,6 +7,7 @@ import numpy as np
 import yaml
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,25 @@ class ThermalCameraTab(QtWidgets.QWidget):
         except Exception as e:
             logger.error(f"Error setting up camera views: {e}")
 
+    def snapshot(self):
+        """Save current camera views"""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_filename = f"snapshot_{timestamp}"
+
+            save_dir = os.path.join(os.path.dirname(__file__), "snapshots")
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
+            # Save individual camera views
+            img = self.camera_images[0]
+            filename = f"{base_filename}_cameras.png"
+            filename = os.path.join(save_dir, filename)
+            img.figure.savefig(filename, bbox_inches="tight", dpi=300)
+
+        except Exception as e:
+            logger.error(f"Error saving snapshot: {e}")
+
     def enable_controls(self, enabled=True):
         """Enable or disable all controls except Start Thermal Camera button"""
         controls = [
@@ -234,6 +254,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             self.ui.relse_mtr_PB.clicked.connect(self.release_motor)
             self.ui.run_PB.clicked.connect(self.run)
             self.ui.stop_PB.clicked.connect(self.stop)
+            self.ui.snapshot_PB.clicked.connect(self.snapshot)
 
             # Connect camera coordinate setting buttons
             self.ui.camera_set_pos_button_1.clicked.connect(lambda: self.set_camera_position(1))

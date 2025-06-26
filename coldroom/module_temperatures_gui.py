@@ -1,5 +1,6 @@
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QTimer
+from PyQt5.QtGui import QFont
 import logging
 import json
 import os
@@ -7,6 +8,8 @@ import numpy as np
 import yaml
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+import paho.mqtt.client as mqtt
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         # Setup UI components
         self.setup_stitched_views()
         self.reset_figures_PB.clicked.connect(self.reset_camera_views)
+        self.snapshot_PB.clicked.connect(self.snapshot)
 
         # Setup update timer
         self.update_timer = QTimer()
@@ -174,6 +178,34 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
         except Exception as e:
             logger.error(f"Error setting up stitched views: {e}")
+
+    def snapshot(self):
+        """Save current camera views and temperature plot, using timedate for unique filenames"""
+        try:
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_filename = f"snapshot_{timestamp}"
+
+            save_dir = os.path.join(os.path.dirname(__file__), "snapshots")
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
+            # Save stitched images
+            for i, (fig, canvas) in enumerate(zip(self.stitched_figs, self.stitched_canvases)):
+                filename = f"{base_filename}_view_camera{i+1}.png"
+                filename = os.path.join(save_dir, filename)
+                fig.savefig(filename, dpi=300)
+                logger.info(f"Saved stitched image for camera {i+1} as {filename}")
+
+            # Save temperature plot
+            if hasattr(self, "temp_fig"):
+                temp_filename = f"{base_filename}_temperature_plot.png"
+                temp_filename = os.path.join(save_dir, temp_filename)
+                self.temp_fig.savefig(temp_filename, dpi=300)
+                logger.info(f"Saved temperature plot as {temp_filename}")
+
+        except Exception as e:
+            logger.error(f"Error saving snapshot: {e}")
 
     def setup_temperature_plot(self):
         """Setup temperature plotting tab"""
@@ -725,4 +757,184 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
         except Exception as e:
             logger.error(f"Error adding module annotations: {e}")
-            
+
+    def generate_module_temperature_names(self):
+        objs = ["SSA", "MPA"]
+        hybrids = ["H0", "H1"]
+        results = []
+        for obj in objs:
+            for hybrid in hybrids:
+                for i in range(8):
+                    results.append(f"{obj}_{hybrid}_{i}")
+        return results
+
+    def setup_module_temperature_table(self):
+        """Setup the module temperature table with proper headers and structure"""
+        try:
+            # Get the table widget
+            table = self.module_temp_table
+
+            # Determine number of modules (default to 36 if not set)
+            num_modules = self.number_of_modules if self.number_of_modules else 36
+
+            temp_keys = self.generate_module_temperature_names()
+            self.temp_keys = temp_keys  # Store for later use
+            table.setRowCount(len(temp_keys))
+            table.setColumnCount(num_modules)
+
+            # Set horizontal headers (module positions/slots)
+            horizontal_headers = []
+            for i in range(1, num_modules + 1):
+                horizontal_headers.append(str(i))  # Slot numbers from 1 to num_modules
+            table.setHorizontalHeaderLabels(horizontal_headers)
+
+            # Set vertical headers (temperature keys)
+            vertical_headers = temp_keys.copy()  # Copy temperature keys for vertical headers
+            table.setVerticalHeaderLabels(vertical_headers)
+            # Populate the table with empty strings initially
+            for row in range(len(temp_keys)):
+                for col in range(num_modules):
+                    table.setItem(row, col, QtWidgets.QTableWidgetItem("-"))
+            # Adjust column widths
+            table.resizeColumnsToContents()
+
+            # Set the font size for better readability
+            font = QFont()
+            font.setPointSize(6)
+            table.setFont(font)
+
+            logger.info(
+                f"Module temperature table setup completed: {len(temp_keys)} temperature keys, {num_modules} module slots"
+            )
+        except Exception as e:
+            logger.error(f"Error setting up module temperature table: {e}")
+
+    def start_temperature_monitoring(self):
+        """Start monitoring module temperatures via MQTT"""
+        try:
+            self.mqtt_client = ModuleTempMQTT(self.system)
+            self.mqtt_client.loop_start()
+        except Exception as e:
+            logger.error(f"Error starting temperature monitoring: {e}")
+
+    def stop_temperature_monitoring(self):
+        """Stop monitoring module temperatures via MQTT"""
+        try:
+            if hasattr(self, "mqtt_client"):
+                self.mqtt_client.loop_stop()
+                del self.mqtt_client
+                logger.info("Stopped temperature monitoring")
+            else:
+                logger.warning("No MQTT client to stop")
+        except Exception as e:
+            logger.error(f"Error stopping temperature monitoring: {e}")
+
+    def update_temperature_table(self):
+        """Update the module temperature table with current data"""
+        try:
+            if not hasattr(self, "mqtt_client"):
+                logger.warning("MQTT client not initialized, cannot update temperature table")
+                return
+
+            # Get the latest status from the MQTT client
+            status = self.mqtt_client.status
+
+            # Clear the table first
+            self.module_temp_table.clearContents()
+
+            # Populate the table only for the fuseId present in the status
+            for monitored_fuse_id, temp_data in status.items():
+                for mounted_module, mounted_module_info in self.mounted_modules.items():
+                    mounted_module_fuse_id = mounted_module_info.get("fuseId", None)
+                    if mounted_module_fuse_id is None:
+                        logger.warning(f"Mounted module {mounted_module} does not have a fuseId, skipping")
+                        continue
+                    if mounted_module_fuse_id == monitored_fuse_id:
+                        column_index = int(mounted_module_info.get("mounted_on", "-").split(";")[1])
+                    if column_index is not None and column_index < self.module_temp_table.columnCount():
+                        for temp_key, temperature in temp_data.items():
+                            if temp_key in self.temp_keys:
+                                row_index = self.temp_keys.index(temp_key)
+                                item = QtWidgets.QTableWidgetItem(f"{temperature:.1f}")
+                                self.module_temp_table.setItem(row_index, column_index, item)
+        except Exception as e:
+            logger.error(f"Error updating temperature table: {e}")
+
+
+class ModuleTempMQTT:
+    """MQTT client for module temperature updates"""
+
+    TOPIC = "/ph2acf/data"
+
+    def __init__(self, system):
+        self.system = system
+        self.status = {}
+        self.client = mqtt.Client()
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
+        self.client.on_disconnect = self.on_disconnect
+        self.mqtt_settings = self.system._settings["mqtt"]
+        try:
+            self.client.connect(self.mqtt_settings["broker"], self.mqtt_settings["port"], keepalive=60)
+            logger.info(f"Connected to MQTT broker at {self.system.BROKER}:{self.system.PORT}")
+        except Exception as e:
+            logger.error(f"Failed to connect to MQTT broker: {e}")
+
+    def on_connect(self, client, userdata, flags, rc):
+        """Handle MQTT connection"""
+        if rc == 0:
+            self.client.subscribe(self.TOPIC)
+            logger.info(f"Subscribed to topic: {self.TOPIC}")
+        else:
+            logger.error(f"Failed to connect with result code {rc}")
+
+    def on_message(self, client, userdata, msg):
+        """Handle incoming MQTT messages"""
+        try:
+            if msg.topic == self.TOPIC:
+                payload = json.loads(msg.payload.decode("utf-8"))
+                self.handle_message(payload)
+            else:
+                logger.warning(f"Received message on unknown topic: {msg.topic}")
+        except Exception as e:
+            logger.error(f"Error handling message: {e}")
+
+    def on_disconnect(self, client, userdata, rc):
+        """Handle MQTT disconnection"""
+        if rc != 0:
+            logger.error(f"Unexpected disconnection: {rc}")
+        else:
+            logger.info("Disconnected from MQTT broker")
+
+    def loop_start(self):
+        """Start the MQTT loop"""
+        try:
+            self.client.loop_start()
+            logger.info("MQTT loop started")
+        except Exception as e:
+            logger.error(f"Error starting MQTT loop: {e}")
+
+    def loop_stop(self):
+        """Stop the MQTT loop"""
+        try:
+            self.client.loop_stop()
+            logger.info("MQTT loop stopped")
+        except Exception as e:
+            logger.error(f"Error stopping MQTT loop: {e}")
+
+    def handle_message(self, payload):
+        """Handle incoming MQTT messages"""
+        result = {}
+        fuseId = payload.get("")  # !
+        for key in payload.keys():
+            if "_temp" in key:
+                # e.g. SSA_H7_C6_temp or MPA_H0_C7_temp
+                split = key.split("_")
+                component = split[0]
+                hybrid = split[1]
+                hybrid_id = int(hybrid.split("H")[1]) % 2  # H0 or H1
+                chip_id = int(split[2].split("C")[1])
+                temperature = payload[key]
+                result[f"{component}_H{hybrid_id}_{chip_id}"] = temperature
+        # Update the system status with the new temperature data
+        self.system.update_status({fuseId: result})

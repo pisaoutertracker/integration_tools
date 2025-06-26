@@ -171,6 +171,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.thermal_camera_tab.mounted_modules = self.mounted_modules
         self.module_temperatures_tab.mounted_modules = self.mounted_modules
         self.module_temperatures_tab.number_of_modules = self.number_of_modules
+        self.module_temperatures_tab.setup_module_temperature_table()
+        self.modules_list_tab.module_temperature_tab = self.module_temperatures_tab
 
         # Setup status bar
         self.statusBar().showMessage("Ready")
@@ -232,7 +234,9 @@ class MainApp(QtWidgets.QMainWindow):
             self.mounted_modules[module_name].update(
                 {"speed": get_module_speed(module_name, db_url=self.module_db.db_url)}
             )
-            self.mounted_modules[module_name].update({"fuseId": get_module_fuse_id(module_name, db_url=self.module_db.db_url)})
+            self.mounted_modules[module_name].update(
+                {"fuseId": get_module_fuse_id(module_name, db_url=self.module_db.db_url)}
+            )
         logger.debug(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
         return self.mounted_modules
 
@@ -1457,7 +1461,9 @@ class MainApp(QtWidgets.QMainWindow):
 
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description="Cold Room Control Application")
-    args.add_argument("--loglevel", "-log", default="WARNING", help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    args.add_argument(
+        "--loglevel", "-log", default="WARNING", help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    )
     parsed_args = args.parse_args()
     logger = logging.getLogger("integration")
     log_level = getattr(logging, parsed_args.loglevel.upper(), logging.WARNING)
