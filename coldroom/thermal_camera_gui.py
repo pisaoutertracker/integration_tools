@@ -8,8 +8,6 @@ import yaml
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +49,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
 
     def get_camera_modules_map(self):
         if self.mounted_modules is None:
-            print("Mounted modules not set, returning default camera modules map")
+            logger.debug("Mounted modules not set, returning default camera modules map")
             return {
                 "camera1": "Unknown",
                 "camera2": "Unknown",
@@ -290,7 +288,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             # Get current system position (either from status or from our tracking)
             current_system_pos = self.get_current_system_position()
             camera_modules_map = self.get_camera_modules_map()
-            print(f"Camera modules map: {camera_modules_map}")
+            logger.debug(f"Camera modules map: {camera_modules_map}")
 
             for i, (camera_name, camera_info) in enumerate(self.camera_positions.items(), 1):
                 # Calculate effective position based on current system position and camera offset

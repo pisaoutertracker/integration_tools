@@ -7,8 +7,6 @@ import time
 
 from .safety import *
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -158,7 +156,7 @@ class MartaColdRoomMQTTClient:
             target (str): Either 'marta' or 'coldroom' or 'cleanroom'
             payload: The command payload
         """
-        print("Publishing", command, target, payload)
+        logger.debug("Publishing", command, target, payload)
         if target == "marta":  # Add MARTA topic
             topic = f"{self.TOPIC_BASE_MARTA}cmd/{command}"
         elif target == "cleanroom":  # Add cleanroom topic
@@ -168,7 +166,7 @@ class MartaColdRoomMQTTClient:
 
         logger.info(f"Sending command '{command}' to {target} with payload: {payload}")
         ret = self._client.publish(topic, payload)
-        print(ret)
+        logger.debug(ret)
 
     ### MARTA ###
 
@@ -304,7 +302,7 @@ class MartaColdRoomMQTTClient:
         self.publish_cmd("run", "coldroom", payload)
 
     def stop(self, payload=1):
-        print("Stopping", payload)
+        logger.debug("Stopping", payload)
         self.publish_cmd("stop", "coldroom", payload)
 
     def handle_co2_sensor_message(self, payload):

@@ -1,8 +1,11 @@
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal
 import os
+import time
 from .command_worker import CommandWorker
+import logging
 
+logger = logging.getLogger(__name__)
 
 class ModulesListTab(QtWidgets.QMainWindow):
     def __init__(self):
@@ -17,10 +20,6 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self._show_test_results = True  # Control test result popups
         self.ring_id = ""  # Placeholder for ring ID
         self.thermal_camera = None  # Placeholder for thermal camera system
-
-        # Add CAEN command queue
-        self.caen_queue = []  # Queue for CAEN commands
-        self.current_caen_worker = None  # Track current CAEN operation
 
         # Set column widths for better button visibility in Actions
         self.moduleList.setColumnWidth(0, 60)  # Position
@@ -74,49 +73,6 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.camera_status_message_box.setIcon(QtWidgets.QMessageBox.Information)
         self.camera_status_message_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
 
-    # CAEN Queue Management Methods
-    def _add_caen_command_to_queue(self, command_type, channel, module_name=None):
-        """Add a CAEN command to the queue."""
-        command = {
-            "type": command_type,  # "on" or "off"
-            "channel": channel,
-            "module_name": module_name or f"Channel_{channel}",
-        }
-        self.caen_queue.append(command)
-        self._process_caen_queue()
-
-    def _process_caen_queue(self):
-        """Process the next CAEN command in the queue if no command is currently running."""
-        if self.current_caen_worker is not None:
-            return  # CAEN operation already running
-
-        if not self.caen_queue:
-            return  # No commands in queue
-
-        # Get the next command from the queue
-        command = self.caen_queue.pop(0)
-        self._execute_caen_command(command)
-
-    def _execute_caen_command(self, command):
-        """Execute a CAEN command."""
-        if self.current_caen_worker is not None:
-            return  # Already executing a command
-
-        # Create a simple worker for CAEN operations
-        self.current_caen_worker = CaenCommandWorker(self.caen, command)
-        self.current_caen_worker.finished.connect(self._caen_command_finished)
-        self.current_caen_worker.start()
-
-    def _caen_command_finished(self, success, command):
-        """Handle CAEN command completion."""
-        # Clean up the current worker
-        if self.current_caen_worker:
-            self.current_caen_worker.finished.disconnect(self._caen_command_finished)
-            self.current_caen_worker = None
-
-        # Process next command in queue
-        self._process_caen_queue()
-
     # Modified power control methods to use queue
     def turn_on_lv_for_selected_modules(self):
         """Turn on LV for all selected modules."""
@@ -126,7 +82,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 module_info = self.mounted_modules[module_name]
                 lv_channel = module_info.get("LV")
                 if lv_channel:
-                    self._add_caen_command_to_queue("on", lv_channel, module_name)
+                    self.caen_lv_on(lv_channel)
 
     def turn_off_lv_for_selected_modules(self):
         """Turn off LV for all selected modules."""
@@ -136,7 +92,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 module_info = self.mounted_modules[module_name]
                 lv_channel = module_info.get("LV")
                 if lv_channel:
-                    self._add_caen_command_to_queue("off", lv_channel, module_name)
+                    self.caen_lv_off(lv_channel)
 
     def turn_on_hv_for_selected_modules(self):
         """Turn on HV for all selected modules."""
@@ -151,7 +107,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 module_info = self.mounted_modules[module_name]
                 hv_channel = module_info.get("HV")
                 if hv_channel:
-                    self._add_caen_command_to_queue("on", hv_channel, module_name)
+                    self.caen_hv_on_wrap(hv_channel)
 
     def turn_off_hv_for_selected_modules(self):
         """Turn off HV for all selected modules."""
@@ -161,7 +117,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 module_info = self.mounted_modules[module_name]
                 hv_channel = module_info.get("HV")
                 if hv_channel:
-                    self._add_caen_command_to_queue("off", hv_channel, module_name)
+                    self.caen_hv_off(hv_channel)
 
     def caen_hv_on_wrap(self, channel):
         """Wrapper for HV on with safety check."""
@@ -174,15 +130,15 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
     def caen_lv_on(self, channel):
         """Queue LV on command."""
-        self._add_caen_command_to_queue("on", channel)
+        self.caen.on(channel)
 
     def caen_lv_off(self, channel):
         """Queue LV off command."""
-        self._add_caen_command_to_queue("off", channel)
+        self.caen.off(channel)
 
     def caen_hv_off(self, channel):
         """Queue HV off command."""
-        self._add_caen_command_to_queue("off", channel)
+        self.caen.off(channel)
 
     def populate_from_config(self, caen, modules, number_of_modules, thermal_camera_system=None):
         """Populate the moduleList QTreeWidget with module data from a config list."""
@@ -290,15 +246,6 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
         self.update_timer.start(self.update_interval)
 
-    def get_caen_queue_status(self):
-        """Get current CAEN queue status."""
-        return {
-            "is_executing": self.current_caen_worker is not None,
-            "queue_length": len(self.caen_queue),
-            "current_command": (self.current_caen_worker.command if self.current_caen_worker else None),
-            "queued_commands": self.caen_queue.copy(),
-        }
-
     def set_test_command(self):
         """Set the test command from the input field."""
         command = self.test_cmd_le.text().strip()
@@ -309,7 +256,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         with open(self.test_command_history, mode) as f:
             f.write(command + "\n")
         self.test_command = command
-        print(f"Test command set: {self.test_command}")
+        logger.debug(f"Test command set: {self.test_command}")
 
     def run_test_for_selected_modules(self):
         """Run the test command for all selected modules."""
@@ -325,28 +272,28 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 added_modules.append(module_name)
 
         if added_modules:
-            print(f"Added {len(added_modules)} modules to test queue: {added_modules}")
+            logger.debug(f"Added {len(added_modules)} modules to test queue: {added_modules}")
             self.process_test_queue()
 
     def process_test_queue(self):
         """Process the next test in the queue if no test is currently running."""
         if self.current_worker is not None:
-            print("Test already running, waiting for completion...")
+            logger.debug("Test already running, waiting for completion...")
             return
 
         if not self.test_queue:
-            print("No tests in queue.")
+            logger.debug("No tests in queue.")
             return
 
         # Get the next module from the queue
         module_name = self.test_queue.pop(0)
-        print(f"Starting test for module: {module_name} ({len(self.test_queue)} remaining in queue)")
+        logger.debug(f"Starting test for module: {module_name} ({len(self.test_queue)} remaining in queue)")
         self._start_test_for_module(module_name)
 
     def _start_test_for_module(self, module_name):
         """Start the actual test execution for a module."""
         if self.current_worker is not None:
-            print(f"Cannot start test for {module_name}: another test is already running")
+            logger.debug(f"Cannot start test for {module_name}: another test is already running")
             return
 
         # Update testing status
@@ -364,7 +311,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         # Connect signals and start
         self.current_worker.finished.connect(self.test_finished)
         self.current_worker.start()
-        print(f"Test started for module: {module_name}")
+        logger.debug(f"Test started for module: {module_name}")
 
     def test_finished(self, success, stdout, stderr):
         """Handle test completion and start next test in queue."""
@@ -376,11 +323,11 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
         # Log results
         if success:
-            print(f"Test completed successfully for module: {module_name}")
-            print(f"Output: {stdout}")
+            logger.debug(f"Test completed successfully for module: {module_name}")
+            logger.debug(f"Output: {stdout}")
         else:
-            print(f"Test failed for module: {module_name}")
-            print(f"Error: {stderr}")
+            logger.debug(f"Test failed for module: {module_name}")
+            logger.debug(f"Error: {stderr}")
 
         # Show result message if enabled
         if self._show_test_results:
@@ -403,30 +350,30 @@ class ModulesListTab(QtWidgets.QMainWindow):
     def stop_all_tests(self):
         """Stop the current test and clear the test queue."""
         if self.current_worker:
-            print("Stopping current test...")
+            logger.debug("Stopping current test...")
             self.current_worker.terminate_process()
             self._cleanup_current_worker()
 
         if self.test_queue:
-            print(f"Clearing {len(self.test_queue)} tests from queue")
+            logger.debug(f"Clearing {len(self.test_queue)} tests from queue")
             # Update status for queued modules
             for module_name in self.test_queue:
                 self._update_module_testing_status(module_name, "Cancelled")
             self.test_queue.clear()
 
-        print("All tests stopped.")
+        logger.debug("All tests stopped.")
 
     def select_all_modules(self):
         """Select all modules in the moduleList QTreeWidget."""
         for i in range(self.moduleList.topLevelItemCount()):
             item = self.moduleList.topLevelItem(i)
             item.setSelected(True)
-        print("All modules selected.")
+        logger.debug("All modules selected.")
 
     def start_single_module_test(self, module_name):
         """Start test for a single module via button click."""
         if self._add_module_to_queue(module_name):
-            print(f"Added module {module_name} to test queue via button click")
+            logger.debug(f"Added module {module_name} to test queue via button click")
             self.process_test_queue()
 
     def stop_single_module_test(self, module_name):
@@ -456,7 +403,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         """Remove a module from current testing or queue. Returns True if removed successfully."""
         # Check if module is currently being tested
         if self._is_module_currently_testing(module_name):
-            print(f"Stopping current test for module: {module_name}")
+            logger.debug(f"Stopping current test for module: {module_name}")
             self.current_worker.terminate_process()
             self._cleanup_current_worker()
             self._update_module_testing_status(module_name, "Stopped")
@@ -466,7 +413,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         # Check if module is in the queue
         if module_name in self.test_queue:
             self.test_queue.remove(module_name)
-            print(f"Removed module {module_name} from test queue")
+            logger.debug(f"Removed module {module_name} from test queue")
             self._update_module_testing_status(module_name, "Removed")
             return True
 
@@ -483,7 +430,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
     def _show_message(self, message):
         """Show a message box with the given message."""
-        print(message)
+        logger.debug(message)
         self.message_box.setText(message)
         self.message_box.exec_()
 
@@ -517,7 +464,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
             else:
                 # Clear testing status for empty slots
                 item.setText(9, "")
-        print("Module list updated.")
+        logger.debug("Module list updated.")
 
     def _update_testing_status_display(self, item, testing_status):
         """Update the testing status display with visual indicators."""
@@ -555,13 +502,13 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 self.mounted_modules[module_name]["LV_I_value"] = response.get(lv_i, 0)
                 self.mounted_modules[module_name]["LV_on"] = response.get(lv_on, False)
             else:
-                print(f"No response from CAEN for module: {module_name}")
+                logger.debug(f"No response from CAEN for module: {module_name}")
                 self.mounted_modules[module_name]["HV_value"] = 0
                 self.mounted_modules[module_name]["HV_I_value"] = 0
                 self.mounted_modules[module_name]["LV_value"] = 0
                 self.mounted_modules[module_name]["LV_I_value"] = 0
         else:
-            print(f"Module {module_name} not found in mounted modules.")
+            logger.debug(f"Module {module_name} not found in mounted modules.")
             return
 
     def get_used_channels(self):
@@ -590,7 +537,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
     def focus_camera_on_module(self, module_name, thermal_camera_system):
         """Focus the appropriate camera on the specified module based on angular position and side."""
         if module_name not in self.mounted_modules:
-            print(f"Module {module_name} not found in mounted modules.")
+            logger.debug(f"Module {module_name} not found in mounted modules.")
             return
 
         module_info = self.mounted_modules[module_name]
@@ -598,19 +545,19 @@ class ModulesListTab(QtWidgets.QMainWindow):
         side = module_info.get("side", "Undefined")
 
         if angular_position == -1 or side == "Undefined":
-            print(f"Invalid position data for module {module_name}: position={angular_position}, side={side}")
+            logger.debug(f"Invalid position data for module {module_name}: position={angular_position}, side={side}")
             return
 
         # Choose camera pair based on side
         camera_pair = self._get_camera_pair_for_side(side)
         if not camera_pair:
-            print(f"No camera pair available for side {side}")
+            logger.debug(f"No camera pair available for side {side}")
             return
 
         # Choose specific camera based on angular position
         selected_camera = self._select_camera_for_position(camera_pair, angular_position)
 
-        print(
+        logger.debug(
             f"Focusing camera {selected_camera} on module {module_name} at angular position {angular_position}° (side {side})"
         )
 
@@ -622,7 +569,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
             self.camera_status_message_box.exec_()
             # self._move_camera_to_angular_position(thermal_camera_system, selected_camera, angular_position)
         else:
-            print(f"No thermal camera system available")
+            logger.debug(f"No thermal camera system available")
 
     def _get_camera_pair_for_side(self, side):
         """Get the camera pair based on the module side."""
@@ -658,12 +605,12 @@ class ModulesListTab(QtWidgets.QMainWindow):
             # Use the thermal camera GUI's move_camera method
             success = thermal_camera.move_camera(camera_id, angular_position)
             if success:
-                print(f"Camera {camera_id} moved successfully to {angular_position}°")
+                logger.debug(f"Camera {camera_id} moved successfully to {angular_position}°")
             else:
-                print(f"Failed to move camera {camera_id} to {angular_position}°")
+                logger.debug(f"Failed to move camera {camera_id} to {angular_position}°")
 
         except Exception as e:
-            print(f"Error moving camera {camera_id}: {str(e)}")
+            logger.debug(f"Error moving camera {camera_id}: {str(e)}")
 
     def get_camera_status_for_module(self, module_name):
         """Get camera information for a specific module."""
@@ -690,24 +637,3 @@ class ModulesListTab(QtWidgets.QMainWindow):
             "camera_pair": camera_pair,
             "selected_camera": selected_camera,
         }
-
-
-# Simple worker class for CAEN commands
-class CaenCommandWorker(QThread):
-    finished = pyqtSignal(bool, dict)  # success, command
-
-    def __init__(self, caen, command):
-        super().__init__()
-        self.caen = caen
-        self.command = command
-
-    def run(self):
-        try:
-            if self.command["type"] == "on":
-                self.caen.on(self.command["channel"])
-            elif self.command["type"] == "off":
-                self.caen.off(self.command["channel"])
-
-            self.finished.emit(True, self.command)
-        except Exception as e:
-            self.finished.emit(False, self.command)

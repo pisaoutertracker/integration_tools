@@ -2,6 +2,8 @@ import subprocess
 import signal
 import os
 from PyQt5.QtCore import QThread, pyqtSignal
+import logging
+logger = logging.getLogger(__name__)
 
 
 class CommandWorker(QThread):
@@ -39,7 +41,7 @@ class CommandWorker(QThread):
     def run(self):
         try:
             expanded_command = self.expand_placeholders(self.placeholders)
-            print(f"Running command: {expanded_command}")
+            logger.debug(f"Running command: {expanded_command}")
             # Use Popen instead of run() to get process control
             # self.process = subprocess.Popen(
             #     expanded_command, 

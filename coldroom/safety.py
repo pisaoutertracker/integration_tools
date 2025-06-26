@@ -1,5 +1,8 @@
 import os
 import yaml
+import logging
+
+logger = logging.getLogger(__name__)
 
 safety_settings = {
     "internal_temperatures": [
@@ -17,16 +20,16 @@ safety_settings = {
 
 
 def check_dew_point(system_status):
-    print(f"Checking dew point: {system_status}")
+    logger.debug(f"Checking dew point: {system_status}")
     try:
         # Get the three required temperature values
         marta_supply_temp = system_status.get("marta", {}).get("TT05_CO2")
         marta_return_temp = system_status.get("marta", {}).get("TT06_CO2")
         coldroom_temp = system_status.get("coldroom", {}).get("ch_temperature", {}).get("value")
         # coldroom = system_status.get("coldroom", {})
-        # print(f"Coldroom: {coldroom.get('CmdDoorUnlock_Reff')}")
+        # logger.debug(f"Coldroom: {coldroom.get('CmdDoorUnlock_Reff')}")
         # door_status = system_status.get("coldroom", {}).get("CmdDoorUnlock_Reff")
-        # print(f"Door status: {door_status}")
+        # logger.debug(f"Door status: {door_status}")
 
         # Create list of available temperatures
         internal_temperatures = []
@@ -37,29 +40,29 @@ def check_dew_point(system_status):
         if coldroom_temp is not None:
             internal_temperatures.append(coldroom_temp)
 
-        # print(f"Available temperatures: {internal_temperatures}")
+        # logger.debug(f"Available temperatures: {internal_temperatures}")
 
         # Only proceed if we have all three temperatures
         # if len(internal_temperatures) != 3:
-        #     print(f"Not all temperatures available. Found {len(internal_temperatures)} out of 3")
+        #     logger.debug(f"Not all temperatures available. Found {len(internal_temperatures)} out of 3")
         #     return False
 
         # Get the minimum temperature among the three
         min_temperature = min(internal_temperatures)
 
         if "coldroom" not in system_status:
-            print("Coldroom data not available")
+            logger.debug("Coldroom data not available")
             return False  # Conservative approach - if we can't check, assume it's unsafe
 
         # Check if environment data exists
         if "cleanroom" not in system_status or "dewpoint" not in system_status["cleanroom"]:
             return False  # Conservative approach
         reference_dew_point = system_status["cleanroom"]["dewpoint"]  # External dewpoint
-        print(f"Reference dew point: {reference_dew_point}")
+        logger.debug(f"Reference dew point: {reference_dew_point}")
         delta = 1  # Allowable delta between dew point and temperature
         return min_temperature > reference_dew_point + delta
     except Exception as e:
-        print(f"Error in check_dew_point: {str(e)}")
+        logger.debug(f"Error in check_dew_point: {str(e)}")
         return False  # Conservative approach
 
 
@@ -69,7 +72,7 @@ def check_door_status(system_status):
             return False  # Conservative approach
         return system_status["coldroom"]["CmdDoorUnlock_Reff"] == 1  # Door is open
     except Exception as e:
-        print(f"Error in check_door_status: {str(e)}")
+        logger.debug(f"Error in check_door_status: {str(e)}")
         return False  # Conservative approach
 
 
@@ -79,7 +82,7 @@ def check_light_status(system_status):
             return False  # Conservative approach
         return system_status["coldroom"]["light"] == 1  # Light is on
     except Exception as e:
-        print(f"Error in check_light_status: {str(e)}")
+        logger.debug(f"Error in check_light_status: {str(e)}")
         return False  # Conservative approach
 
 
@@ -94,7 +97,7 @@ def check_any_hv_on(caen_ch_status, used_channels):
                 break
         return hv_on
     except Exception as e:
-        print(f"Error in check_any_hv_on: {str(e)}")
+        logger.debug(f"Error in check_any_hv_on: {str(e)}")
         return True
 
 
@@ -144,7 +147,7 @@ def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
         return is_safe, log_msg
 
     except Exception as e:
-        print(f"Error in check_door_safe_to_open: {str(e)}")
+        logger.debug(f"Error in check_door_safe_to_open: {str(e)}")
         return False  # Conservative approach - if we can't check, assume it's unsafe
 
 
@@ -166,5 +169,5 @@ def check_light_safe_to_turn_on(system_status, caen_ch_status, used_channels):
         return is_safe
 
     except Exception as e:
-        print(f"Error in check_light_safe_to_turn_on: {str(e)}")
+        logger.debug(f"Error in check_light_safe_to_turn_on: {str(e)}")
         return False  # Conservative approach - if we can't check, assume it's unsafe

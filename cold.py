@@ -2,6 +2,7 @@
 import sys
 import os
 import yaml
+import argparse
 import logging
 import time
 from PyQt5 import QtWidgets, uic, QtGui
@@ -24,8 +25,7 @@ from db.utils import get_modules_on_ring, get_module_endpoints, get_module_speed
 
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("integration")
 
 
 class MainApp(QtWidgets.QMainWindow):
@@ -233,7 +233,7 @@ class MainApp(QtWidgets.QMainWindow):
                 {"speed": get_module_speed(module_name, db_url=self.module_db.db_url)}
             )
             self.mounted_modules[module_name].update({"fuseId": get_module_fuse_id(module_name, db_url=self.module_db.db_url)})
-        print(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
+        logger.debug(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
         return self.mounted_modules
 
     def load_settings_to_ui(self):
@@ -709,14 +709,14 @@ class MainApp(QtWidgets.QMainWindow):
                         )  # LED is yellow when ON
                         logger.debug(f"Updated light LED: {'yellow' if coldroom['light'] else 'black'}")
                         if bool(coldroom["light"]) is False:
-                            print("Light off, check if it is safe")
+                            logger.debug("Light off, check if it is safe")
                             used_caen_channels = self.modules_list_tab.get_used_channels()
                             is_safe = check_light_safe_to_turn_on(
                                 self.system.status, self.caen_tab.last_response, used_caen_channels
                             )
                             button = central.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
                             if not is_safe:
-                                print("not safe")
+                                logger.debug("not safe")
                                 if button:
                                     button.setEnabled(False)
                                     logger.debug("Disabled light button due to safety check")
@@ -1456,6 +1456,13 @@ class MainApp(QtWidgets.QMainWindow):
 
 
 if __name__ == "__main__":
+    args = argparse.ArgumentParser(description="Cold Room Control Application")
+    args.add_argument("--loglevel", "-log", default="WARNING", help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    parsed_args = args.parse_args()
+    logger = logging.getLogger("integration")
+    log_level = getattr(logging, parsed_args.loglevel.upper(), logging.WARNING)
+    logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
+
     app = QtWidgets.QApplication(sys.argv)
     window = MainApp()
     window.show()

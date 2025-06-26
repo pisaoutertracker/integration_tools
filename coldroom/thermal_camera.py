@@ -6,8 +6,6 @@ import time
 import numpy as np
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -141,12 +139,12 @@ class ThermalCameraMQTTClient:
 
     def publish_cmd(self, command, params=None):
         """Publish a command to the MQTT broker"""
-        print(command)
+        logger.debug(command)
         try:
             if params is None:
                 params = {}
             payload = json.dumps(params)
-            print(f"{self.TOPIC_BASE}cmd/{command}", payload)
+            logger.debug(f"{self.TOPIC_BASE}cmd/{command}", payload)
             self._client.publish(f"{self.TOPIC_BASE}cmd/{command}", payload)
             logger.debug(f"Published command: {command} with params: {params}")
         except Exception as e:
