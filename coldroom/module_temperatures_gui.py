@@ -1049,6 +1049,10 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             font.setPointSize(6)
             table.setFont(font)
 
+            # Ajust the row heights
+            for row in range(len(temp_keys)):
+                table.setRowHeight(row, 20)
+
             logger.info(
                 f"Module temperature table setup completed: {len(temp_keys)} temperature keys, {num_modules} module slots"
             )
@@ -1084,10 +1088,9 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
             # Get the latest status from the MQTT client
             status = self.mqtt_client.status
-
+            to_publish = {}
             # Clear the table first
             self.module_temp_table.clearContents()
-
             # Populate the table only for the fuseId present in the status
             for monitored_fuse_id, temp_data in status.items():
                 for mounted_module, mounted_module_info in self.mounted_modules.items():
@@ -1103,12 +1106,21 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                                     if temp_key in mounted_module_info["temperature_offsets"]:
                                         temperature += mounted_module_info["temperature_offsets"][temp_key]
                                         item = QtWidgets.QTableWidgetItem(f"{temperature:.1f}")
+                                        to_publish[self.mqtt_client.key_map[temp_key]] = temperature
                                     else:
                                         # change the color of the cell to red if no offset is found
                                         item = QtWidgets.QTableWidgetItem(f"{temperature:.1f}")
                                         item.setBackground(QColor(255, 0, 0))
                                     row_index = self.temp_keys.index(temp_key)
-                                    self.module_temp_table.setItem(row_index, column_index, item)
+                                    self.module_temp_table.setItem(row_index, column_index - 1, item)
+            if to_publish:
+                print(f"Publishing temperature data: {to_publish}")
+                self.mqtt_client.client.publish(
+                    f"{self.mqtt_client.BASE_TOPIC}/calib_data", json.dumps(to_publish)
+                )
+                logger.debug(f"Published temperature data: {to_publish}")
+            else:
+                logger.debug("No temperature data to publish")
         except Exception as e:
             logger.error(f"Error updating temperature table: {e}")
 
@@ -1180,11 +1192,13 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 class ModuleTempMQTT:
     """MQTT client for module temperature updates"""
 
+    BASE_TOPIC = "ph2acf"
     TOPIC = "/ph2acf/data"
 
     def __init__(self, system):
         self.system = system
         self.status = {}
+        self.key_map = {}
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
@@ -1253,6 +1267,8 @@ class ModuleTempMQTT:
                 hybrid_id = int(hybrid.split("H")[1]) % 2  # H0 or H1
                 chip_id = int(split[2].split("C")[1])
                 temperature = payload[key]
-                result[f"{component}_H{hybrid_id}_{chip_id}"] = temperature
+                new_key = f"{component}_H{hybrid_id}_{chip_id}"
+                result[new_key] = temperature
+                self.key_map[new_key] = key
         # Update the system status with the new temperature data
         self.status.update({fuseId: result})

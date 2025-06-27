@@ -91,6 +91,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 lv_channel = module_info.get("LV")
                 if lv_channel:
                     self.caen_lv_on(lv_channel)
+            time.sleep(0.1)
 
     def turn_off_lv_for_selected_modules(self):
         """Turn off LV for all selected modules."""
@@ -101,6 +102,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 lv_channel = module_info.get("LV")
                 if lv_channel:
                     self.caen_lv_off(lv_channel)
+            time.sleep(0.1)
 
     def turn_on_hv_for_selected_modules(self):
         """Turn on HV for all selected modules."""
@@ -116,6 +118,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 hv_channel = module_info.get("HV")
                 if hv_channel:
                     self.caen_hv_on_wrap(hv_channel)
+            time.sleep(0.1)
 
     def turn_off_hv_for_selected_modules(self):
         """Turn off HV for all selected modules."""
@@ -126,6 +129,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 hv_channel = module_info.get("HV")
                 if hv_channel:
                     self.caen_hv_off(hv_channel)
+            time.sleep(0.1)
 
     def caen_hv_on_wrap(self, channel):
         """Wrapper for HV on with safety check."""
