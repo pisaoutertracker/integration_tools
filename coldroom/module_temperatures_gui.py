@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QTimer
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QColor
 import logging
 import json
 import os
@@ -22,6 +22,10 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         ui_file = os.path.join(os.path.dirname(__file__), "module_temperatures.ui")
         uic.loadUi(ui_file, self)
 
+        # Initialize scaling modes - default to CO2 scaling
+        self.use_co2_scaling_stitched = True  # Default to CO2 scaling for stitched views
+        self.use_co2_scaling_temperature_plot = True  # Default to CO2 scaling for temperature plot
+
         # Initialize stitching-related attributes
         self.camera_fov = 20  # Field of view in degrees for each camera
         self.config_file = os.path.join(os.path.dirname(__file__), "camera_config.yaml")
@@ -33,6 +37,11 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         self.setup_stitched_views()
         self.reset_figures_PB.clicked.connect(self.reset_camera_views)
         self.snapshot_PB.clicked.connect(self.snapshot)
+
+        # Set default temperature range to CO2 and connect signal
+        if hasattr(self, "t_range_comboBox"):
+            self.t_range_comboBox.setCurrentText("CO2")
+            self.t_range_comboBox.currentTextChanged.connect(self.on_temperature_range_changed)
 
         # Setup update timer
         self.update_timer = QTimer()
@@ -155,7 +164,6 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 )
 
                 # Set up the axes for degrees
-                # ax.set_xlabel("Angle (degrees)") ! Do not set xlabel
                 ax.set_xticks(np.linspace(0, 360, 9))  # Ticks every 45 degrees
                 ax.set_yticks([])
 
@@ -233,15 +241,19 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             temp_graphics_view.setScene(temp_scene)
 
             # Create matplotlib figure for temperature plot
-            self.temp_fig = Figure(figsize=(12, 3.5), dpi=100, tight_layout=True)
+            self.temp_fig = Figure(figsize=(12, 4), dpi=100, tight_layout=True)  # Increased height slightly
             self.temp_canvas = FigureCanvas(self.temp_fig)
             temp_scene.addWidget(self.temp_canvas)
 
             # Create axes for temperature plot
             self.temp_ax = self.temp_fig.add_subplot(111)
+            self.temp_ax.set_xlabel("Angle (degrees)")
             self.temp_ax.set_ylabel("T (°C)")
             self.temp_ax.grid(True, alpha=0.3, which="both")
             self.temp_ax.set_xlim(0, 360)
+
+            # Set x-axis ticks every 45 degrees for better readability
+            self.temp_ax.set_xticks(np.linspace(0, 360, 9))
 
             # Initialize empty line plots for each camera (max and min)
             self.temp_lines = {}
@@ -260,22 +272,37 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 self.temp_lines[f"{camera_name}_max"] = max_line
                 self.temp_lines[f"{camera_name}_min"] = min_line
 
-            # Add legend
-            self.temp_ax.legend(bbox_to_anchor=(1.0, 1), loc="upper left", fontsize=8, frameon=False)
+            # Add legend with better positioning to account for module annotations
+            self.temp_ax.legend(bbox_to_anchor=(1.0, 0.5), loc="center left", fontsize=8, frameon=False)
 
-            # Adjust layout to make room for legend
-            self.temp_fig.subplots_adjust(right=0.85)
+            # Adjust layout to make room for legend and module annotations
+            self.temp_fig.subplots_adjust(right=0.82, top=0.85)
 
             logger.info("Temperature plot tab added successfully")
 
         except Exception as e:
             logger.error(f"Error setting up temperature plot: {e}")
 
-    def update_temperature_plot(self):
-        """Update the temperature plot with current data"""
+    def update_temperature_plot_co2_scale(self):
+        """Update temperature plot using CO2 temperature-based Y-axis scaling"""
         try:
             if not hasattr(self, "temp_ax"):
                 return
+
+            # Get CO2 temperature for Y-axis range
+            co2_temp = 0.0  # Default fallback
+            try:
+                marta_status = self.system.status.get("marta", {})
+                co2_temp = float(marta_status.get("TT06_CO2", 0.0))
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Could not get CO2 temperature from MARTA status, using default range for temperature plot"
+                )
+                co2_temp = 0.0
+
+            # Calculate Y-axis range: CO2 temp to CO2 temp + 20
+            y_min = co2_temp
+            y_max = co2_temp + 20.0
 
             # Get temperature data from thermal camera
             if hasattr(self.system._thermalcamera, "_stitching_max_temperature") and hasattr(
@@ -321,26 +348,189 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                                 self.temp_lines[f"{camera_display_name}_max"].set_data(positions, filtered_max_temps)
                                 self.temp_lines[f"{camera_display_name}_min"].set_data(positions, min_temps)
 
-                # Auto-scale the y-axis based on all temperature data
-                all_temps = []
-                for line in self.temp_lines.values():
-                    y_data = line.get_ydata()
-                    if len(y_data) > 0:
-                        all_temps.extend(y_data)
+            # Set fixed Y-axis range based on CO2 temperature
+            self.temp_ax.set_ylim(y_min, y_max)
 
-                if all_temps:
-                    temp_min = min(all_temps)
-                    temp_max = max(all_temps)
-                    temp_range = temp_max - temp_min
-                    margin = temp_range * 0.1 if temp_range > 0 else 1.0
+            # Add module annotations to the temperature plot
+            self.add_module_annotations_to_temperature_plot()
 
-                    self.temp_ax.set_ylim(temp_min - margin, temp_max + margin)
+            # Redraw the canvas
+            self.temp_canvas.draw()
 
-                # Redraw the canvas
-                self.temp_canvas.draw()
+            logger.debug(
+                f"Updated temperature plot with CO2-based Y-axis range: {y_min:.1f}°C to {y_max:.1f}°C (CO2 temp: {co2_temp:.1f}°C)"
+            )
 
         except Exception as e:
+            logger.error(f"Error updating temperature plot with CO2 scale: {e}")
+
+    def update_temperature_plot_auto_scale(self):
+        """Update temperature plot using automatic Y-axis scaling based on data"""
+        try:
+            if not hasattr(self, "temp_ax"):
+                return
+
+            # Get temperature data and update plot lines
+            all_temps = []
+
+            if hasattr(self.system._thermalcamera, "_stitching_max_temperature") and hasattr(
+                self.system._thermalcamera, "_stitching_min_temperature"
+            ):
+
+                for i in range(4):
+                    camera_name = f"camera{i}"  # This matches the thermal_camera.py naming
+                    camera_display_name = f"camera{i+1}"  # This matches the GUI naming
+
+                    if (
+                        camera_name in self.system._thermalcamera._stitching_max_temperature
+                        and camera_name in self.system._thermalcamera._stitching_min_temperature
+                    ):
+
+                        max_temp_data = self.system._thermalcamera._stitching_max_temperature[camera_name]
+                        min_temp_data = self.system._thermalcamera._stitching_min_temperature[camera_name]
+
+                        if max_temp_data and min_temp_data:
+                            # Extract positions and temperatures
+                            positions = []
+                            max_temps = []
+                            min_temps = []
+
+                            # Get all positions that have both max and min data
+                            common_positions = set(max_temp_data.keys()) & set(min_temp_data.keys())
+
+                            for pos in sorted(common_positions, key=float):
+                                # Apply camera position offset to get effective position
+                                effective_position = (
+                                    float(pos) + self.camera_positions[camera_display_name]["position"]
+                                ) % 360
+
+                                positions.append(effective_position)
+                                max_temps.append(max_temp_data[pos])
+                                min_temps.append(min_temp_data[pos])
+
+                            if positions and max_temps:
+                                # Filter spikes from max temperatures using simple method
+                                filtered_max_temps = self.simple_spike_filter(max_temps)
+
+                                # Update the plot lines
+                                self.temp_lines[f"{camera_display_name}_max"].set_data(positions, filtered_max_temps)
+                                self.temp_lines[f"{camera_display_name}_min"].set_data(positions, min_temps)
+
+                                # Collect all temperature values for auto-scaling
+                                all_temps.extend(filtered_max_temps)
+                                all_temps.extend(min_temps)
+
+            # Auto-scale the Y-axis based on all temperature data
+            if all_temps:
+                temp_min = min(all_temps)
+                temp_max = max(all_temps)
+                temp_range = temp_max - temp_min
+                margin = temp_range * 0.1 if temp_range > 0 else 1.0
+
+                self.temp_ax.set_ylim(temp_min - margin, temp_max + margin)
+
+                logger.debug(
+                    f"Updated temperature plot with auto-scale Y-axis range: {temp_min - margin:.1f}°C to {temp_max + margin:.1f}°C"
+                )
+
+            # Add module annotations to the temperature plot
+            self.add_module_annotations_to_temperature_plot()
+
+            # Redraw the canvas
+            self.temp_canvas.draw()
+
+        except Exception as e:
+            logger.error(f"Error updating temperature plot with auto scale: {e}")
+
+    def update_temperature_plot(self):
+        """Update the temperature plot with current data"""
+        try:
+            if self.use_co2_scaling_temperature_plot:
+                self.update_temperature_plot_co2_scale()
+            else:
+                self.update_temperature_plot_auto_scale()
+        except Exception as e:
             logger.error(f"Error updating temperature plot: {e}")
+
+    def add_module_annotations_to_temperature_plot(self):
+        """Add module name annotations to the temperature plot"""
+        try:
+            if self.mounted_modules is None:
+                logger.debug("No mounted modules available for temperature plot")
+                return
+
+            # Clear previous module annotations
+            for txt in self.temp_ax.texts[:]:
+                if hasattr(txt, "_module_annotation"):
+                    txt.remove()
+
+            # Remove previous module annotation lines
+            for line in self.temp_ax.lines[:]:
+                if hasattr(line, "_module_annotation"):
+                    line.remove()
+
+            # Add annotations for all mounted modules
+            annotation_count = 0
+            for module_name, module_info in self.mounted_modules.items():
+                module_position = module_info["angular_position"]
+                module_side = module_info["side"]
+
+                # Get module slot information if available
+                if "mounted_on" in module_info and ";" in str(module_info["mounted_on"]):
+                    module_slot = str(module_info["mounted_on"]).split(";")[1]
+                else:
+                    module_slot = "-"
+
+                # Create annotation text with side information for clarity
+                annotation_text = f"{module_slot}:{module_name}"
+
+                logger.debug(f"Adding temperature plot annotation '{annotation_text}' at x={module_position}")
+
+                # Add text annotation at the top of the plot with rotation
+                y_top = self.temp_ax.get_ylim()[1]
+                text_obj = self.temp_ax.text(
+                    module_position,
+                    y_top,
+                    annotation_text,
+                    fontsize=6,
+                    color="black",
+                    ha="left",
+                    va="bottom",
+                    rotation=45,
+                    clip_on=False,  # Allow text to extend beyond plot area
+                    transform=self.temp_ax.transData,
+                )
+
+                # Mark as module annotation for easy removal
+                text_obj._module_annotation = True
+
+                # Add a dashed vertical line to mark the exact position
+                # Use different colors based on side for better distinction
+                line_color = "black" if module_side == "13" else "gray" if module_side == "24" else "gray"
+                line_obj = self.temp_ax.axvline(
+                    x=module_position, color=line_color, linestyle="--", alpha=0.5, linewidth=1
+                )
+
+                # Mark as module annotation for easy removal
+                line_obj._module_annotation = True
+
+                annotation_count += 1
+                logger.debug(
+                    f"Added temperature plot annotation {annotation_count}: {annotation_text} at position {module_position}"
+                )
+
+            logger.info(f"Added {annotation_count} module annotations to temperature plot")
+
+            # Adjust the top margin to make room for the angled text
+            current_top = self.temp_fig.subplotpars.top
+            if current_top > 0.85:  # Only adjust if not already adjusted
+                self.temp_fig.subplots_adjust(top=0.85)
+
+            # Force redraw
+            self.temp_fig.canvas.draw_idle()
+
+        except Exception as e:
+            logger.error(f"Error adding module annotations to temperature plot: {e}")
 
     def simple_spike_filter(self, temps, max_change=5.0):
         """Simple spike filter - replaces values that change too much from neighbors"""
@@ -431,65 +621,216 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
         return panorama_norm, panorama
 
-    def simple_spike_filter(self, temps, max_change=5.0):
-        """Simple spike filter - replaces values that change too much from neighbors"""
-        if len(temps) < 3:
-            return temps
-
-        filtered = temps.copy()
-
-        for i in range(1, len(temps) - 1):
-            prev_temp = filtered[i - 1]
-            curr_temp = temps[i]
-            next_temp = temps[i + 1]
-
-            # Check if current temp is a spike
-            if abs(curr_temp - prev_temp) > max_change and abs(curr_temp - next_temp) > max_change:
-                # Replace with average of neighbors
-                filtered[i] = (prev_temp + next_temp) / 2
-
-        return filtered
-
-    def update_temperature_plot(self):
-        """Update the temperature plot with current data"""
+    def update_displays(self):
+        """Update all displays with current data"""
         try:
-            if not hasattr(self, "temp_ax"):
-                return
+            if self.use_co2_scaling_stitched:
+                self.update_displays_co2_scale()
+            else:
+                self.update_displays_auto_scale()
 
-            # Get temperature data from thermal camera
-            if hasattr(self.system._thermalcamera, "_stitching_max_temperature") and hasattr(
-                self.system._thermalcamera, "_stitching_min_temperature"
-            ):
+            self.update_temperature_table()
+        except Exception as e:
+            logger.error(f"Error updating displays: {e}")
 
-                max_temps = self.system._thermalcamera._stitching_max_temperature
-                min_temps = self.system._thermalcamera._stitching_min_temperature
+    def update_displays_co2_scale(self):
+        """Update displays using CO2 temperature-based scaling"""
+        # This is the current implementation above - CO2 scaling
+        try:
+            # Get CO2 temperature for colorbar range
+            co2_temp = 0.0  # Default fallback
+            try:
+                marta_status = self.system.status.get("marta", {})
+                co2_temp = float(marta_status.get("TT06_CO2", 0.0))
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Could not get CO2 temperature from MARTA status, using default range for stitched views"
+                )
+                co2_temp = 0.0
 
-                # Update lines for each camera
-                for camera_name in ["camera1", "camera2", "camera3", "camera4"]:
-                    if camera_name in max_temps and camera_name in min_temps:
-                        angles = sorted(max_temps[camera_name].keys())
-                        max_values = [max_temps[camera_name][angle] for angle in angles]
-                        min_values = [min_temps[camera_name][angle] for angle in angles]
+            # Calculate colorbar range: CO2 temp to CO2 temp + 20
+            colorbar_min = co2_temp
+            colorbar_max = co2_temp + 15.0
 
-                        # Apply spike filter
-                        max_values_filtered = self.simple_spike_filter(max_values)
-                        min_values_filtered = self.simple_spike_filter(min_values)
+            # Get stitching data from thermal camera
+            if hasattr(self.system._thermalcamera, "_stitching_data"):
+                for i, (camera_name, camera_data) in enumerate(self.system._thermalcamera._stitching_data.items()):
+                    # add +1 to the camera name to match the UI naming
+                    camera_index = int(camera_name[-1]) + 1
+                    camera_name = f"camera{camera_index}"
+                    if camera_data:  # If we have data for this camera
+                        # Get all images and positions
+                        images = []
+                        positions = []
 
-                        # Update line data
-                        if f"{camera_name}_max" in self.temp_lines:
-                            self.temp_lines[f"{camera_name}_max"].set_data(angles, max_values_filtered)
-                        if f"{camera_name}_min" in self.temp_lines:
-                            self.temp_lines[f"{camera_name}_min"].set_data(angles, min_values_filtered)
+                        # Collect all images and positions
+                        for pos, pos_images in camera_data.items():
+                            if pos_images:  # If we have images at this position
+                                # Keep only the last image at this position
+                                last_img = pos_images[-1]
+                                images.append(last_img)
+                                positions.append(float(pos) + self.camera_positions[camera_name]["position"])
 
-                # Auto-scale y-axis
-                self.temp_ax.relim()
-                self.temp_ax.autoscale_view()
+                        if images:  # If we have any images to stitch
+                            # Create stitched panorama using CO2 temperature range
+                            panorama_norm, panorama = self.stitch_multiple_images(
+                                images, positions, colorbar_min, colorbar_max, full_coverage=360
+                            )
 
-                # Redraw canvas
-                self.temp_canvas.draw()
+                            # Ensure the panorama is properly sized for 360 degrees
+                            if panorama.shape[1] != 360:
+                                # Resize to 360 degrees if needed
+                                from scipy.ndimage import zoom
+
+                                zoom_factor = (1, 360 / panorama.shape[1])
+                                panorama = zoom(panorama, zoom_factor, order=1)
+
+                            # Update the stitched view with CO2-based scaling
+                            self.stitched_images[camera_index - 1].set_array(panorama)
+                            self.stitched_images[camera_index - 1].set_clim(colorbar_min, colorbar_max)
+
+                            # Clear previous annotations and add module names
+                            ax = self.stitched_axes[camera_index - 1]
+                            # Remove previous text annotations and lines (but keep camera position lines)
+                            for txt in ax.texts[:]:
+                                if hasattr(txt, "_module_annotation"):
+                                    txt.remove()
+
+                            # Remove previous annotation lines (both module and camera position)
+                            for line in ax.lines[:]:
+                                if hasattr(line, "_module_annotation") or hasattr(line, "_camera_position"):
+                                    line.remove()
+
+                            # Add camera position line (red dashed line showing current camera position)
+                            current_camera_pos = self.get_camera_effective_position(camera_index)
+                            if current_camera_pos is not None:
+                                camera_line = ax.axvline(
+                                    x=current_camera_pos,
+                                    color="red",
+                                    linestyle="--",
+                                    alpha=0.8,
+                                    linewidth=2,
+                                    label=f"Camera {camera_index} Position",
+                                )
+                                # Mark as camera position line for easy removal
+                                camera_line._camera_position = True
+
+                            # Add module annotations if we have mounted modules
+                            if self.mounted_modules is not None:
+                                self.add_module_annotations_to_stitched_image(ax, camera_name)
+                            else:
+                                logger.debug(f"No mounted modules available for {camera_name}")
+
+                            # Update colorbar with CO2-based range
+                            cbar = self.stitched_images[camera_index - 1].colorbar
+                            if cbar is not None:
+                                cbar.set_ticks(np.linspace(colorbar_min, colorbar_max, 5))
+                                cbar.set_ticklabels(
+                                    [f"{temp:.1f}°C" for temp in np.linspace(colorbar_min, colorbar_max, 5)]
+                                )
+
+                            # Draw canvas
+                            self.stitched_canvases[camera_index - 1].draw()
+
+                            logger.debug(
+                                f"Updated stitched view for camera {camera_index} with CO2 range: {colorbar_min:.1f}°C to {colorbar_max:.1f}°C"
+                            )
+
+            # Update temperature plot
+            self.update_temperature_plot()
 
         except Exception as e:
-            logger.error(f"Error updating temperature plot: {e}")
+            logger.error(f"Error creating stitched images: {e}")
+            logger.error(f"Error details: {str(e)}", exc_info=True)
+
+    def update_displays_auto_scale(self):
+        """Update displays using automatic scaling based on image data"""
+        try:
+            # Get stitching data from thermal camera
+            if hasattr(self.system._thermalcamera, "_stitching_data"):
+                for i, (camera_name, camera_data) in enumerate(self.system._thermalcamera._stitching_data.items()):
+                    camera_index = int(camera_name[-1]) + 1
+                    camera_name = f"camera{camera_index}"
+                    if camera_data:
+                        # Get all images and positions
+                        images = []
+                        positions = []
+                        temp_min = float("inf")
+                        temp_max = float("-inf")
+
+                        # Collect all images and positions
+                        for pos, pos_images in camera_data.items():
+                            if pos_images:
+                                last_img = pos_images[-1]
+                                images.append(last_img)
+                                positions.append(float(pos) + self.camera_positions[camera_name]["position"])
+
+                                # Update temperature range based on actual data
+                                temp_min = min(temp_min, last_img.min())
+                                temp_max = max(temp_max, last_img.max())
+
+                        if images:
+                            # Create stitched panorama using actual temperature range
+                            panorama_norm, panorama = self.stitch_multiple_images(
+                                images, positions, temp_min, temp_max, full_coverage=360
+                            )
+
+                            # Ensure the panorama is properly sized for 360 degrees
+                            if panorama.shape[1] != 360:
+                                from scipy.ndimage import zoom
+
+                                zoom_factor = (1, 360 / panorama.shape[1])
+                                panorama = zoom(panorama, zoom_factor, order=1)
+
+                            # Update the stitched view with auto-scaling
+                            self.stitched_images[camera_index - 1].set_array(panorama)
+                            self.stitched_images[camera_index - 1].set_clim(temp_min, temp_max)
+
+                            # Clear previous annotations and add new ones
+                            ax = self.stitched_axes[camera_index - 1]
+                            for txt in ax.texts[:]:
+                                if hasattr(txt, "_module_annotation"):
+                                    txt.remove()
+
+                            for line in ax.lines[:]:
+                                if hasattr(line, "_module_annotation") or hasattr(line, "_camera_position"):
+                                    line.remove()
+
+                            # Add camera position line
+                            current_camera_pos = self.get_camera_effective_position(camera_index)
+                            if current_camera_pos is not None:
+                                camera_line = ax.axvline(
+                                    x=current_camera_pos,
+                                    color="red",
+                                    linestyle="--",
+                                    alpha=0.8,
+                                    linewidth=2,
+                                    label=f"Camera {camera_index} Position",
+                                )
+                                camera_line._camera_position = True
+
+                            # Add module annotations
+                            if self.mounted_modules is not None:
+                                self.add_module_annotations_to_stitched_image(ax, camera_name)
+
+                            # Update colorbar with auto-scale range
+                            cbar = self.stitched_images[camera_index - 1].colorbar
+                            if cbar is not None:
+                                cbar.set_ticks(np.linspace(temp_min, temp_max, 5))
+                                cbar.set_ticklabels([f"{temp:.1f}°C" for temp in np.linspace(temp_min, temp_max, 5)])
+
+                            # Draw canvas
+                            self.stitched_canvases[camera_index - 1].draw()
+
+                            logger.debug(
+                                f"Updated stitched view for camera {camera_index} with auto-scale range: {temp_min:.1f}°C to {temp_max:.1f}°C"
+                            )
+
+            # Update temperature plot
+            self.update_temperature_plot()
+
+        except Exception as e:
+            logger.error(f"Error creating stitched images with auto-scale: {e}")
 
     def reset_camera_views(self):
         """Reset camera views to initial state"""
@@ -524,102 +865,6 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
         except Exception as e:
             logger.error(f"Error resetting camera views: {e}")
-
-    def update_displays(self):
-        """Update all displays with current data"""
-        # Create stitched images using the accumulated data
-        try:
-            # Get stitching data from thermal camera
-            if hasattr(self.system._thermalcamera, "_stitching_data"):
-                for i, (camera_name, camera_data) in enumerate(self.system._thermalcamera._stitching_data.items()):
-                    # add +1 to the camera name to match the UI naming
-                    camera_index = int(camera_name[-1]) + 1
-                    camera_name = f"camera{camera_index}"
-                    if camera_data:  # If we have data for this camera
-                        # Get all images and positions
-                        images = []
-                        positions = []
-                        temp_min = float("inf")
-                        temp_max = float("-inf")
-
-                        # Collect all images and positions
-                        for pos, pos_images in camera_data.items():
-                            if pos_images:  # If we have images at this position
-                                # Keep only the last image at this position
-                                last_img = pos_images[-1]
-                                images.append(last_img)
-                                # positions.append(float(pos))
-                                positions.append(float(pos) + self.camera_positions[camera_name]["position"])
-
-                                # Update temperature range
-                                temp_min = min(temp_min, last_img.min())
-                                temp_max = max(temp_max, last_img.max())
-
-                        if images:  # If we have any images to stitch
-                            # Create stitched panorama
-                            panorama_norm, panorama = self.stitch_multiple_images(
-                                images, positions, temp_min, temp_max, full_coverage=360
-                            )
-
-                            # Ensure the panorama is properly sized for 360 degrees
-                            if panorama.shape[1] != 360:
-                                # Resize to 360 degrees if needed
-                                from scipy.ndimage import zoom
-
-                                zoom_factor = (1, 360 / panorama.shape[1])
-                                panorama = zoom(panorama, zoom_factor, order=1)
-
-                            # Update the stitched view
-                            self.stitched_images[camera_index - 1].set_array(panorama)
-                            self.stitched_images[camera_index - 1].set_clim(temp_min, temp_max)
-
-                            # Clear previous annotations and add module names
-                            ax = self.stitched_axes[camera_index - 1]
-                            # Remove previous text annotations and lines (but keep camera position lines)
-                            for txt in ax.texts[:]:
-                                if hasattr(txt, "_module_annotation"):
-                                    txt.remove()
-
-                            # Remove previous annotation lines (both module and camera position)
-                            for line in ax.lines[:]:
-                                if hasattr(line, "_module_annotation") or hasattr(line, "_camera_position"):
-                                    line.remove()
-
-                            # Add camera position line (red dashed line showing current camera position)
-                            current_camera_pos = self.get_camera_effective_position(camera_index)
-                            if current_camera_pos is not None:
-                                camera_line = ax.axvline(
-                                    x=current_camera_pos,
-                                    color="red",
-                                    linestyle="--",
-                                    alpha=0.8,
-                                    linewidth=2,
-                                    label=f"Camera {camera_index} Position",
-                                )
-                                # Mark as camera position line for easy removal
-                                camera_line._camera_position = True
-
-                            # Add module annotations if we have mounted modules
-                            if self.mounted_modules is not None:
-                                self.add_module_annotations_to_stitched_image(ax, camera_name)
-                            else:
-                                logger.debug(f"No mounted modules available for {camera_name}")
-
-                            # Update colorbar
-                            cbar = self.stitched_images[camera_index - 1].colorbar
-                            if cbar is not None:
-                                cbar.set_ticks(np.linspace(temp_min, temp_max, 5))
-                                cbar.set_ticklabels([f"{temp:.1f}°C" for temp in np.linspace(temp_min, temp_max, 5)])
-
-                            # Draw canvas
-                            self.stitched_canvases[camera_index - 1].draw()
-
-            # Update temperature plot
-            self.update_temperature_plot()
-
-        except Exception as e:
-            logger.error(f"Error creating stitched images: {e}")
-            logger.error(f"Error details: {str(e)}", exc_info=True)
 
     def update_stitched_images(self):
         """Update stitched images for all cameras"""
@@ -762,10 +1007,11 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         objs = ["SSA", "MPA"]
         hybrids = ["H0", "H1"]
         results = []
-        for obj in objs:
-            for hybrid in hybrids:
+        for hybrid in hybrids:
+            for obj in objs:
                 for i in range(8):
-                    results.append(f"{obj}_{hybrid}_{i}")
+                    offset = 8 * int(obj == "MPA")
+                    results.append(f"{obj}_{hybrid}_{i+offset}")
         return results
 
     def setup_module_temperature_table(self):
@@ -851,14 +1097,84 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                         continue
                     if mounted_module_fuse_id == monitored_fuse_id:
                         column_index = int(mounted_module_info.get("mounted_on", "-").split(";")[1])
-                    if column_index is not None and column_index < self.module_temp_table.columnCount():
-                        for temp_key, temperature in temp_data.items():
-                            if temp_key in self.temp_keys:
-                                row_index = self.temp_keys.index(temp_key)
-                                item = QtWidgets.QTableWidgetItem(f"{temperature:.1f}")
-                                self.module_temp_table.setItem(row_index, column_index, item)
+                        if column_index is not None and column_index < self.module_temp_table.columnCount():
+                            for temp_key, temperature in temp_data.items():
+                                if temp_key in self.temp_keys:
+                                    if temp_key in mounted_module_info["temperature_offsets"]:
+                                        temperature += mounted_module_info["temperature_offsets"][temp_key]
+                                        item = QtWidgets.QTableWidgetItem(f"{temperature:.1f}")
+                                    else:
+                                        # change the color of the cell to red if no offset is found
+                                        item = QtWidgets.QTableWidgetItem(f"{temperature:.1f}")
+                                        item.setBackground(QColor(255, 0, 0))
+                                    row_index = self.temp_keys.index(temp_key)
+                                    self.module_temp_table.setItem(row_index, column_index, item)
         except Exception as e:
             logger.error(f"Error updating temperature table: {e}")
+
+    def set_stitched_scaling_mode(self, use_co2_scale=True):
+        """Set the scaling mode for stitched camera views
+
+        Args:
+            use_co2_scale (bool): If True, use CO2 temperature range. If False, use auto-scaling.
+        """
+        try:
+            self.use_co2_scaling_stitched = use_co2_scale
+            logger.info(
+                f"Stitched views scaling mode set to: {'CO2 temperature range' if use_co2_scale else 'Auto-scale'}"
+            )
+
+            # Immediately update the displays with the new scaling
+            self.update_displays()
+
+        except Exception as e:
+            logger.error(f"Error setting stitched scaling mode: {e}")
+
+    def set_scaling_mode(self, use_co2_scale=True):
+        """Set the scaling mode for both stitched views and temperature plot
+
+        Args:
+            use_co2_scale (bool): If True, use CO2 temperature range. If False, use auto-scaling.
+        """
+        try:
+            self.use_co2_scaling_stitched = use_co2_scale
+            self.use_co2_scaling_temperature_plot = use_co2_scale
+
+            logger.info(
+                f"Module temperatures scaling mode set to: {'CO2 temperature range' if use_co2_scale else 'Auto-scale'}"
+            )
+
+            # Update the ComboBox to reflect the change
+            if hasattr(self, "t_range_comboBox"):
+                combo_text = "CO2" if use_co2_scale else "Auto"
+                self.t_range_comboBox.setCurrentText(combo_text)
+
+            # Immediately update the displays with the new scaling
+            self.update_displays()
+
+        except Exception as e:
+            logger.error(f"Error setting scaling mode: {e}")
+
+    def on_temperature_range_changed(self, text):
+        """Handle temperature range selection change"""
+        try:
+            if text == "CO2":
+                self.use_co2_scaling_stitched = True
+                self.use_co2_scaling_temperature_plot = True
+                logger.info("Module temperatures scaling set to CO2-based scaling")
+            elif text == "Auto":
+                self.use_co2_scaling_stitched = False
+                self.use_co2_scaling_temperature_plot = False
+                logger.info("Module temperatures scaling set to auto-scaling")
+            else:
+                logger.warning(f"Unknown temperature range option: {text}")
+                return
+
+            # Immediately update displays with new scaling mode
+            self.update_displays()
+
+        except Exception as e:
+            logger.error(f"Error changing module temperatures range: {e}")
 
 
 class ModuleTempMQTT:
@@ -925,8 +1241,10 @@ class ModuleTempMQTT:
     def handle_message(self, payload):
         """Handle incoming MQTT messages"""
         result = {}
-        fuseId = payload.get("")  # !
+        fuseId = None
         for key in payload.keys():
+            if "fuseId" in key:
+                fuseId = payload[key]
             if "_temp" in key:
                 # e.g. SSA_H7_C6_temp or MPA_H0_C7_temp
                 split = key.split("_")
@@ -937,4 +1255,4 @@ class ModuleTempMQTT:
                 temperature = payload[key]
                 result[f"{component}_H{hybrid_id}_{chip_id}"] = temperature
         # Update the system status with the new temperature data
-        self.system.update_status({fuseId: result})
+        self.status.update({fuseId: result})

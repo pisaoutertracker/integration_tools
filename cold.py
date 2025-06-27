@@ -21,7 +21,7 @@ from coldroom.safety import (
 )
 from caen.caenGUIall import caenGUIall
 from db.module_db import ModuleDB
-from db.utils import get_modules_on_ring, get_module_endpoints, get_module_speed, get_module_fuse_id
+from db.utils import get_modules_on_ring, get_module_endpoints, get_module_speed, get_module_fuse_id, get_module
 
 
 # Configure logging
@@ -172,7 +172,7 @@ class MainApp(QtWidgets.QMainWindow):
         self.module_temperatures_tab.mounted_modules = self.mounted_modules
         self.module_temperatures_tab.number_of_modules = self.number_of_modules
         self.module_temperatures_tab.setup_module_temperature_table()
-        self.modules_list_tab.module_temperature_tab = self.module_temperatures_tab
+        self.module_temperatures_tab.start_temperature_monitoring()
 
         # Setup status bar
         self.statusBar().showMessage("Ready")
@@ -236,6 +236,13 @@ class MainApp(QtWidgets.QMainWindow):
             )
             self.mounted_modules[module_name].update(
                 {"fuseId": get_module_fuse_id(module_name, db_url=self.module_db.db_url)}
+            )
+            self.mounted_modules[module_name].update(
+                {
+                    "temperature_offsets": get_module(module_name, db_url=self.module_db.db_url).get(
+                        "temperature_offsets", {}
+                    )
+                }
             )
         logger.debug(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
         return self.mounted_modules

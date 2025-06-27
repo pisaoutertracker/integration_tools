@@ -574,8 +574,8 @@ class ModulesListTab(QtWidgets.QMainWindow):
             self.camera_status_message_box.setText(
                 f"Moving camera {selected_camera} to {angular_position}° for module {module_name} (side {side})"
             )
-            self.camera_status_message_box.exec_()
-            # self._move_camera_to_angular_position(thermal_camera_system, selected_camera, angular_position)
+            # self.camera_status_message_box.exec_()
+            self._move_camera_to_angular_position(thermal_camera_system, selected_camera, angular_position)
         else:
             logger.debug(f"No thermal camera system available")
 
@@ -646,14 +646,12 @@ class ModulesListTab(QtWidgets.QMainWindow):
             "selected_camera": selected_camera,
         }
 
-    def start_temperature_monitoring(self, module_temperature_tab):
-        module_temperature_tab.start_temperature_monitoring()
+    def start_temperature_monitoring(self):
         command = "runCalibration -f PS_Module_fc7ot6_og345.xml -c monitoronly -b"
         self.monitoring_worker = CommandWorker(command)
         self.monitoring_worker.start()
 
-    def stop_temperature_monitoring(self, module_temperature_tab):
-        module_temperature_tab.stop_temperature_monitoring()
+    def stop_temperature_monitoring(self):
         if hasattr(self, "monitoring_worker") and self.monitoring_worker:
             self.monitoring_worker.terminate_process()
             self.monitoring_worker = None

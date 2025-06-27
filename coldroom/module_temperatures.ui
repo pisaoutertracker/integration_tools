@@ -15,7 +15,7 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0" colspan="3">
+    <item row="0" column="0" colspan="6">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
        <number>0</number>
@@ -84,6 +84,40 @@
      </widget>
     </item>
     <item row="1" column="2">
+     <spacer name="horizontalSpacer_2">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>40</width>
+        <height>20</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item row="1" column="3">
+     <widget class="QLabel" name="label_11">
+      <property name="text">
+       <string>Range</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="4">
+     <widget class="QComboBox" name="t_range_comboBox">
+      <item>
+       <property name="text">
+        <string>CO2</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Auto</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="1" column="5">
      <spacer name="horizontalSpacer">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
@@ -96,7 +130,7 @@
       </property>
      </spacer>
     </item>
-    <item row="2" column="0" colspan="3">
+    <item row="2" column="0" colspan="6">
      <widget class="QTableWidget" name="module_temp_table">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">

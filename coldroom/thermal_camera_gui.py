@@ -37,6 +37,12 @@ class ThermalCameraTab(QtWidgets.QWidget):
         # Connect signals
         self.connect_signals()
         self.update_camera_displays()
+
+        # Set default temperature range to CO2 and connect signal
+        if hasattr(self.ui, 't_range_comboBox'):
+            self.ui.t_range_comboBox.setCurrentText("CO2")
+            self.ui.t_range_comboBox.currentTextChanged.connect(self.on_temperature_range_changed)
+
         # Setup update timer
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_status)
@@ -45,6 +51,9 @@ class ThermalCameraTab(QtWidgets.QWidget):
         # Disable controls until thermal camera is started
         self.enable_controls(False)
         self.mounted_modules = None
+
+        # Initialize scaling mode - default to CO2 scaling
+        self.use_co2_scaling = True
 
         logger.info("Thermal camera tab initialized")
 
@@ -455,39 +464,151 @@ class ThermalCameraTab(QtWidgets.QWidget):
                 "background-color: green;" if switch_state else "background-color: red;"
             )
 
-            # Update camera images with proper scaling
+            # Update camera images based on current scaling mode
             if hasattr(self.system._thermalcamera, "_images"):
-                # First update individual camera views
-                for i, (camera_name, image_data) in enumerate(self.system._thermalcamera._images.items()):
-                    if isinstance(image_data, np.ndarray):
-                        # Convert to float if needed
-                        if image_data.dtype != np.float64:
-                            try:
-                                image_data = image_data.astype(np.float64)
-                            except (ValueError, TypeError) as e:
-                                logger.error(f"Failed to convert image data to float: {e}")
-                                continue
+                if self.use_co2_scaling:
+                    self.update_camera_images_co2_scale()
+                else:
+                    self.update_camera_images_auto_scale()
 
-                        # Update individual camera view
-                        self.camera_images[i].set_array(image_data)
-
-                        # Calculate temperature range for consistent scaling
-                        vmin = np.nanmin(image_data)
-                        vmax = np.nanmax(image_data)
-                        self.camera_images[i].set_clim(vmin, vmax)
-
-                        # Update colorbar ticks for camera view
-                        cbar = self.camera_images[i].colorbar
-                        if cbar is not None:
-                            cbar.set_ticks(np.linspace(vmin, vmax, 5))
-                            cbar.set_ticklabels([f"{temp:.1f}°C" for temp in np.linspace(vmin, vmax, 5)])
-
-                # Draw camera canvas
-                self.cameras_canvas.draw()
+            self.update_camera_displays()
 
         except Exception as e:
             logger.error(f"Error updating status: {e}")
             logger.error(f"Error details: {str(e)}", exc_info=True)
+
+    def update_camera_images_co2_scale(self):
+        """Update camera images using CO2 temperature-based scaling"""
+        try:
+            # Get CO2 temperature for colorbar range
+            co2_temp = 0.0  # Default fallback
+            try:
+                marta_status = self.system.status.get("marta", {})
+                co2_temp = float(marta_status.get("TT06_CO2", 0.0))
+            except (ValueError, TypeError):
+                logger.warning("Could not get CO2 temperature from MARTA status, using default range")
+                co2_temp = 0.0
+
+            # Calculate colorbar range: CO2 temp to CO2 temp + 20
+            colorbar_min = co2_temp
+            colorbar_max = co2_temp + 15.0
+
+            # Update individual camera views
+            for i, (camera_name, image_data) in enumerate(self.system._thermalcamera._images.items()):
+                if isinstance(image_data, np.ndarray):
+                    # Convert to float if needed
+                    if image_data.dtype != np.float64:
+                        try:
+                            image_data = image_data.astype(np.float64)
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"Failed to convert image data to float: {e}")
+                            continue
+
+                    # Update individual camera view
+                    self.camera_images[i].set_array(image_data)
+
+                    # Use CO2-based temperature range for consistent scaling
+                    self.camera_images[i].set_clim(colorbar_min, colorbar_max)
+
+                    # Update colorbar ticks for camera view
+                    cbar = self.camera_images[i].colorbar
+                    if cbar is not None:
+                        cbar.set_ticks(np.linspace(colorbar_min, colorbar_max, 5))
+                        cbar.set_ticklabels([f"{temp:.1f}°C" for temp in np.linspace(colorbar_min, colorbar_max, 5)])
+
+            # Draw camera canvas
+            self.cameras_canvas.draw()
+
+            logger.debug(
+                f"Updated camera images with CO2 range: {colorbar_min:.1f}°C to {colorbar_max:.1f}°C (CO2 temp: {co2_temp:.1f}°C)"
+            )
+
+        except Exception as e:
+            logger.error(f"Error updating camera images with CO2 scale: {e}")
+
+    def update_camera_images_auto_scale(self):
+        """Update camera images using automatic scaling based on image data"""
+        try:
+            # Update individual camera views with auto-scaling
+            for i, (camera_name, image_data) in enumerate(self.system._thermalcamera._images.items()):
+                if isinstance(image_data, np.ndarray):
+                    # Convert to float if needed
+                    if image_data.dtype != np.float64:
+                        try:
+                            image_data = image_data.astype(np.float64)
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"Failed to convert image data to float: {e}")
+                            continue
+
+                    # Update individual camera view
+                    self.camera_images[i].set_array(image_data)
+
+                    # Calculate temperature range for automatic scaling
+                    vmin = np.nanmin(image_data)
+                    vmax = np.nanmax(image_data)
+                    self.camera_images[i].set_clim(vmin, vmax)
+
+                    # Update colorbar ticks for camera view
+                    cbar = self.camera_images[i].colorbar
+                    if cbar is not None:
+                        cbar.set_ticks(np.linspace(vmin, vmax, 5))
+                        cbar.set_ticklabels([f"{temp:.1f}°C" for temp in np.linspace(vmin, vmax, 5)])
+
+            # Draw camera canvas
+            self.cameras_canvas.draw()
+
+            logger.debug("Updated camera images with auto-scale")
+
+        except Exception as e:
+            logger.error(f"Error updating camera images with auto scale: {e}")
+
+    def set_scaling_mode(self, use_co2_scale=True):
+        """Set the scaling mode for camera images
+
+        Args:
+            use_co2_scale (bool): If True, use CO2 temperature range. If False, use auto-scaling.
+        """
+        try:
+            self.use_co2_scaling = use_co2_scale
+            logger.info(f"Camera scaling mode set to: {'CO2 temperature range' if use_co2_scale else 'Auto-scale'}")
+
+            # Update the ComboBox to reflect the change
+            if hasattr(self.ui, 't_range_comboBox'):
+                combo_text = "CO2" if use_co2_scale else "Auto"
+                self.ui.t_range_comboBox.setCurrentText(combo_text)
+
+            # Immediately update the display with the new scaling
+            if hasattr(self.system._thermalcamera, "_images"):
+                if use_co2_scale:
+                    self.update_camera_images_co2_scale()
+                else:
+                    self.update_camera_images_auto_scale()
+
+        except Exception as e:
+            logger.error(f"Error setting scaling mode: {e}")
+
+    def on_temperature_range_changed(self, text):
+        """Handle temperature range selection change"""
+        try:
+            if text == "CO2":
+                self.use_co2_scaling = True
+                logger.info("Thermal camera scaling set to CO2-based scaling")
+            elif text == "Auto":
+                self.use_co2_scaling = False
+                logger.info("Thermal camera scaling set to auto-scaling")
+            else:
+                logger.warning(f"Unknown temperature range option: {text}")
+                return
+
+            # Immediately update camera images with new scaling mode
+            if hasattr(self.system._thermalcamera, "_images"):
+                if self.use_co2_scaling:
+                    self.update_camera_images_co2_scale()
+                else:
+                    self.update_camera_images_auto_scale()
+
+        except Exception as e:
+            logger.error(f"Error changing thermal camera temperature range: {e}")
 
     def rotate(self):
         """Rotate the thermal camera by the specified angle"""
@@ -537,7 +658,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             if self.system._thermalcamera:
                 self.system._thermalcamera.set_absolute_position({"value": position})
                 logger.info(f"Setting absolute position to {position}")
-            self.update_camera_displays()
+                self.update_camera_displays()
         except ValueError:
             logger.error("Invalid position value")
         except Exception as e:

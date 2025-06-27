@@ -25,7 +25,7 @@
       </property>
      </widget>
     </item>
-    <item row="0" column="1">
+    <item row="0" column="1" colspan="4">
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
        <widget class="QPushButton" name="relse_mtr_PB_2">
@@ -50,46 +50,14 @@
       </item>
      </layout>
     </item>
-    <item row="1" column="1">
-     <widget class="QLabel" name="label_3">
+    <item row="5" column="1">
+     <widget class="QLabel" name="label_2">
       <property name="text">
-       <string>Rotate the system</string>
+       <string>Coordinates</string>
       </property>
      </widget>
     </item>
-    <item row="2" column="1">
-     <layout class="QHBoxLayout" name="horizontalLayout_2">
-      <item>
-       <widget class="QLabel" name="label_8">
-        <property name="text">
-         <string>Direction</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QComboBox" name="direction_combo">
-        <item>
-         <property name="text">
-          <string>Clockwise</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Anticlockwise</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="label_9">
-        <property name="text">
-         <string>(Rotate, Calibrate)</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item row="3" column="1">
+    <item row="3" column="1" colspan="4">
      <layout class="QHBoxLayout" name="horizontalLayout_3">
       <item>
        <widget class="QPushButton" name="rotate_PB">
@@ -117,7 +85,7 @@
       </item>
      </layout>
     </item>
-    <item row="4" column="1">
+    <item row="4" column="1" colspan="4">
      <layout class="QHBoxLayout" name="horizontalLayout_4">
       <item>
        <widget class="QPushButton" name="go_to_PB">
@@ -145,201 +113,7 @@
       </item>
      </layout>
     </item>
-    <item row="5" column="1">
-     <widget class="QLabel" name="label_2">
-      <property name="text">
-       <string>Coordinates</string>
-      </property>
-     </widget>
-    </item>
-    <item row="6" column="1">
-     <layout class="QHBoxLayout" name="horizontalLayout_5">
-      <item>
-       <widget class="QLineEdit" name="ip_abs_pos_LE"/>
-      </item>
-      <item>
-       <widget class="QPushButton" name="set_abs_pos_PB">
-        <property name="text">
-         <string>Set Absolute Position</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="export_abs_pos_PB">
-        <property name="text">
-         <string>Export Absolute Position</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item row="7" column="1">
-     <layout class="QHBoxLayout" name="horizontalLayout_6">
-      <item>
-       <widget class="QPushButton" name="calibrate_PB">
-        <property name="text">
-         <string>Calibrate</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="ip_limiting_angle_lbl">
-        <property name="text">
-         <string>within</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="ip_angle_LE_2">
-        <property name="text">
-         <string>90</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="ip_limiting_angle_lbl_3">
-        <property name="text">
-         <string>degrees</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item row="8" column="1">
-     <widget class="QLabel" name="label">
-      <property name="text">
-       <string>Automatic Rotation </string>
-      </property>
-     </widget>
-    </item>
-    <item row="9" column="1">
-     <layout class="QHBoxLayout" name="horizontalLayout_7">
-      <item>
-       <widget class="QPushButton" name="run_PB">
-        <property name="text">
-         <string>Run</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="stop_PB">
-        <property name="text">
-         <string>Stop</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item row="10" column="1">
-     <layout class="QHBoxLayout" name="horizontalLayout_8">
-      <item>
-       <widget class="QLabel" name="streaming_img_lbl">
-        <property name="text">
-         <string>Streaming</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QFrame" name="streamin_image_flag">
-        <property name="minimumSize">
-         <size>
-          <width>20</width>
-          <height>20</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">background-color: red;</string>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::NoFrame</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Raised</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="run_stat_flg_lbl">
-        <property name="text">
-         <string>Running</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QFrame" name="run_stat_flg">
-        <property name="minimumSize">
-         <size>
-          <width>20</width>
-          <height>20</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">background-color: red;</string>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::NoFrame</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Raised</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="label_10">
-        <property name="text">
-         <string>Switch State</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QFrame" name="switch_state_flag">
-        <property name="minimumSize">
-         <size>
-          <width>20</width>
-          <height>20</height>
-         </size>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">background-color: red;</string>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::NoFrame</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Raised</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="horizontalSpacer">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>38</width>
-          <height>17</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item>
-       <widget class="QLabel" name="pos_lbl">
-        <property name="text">
-         <string>Current Position:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="ip_limiting_angle_lbl_2">
-        <property name="text">
-         <string>0</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item row="11" column="1">
+    <item row="11" column="1" colspan="4">
      <layout class="QGridLayout" name="gridLayout">
       <item row="0" column="0">
        <widget class="QLabel" name="camera_id_label_1">
@@ -559,10 +333,102 @@
       </item>
      </layout>
     </item>
-    <item row="12" column="1">
-     <widget class="QPushButton" name="snapshot_PB">
+    <item row="7" column="1" colspan="4">
+     <layout class="QHBoxLayout" name="horizontalLayout_6">
+      <item>
+       <widget class="QPushButton" name="calibrate_PB">
+        <property name="text">
+         <string>Calibrate</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="ip_limiting_angle_lbl">
+        <property name="text">
+         <string>within</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="ip_angle_LE_2">
+        <property name="text">
+         <string>90</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="ip_limiting_angle_lbl_3">
+        <property name="text">
+         <string>degrees</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="6" column="1" colspan="4">
+     <layout class="QHBoxLayout" name="horizontalLayout_5">
+      <item>
+       <widget class="QLineEdit" name="ip_abs_pos_LE"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="set_abs_pos_PB">
+        <property name="text">
+         <string>Set Absolute Position</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="export_abs_pos_PB">
+        <property name="text">
+         <string>Export Absolute Position</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="12" column="4">
+     <widget class="QComboBox" name="t_range_comboBox">
+      <item>
+       <property name="text">
+        <string>CO2</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Auto</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="9" column="1" colspan="4">
+     <layout class="QHBoxLayout" name="horizontalLayout_7">
+      <item>
+       <widget class="QPushButton" name="run_PB">
+        <property name="text">
+         <string>Run</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="stop_PB">
+        <property name="text">
+         <string>Stop</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="8" column="1" colspan="3">
+     <widget class="QLabel" name="label">
       <property name="text">
-       <string>Snapshot</string>
+       <string>Automatic Rotation </string>
+      </property>
+     </widget>
+    </item>
+    <item row="12" column="3">
+     <widget class="QLabel" name="label_11">
+      <property name="text">
+       <string>Range</string>
       </property>
      </widget>
     </item>
@@ -575,6 +441,174 @@
        <size>
         <width>20</width>
         <height>28</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item row="12" column="1">
+     <widget class="QPushButton" name="snapshot_PB">
+      <property name="text">
+       <string>Snapshot</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1" colspan="4">
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <widget class="QLabel" name="label_8">
+        <property name="text">
+         <string>Direction</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="direction_combo">
+        <item>
+         <property name="text">
+          <string>Clockwise</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Anticlockwise</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_9">
+        <property name="text">
+         <string>(Rotate, Calibrate)</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="10" column="1" colspan="4">
+     <layout class="QHBoxLayout" name="horizontalLayout_8">
+      <item>
+       <widget class="QLabel" name="streaming_img_lbl">
+        <property name="text">
+         <string>Streaming</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="streamin_image_flag">
+        <property name="minimumSize">
+         <size>
+          <width>20</width>
+          <height>20</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">background-color: red;</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="run_stat_flg_lbl">
+        <property name="text">
+         <string>Running</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="run_stat_flg">
+        <property name="minimumSize">
+         <size>
+          <width>20</width>
+          <height>20</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">background-color: red;</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_10">
+        <property name="text">
+         <string>Switch State</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="switch_state_flag">
+        <property name="minimumSize">
+         <size>
+          <width>20</width>
+          <height>20</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">background-color: red;</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>38</width>
+          <height>17</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="pos_lbl">
+        <property name="text">
+         <string>Current Position:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="ip_limiting_angle_lbl_2">
+        <property name="text">
+         <string>0</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="1" column="1" colspan="3">
+     <widget class="QLabel" name="label_3">
+      <property name="text">
+       <string>Rotate the system</string>
+      </property>
+     </widget>
+    </item>
+    <item row="12" column="2">
+     <spacer name="horizontalSpacer_2">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>40</width>
+        <height>20</height>
        </size>
       </property>
      </spacer>
