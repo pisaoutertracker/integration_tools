@@ -1192,7 +1192,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 class ModuleTempMQTT:
     """MQTT client for module temperature updates"""
 
-    BASE_TOPIC = "ph2acf"
+    BASE_TOPIC = "/ph2acf"
     TOPIC = "/ph2acf/data"
 
     def __init__(self, system):
