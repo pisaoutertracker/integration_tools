@@ -648,7 +648,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 )
                 co2_temp = 0.0
 
-            # Calculate colorbar range: CO2 temp to CO2 temp + 20
+            # Calculate colorbar range: CO2 temp to CO2 temp + 15
             colorbar_min = co2_temp
             colorbar_max = co2_temp + 15.0
 
@@ -1063,7 +1063,9 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         """Start monitoring module temperatures via MQTT"""
         try:
             self.mqtt_client = ModuleTempMQTT(self.system)
+            self.mqtt_client.set_gui_reference(self)  # Set reference to this GUI instance
             self.mqtt_client.loop_start()
+            logger.info("Started temperature monitoring with calibrated data publishing")
         except Exception as e:
             logger.error(f"Error starting temperature monitoring: {e}")
 
@@ -1088,9 +1090,10 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
             # Get the latest status from the MQTT client
             status = self.mqtt_client.status
-            to_publish = {}
+            
             # Clear the table first
             self.module_temp_table.clearContents()
+            
             # Populate the table only for the fuseId present in the status
             for monitored_fuse_id, temp_data in status.items():
                 for mounted_module, mounted_module_info in self.mounted_modules.items():
@@ -1106,23 +1109,54 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                                     if temp_key in mounted_module_info["temperature_offsets"]:
                                         temperature += mounted_module_info["temperature_offsets"][temp_key]
                                         item = QtWidgets.QTableWidgetItem(f"{temperature:.1f}")
-                                        to_publish[self.mqtt_client.key_map[temp_key]] = temperature
                                     else:
                                         # change the color of the cell to red if no offset is found
                                         item = QtWidgets.QTableWidgetItem(f"{temperature:.1f}")
                                         item.setBackground(QColor(255, 0, 0))
                                     row_index = self.temp_keys.index(temp_key)
                                     self.module_temp_table.setItem(row_index, column_index - 1, item)
-            if to_publish:
-                print(f"Publishing temperature data: {to_publish}")
-                self.mqtt_client.client.publish(
-                    f"{self.mqtt_client.BASE_TOPIC}/calib_data", json.dumps(to_publish)
-                )
-                logger.debug(f"Published temperature data: {to_publish}")
-            else:
-                logger.debug("No temperature data to publish")
+            
+            # Note: Removed the publishing logic from here - it's now handled in handle_message
+            
         except Exception as e:
             logger.error(f"Error updating temperature table: {e}")
+
+    def publish_calibrated_data(self, fuse_id, temp_data):
+        """Publish calibrated temperature data for a specific module"""
+        try:
+            if not hasattr(self, "mqtt_client"):
+                logger.warning("MQTT client not initialized, cannot publish calibrated data")
+                return
+
+            to_publish = {}
+            
+            # Find the mounted module with this fuse_id
+            for mounted_module, mounted_module_info in self.mounted_modules.items():
+                mounted_module_fuse_id = mounted_module_info.get("fuseId", None)
+                if mounted_module_fuse_id == fuse_id:
+                    # Process temperature data for this module
+                    for temp_key, temperature in temp_data.items():
+                        if temp_key in self.temp_keys:
+                            if temp_key in mounted_module_info["temperature_offsets"]:
+                                calibrated_temp = temperature + mounted_module_info["temperature_offsets"][temp_key]
+                                original_key = self.mqtt_client.key_map.get(temp_key, temp_key)
+                                to_publish[original_key] = calibrated_temp
+                            else:
+                                logger.warning(f"No offset found for {temp_key} in module {mounted_module}")
+                    
+                    break  # Found the module, no need to continue
+            
+            # Publish the calibrated data if we have any
+            if to_publish:
+                topic = f"{self.mqtt_client.BASE_TOPIC}/calib_data"
+                payload = json.dumps(to_publish)
+                self.mqtt_client.client.publish(topic, payload)
+                logger.info(f"Published calibrated temperature data for fuse_id {fuse_id}: {to_publish}")
+            else:
+                logger.debug(f"No calibrated temperature data to publish for fuse_id {fuse_id}")
+                
+        except Exception as e:
+            logger.error(f"Error publishing calibrated data: {e}")
 
     def set_stitched_scaling_mode(self, use_co2_scale=True):
         """Set the scaling mode for stitched camera views
