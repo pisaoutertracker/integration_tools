@@ -6,6 +6,7 @@ import os
 import numpy as np
 import yaml
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import datetime
 
@@ -170,7 +171,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             logger.error(f"Error saving camera config: {e}")
 
     def setup_camera_views(self):
-        """Setup matplotlib figures for camera views"""
+        """Setup matplotlib figures for camera views with navigation toolbar"""
         try:
             # Create scene and canvas for individual cameras view
             scene1 = QtWidgets.QGraphicsScene()
@@ -179,13 +180,25 @@ class ThermalCameraTab(QtWidgets.QWidget):
             # Create matplotlib figure for individual cameras with adjusted size
             self.cameras_fig = Figure(figsize=(8, 5), dpi=100)  # Increased width
             self.cameras_canvas = FigureCanvas(self.cameras_fig)
-            scene1.addWidget(self.cameras_canvas)
+            
+            # Create navigation toolbar for camera views
+            self.cameras_toolbar = NavigationToolbar(self.cameras_canvas, self.widget)
+            
+            # Create a widget to hold both toolbar and canvas
+            camera_widget = QtWidgets.QWidget()
+            camera_layout = QtWidgets.QVBoxLayout(camera_widget)
+            camera_layout.addWidget(self.cameras_toolbar)
+            camera_layout.addWidget(self.cameras_canvas)
+            camera_layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Add the combined widget to the scene
+            scene1.addWidget(camera_widget)
 
             # Create 2x2 grid for cameras with minimal spacing
             self.cameras_axes = self.cameras_fig.subplots(2, 2, gridspec_kw={"hspace": 0.15, "wspace": 0.1})
             self.camera_images = []
 
-            # Initialize camera images with proper sizing
+            # Initialize camera images with proper sizing and coordinate formatting
             camera_index = 0  # Add counter for sequential numbering
             for i in range(2):
                 for j in range(2):
@@ -197,6 +210,9 @@ class ThermalCameraTab(QtWidgets.QWidget):
                     ax.set_xticks([])
                     ax.set_yticks([])
 
+                    # Set up coordinate formatter to show temperature values
+                    ax.format_coord = lambda x, y, ax_ref=ax, img_ref=img: self.format_coord_temperature(x, y, ax_ref, img_ref)
+
                     # Add colorbar with proper sizing
                     cbar = self.cameras_fig.colorbar(img, ax=ax, fraction=0.046, pad=0.04)
                     cbar.ax.tick_params(labelsize=8)
@@ -204,10 +220,32 @@ class ThermalCameraTab(QtWidgets.QWidget):
             # Adjust subplot parameters to remove excess whitespace
             self.cameras_fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
 
-            logger.info("Camera views initialized")
+            logger.info("Camera views with navigation toolbar initialized")
 
         except Exception as e:
             logger.error(f"Error setting up camera views: {e}")
+
+    def format_coord_temperature(self, x, y, ax, img):
+        """Format coordinates to show pixel position and temperature value"""
+        try:
+            # Get the image data
+            data = img.get_array()
+            
+            # Convert mouse coordinates to array indices
+            numrows, numcols = data.shape
+            col = int(x + 0.5)
+            row = int(y + 0.5)
+            
+            # Check if coordinates are within bounds
+            if 0 <= col < numcols and 0 <= row < numrows:
+                temp_value = data[row, col]
+                return f'x={col}, y={row}, T={temp_value:.1f}°C'
+            else:
+                return f'x={x:.1f}, y={y:.1f}'
+                
+        except Exception as e:
+            logger.error(f"Error formatting coordinates: {e}")
+            return f'x={x:.1f}, y={y:.1f}'
 
     def snapshot(self):
         """Save current camera views"""

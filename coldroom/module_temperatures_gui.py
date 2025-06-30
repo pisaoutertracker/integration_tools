@@ -7,6 +7,7 @@ import os
 import numpy as np
 import yaml
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import paho.mqtt.client as mqtt
 import datetime
@@ -26,15 +27,8 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         self.use_co2_scaling_stitched = True  # Default to CO2 scaling for stitched views
         self.use_co2_scaling_temperature_plot = True  # Default to CO2 scaling for temperature plot
 
-        # Initialize camera-specific FOV values (default to 20 degrees for all cameras)
-        self.camera_fovs = {
-            "camera1": 20,
-            "camera2": 20,
-            "camera3": 20,
-            "camera4": 20,
-        }
-
         # Initialize stitching-related attributes
+        self.camera_fov = 20  # Field of view in degrees for each camera
         self.config_file = os.path.join(os.path.dirname(__file__), "camera_config.yaml")
         self.camera_positions = self.load_camera_config()
         self.mounted_modules = None
@@ -44,9 +38,6 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         self.setup_stitched_views()
         self.reset_figures_PB.clicked.connect(self.reset_camera_views)
         self.snapshot_PB.clicked.connect(self.snapshot)
-
-        # Connect FOV sliders and set initial values
-        self.setup_fov_sliders()
 
         # Set default temperature range to CO2 and connect signal
         if hasattr(self, "t_range_comboBox"):
@@ -149,6 +140,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             self.stitched_canvases = []
             self.stitched_images = []
             self.stitched_axes = []
+            self.stitched_toolbars = []  # Add toolbar list
 
             # Get the tab widget from the UI
             self.stitched_tab_widget = self.findChild(QtWidgets.QTabWidget, "tabWidget")
@@ -160,7 +152,19 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 # Create figure and canvas with proper aspect ratio for 360-degree view
                 fig = Figure(figsize=(12, 3.5), dpi=100, tight_layout=True)
                 canvas = FigureCanvas(fig)
-                scene.addWidget(canvas)
+                
+                # Create navigation toolbar
+                toolbar = NavigationToolbar(canvas, self)
+                
+                # Create widget to hold toolbar and canvas
+                plot_widget = QtWidgets.QWidget()
+                plot_layout = QtWidgets.QVBoxLayout(plot_widget)
+                plot_layout.addWidget(toolbar)
+                plot_layout.addWidget(canvas)
+                plot_layout.setContentsMargins(0, 0, 0, 0)
+                
+                # Add the combined widget to the scene
+                scene.addWidget(plot_widget)
 
                 # Create axes and image
                 ax = fig.add_subplot(111)
@@ -172,6 +176,9 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                     interpolation="nearest",
                     extent=[0, 360, 0, 24],  # Set the extent to match degrees
                 )
+
+                # Set up coordinate formatter for stitched views
+                ax.format_coord = lambda x, y, ax_ref=ax, img_ref=img: self.format_coord_stitched(x, y, ax_ref, img_ref)
 
                 # Set up the axes for degrees
                 ax.set_xticks(np.linspace(0, 360, 9))  # Ticks every 45 degrees
@@ -189,13 +196,36 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 self.stitched_canvases.append(canvas)
                 self.stitched_images.append(img)
                 self.stitched_axes.append(ax)
+                self.stitched_toolbars.append(toolbar)
 
             self.setup_temperature_plot()
 
-            logger.info("Stitched views initialized")
+            logger.info("Stitched views with navigation toolbars initialized")
 
         except Exception as e:
             logger.error(f"Error setting up stitched views: {e}")
+
+    def format_coord_stitched(self, x, y, ax, img):
+        """Format coordinates for stitched view to show angle and temperature"""
+        try:
+            # Get the image data
+            data = img.get_array()
+            
+            # Convert coordinates to array indices
+            numrows, numcols = data.shape
+            col = int(x * numcols / 360)  # Convert angle to column index
+            row = int(y)  # Direct pixel row
+            
+            # Check if coordinates are within bounds
+            if 0 <= col < numcols and 0 <= row < numrows:
+                temp_value = data[row, col]
+                return f'Angle={x:.1f}°, Row={row}, T={temp_value:.1f}°C'
+            else:
+                return f'Angle={x:.1f}°, Row={y:.1f}'
+                
+        except Exception as e:
+            logger.error(f"Error formatting stitched coordinates: {e}")
+            return f'Angle={x:.1f}°, Row={y:.1f}'
 
     def snapshot(self):
         """Save current camera views and temperature plot, using timedate for unique filenames"""
@@ -251,9 +281,21 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             temp_graphics_view.setScene(temp_scene)
 
             # Create matplotlib figure for temperature plot
-            self.temp_fig = Figure(figsize=(12, 4), dpi=100, tight_layout=True)  # Increased height slightly
+            self.temp_fig = Figure(figsize=(12, 4), dpi=100, tight_layout=True)
             self.temp_canvas = FigureCanvas(self.temp_fig)
-            temp_scene.addWidget(self.temp_canvas)
+            
+            # Create navigation toolbar for temperature plot
+            self.temp_toolbar = NavigationToolbar(self.temp_canvas, self)
+            
+            # Create widget to hold toolbar and canvas
+            temp_plot_widget = QtWidgets.QWidget()
+            temp_plot_layout = QtWidgets.QVBoxLayout(temp_plot_widget)
+            temp_plot_layout.addWidget(self.temp_toolbar)
+            temp_plot_layout.addWidget(self.temp_canvas)
+            temp_plot_layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Add to scene
+            temp_scene.addWidget(temp_plot_widget)
 
             # Create axes for temperature plot
             self.temp_ax = self.temp_fig.add_subplot(111)
@@ -261,6 +303,9 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             self.temp_ax.set_ylabel("T (°C)")
             self.temp_ax.grid(True, alpha=0.3, which="both")
             self.temp_ax.set_xlim(0, 360)
+
+            # Set up coordinate formatter for temperature plot
+            self.temp_ax.format_coord = lambda x, y: f'Angle={x:.1f}°, T={y:.1f}°C'
 
             # Set x-axis ticks every 45 degrees for better readability
             self.temp_ax.set_xticks(np.linspace(0, 360, 9))
@@ -288,7 +333,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             # Adjust layout to make room for legend and module annotations
             self.temp_fig.subplots_adjust(right=0.82, top=0.85)
 
-            logger.info("Temperature plot tab added successfully")
+            logger.info("Temperature plot tab with navigation toolbar added successfully")
 
         except Exception as e:
             logger.error(f"Error setting up temperature plot: {e}")
@@ -561,16 +606,13 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
         return filtered
 
-    def stitch_multiple_images(self, images, positions, temp_min, temp_max, camera_name, full_coverage=360):
+    def stitch_multiple_images(self, images, positions, temp_min, temp_max, full_coverage=360):
         """Stitch multiple images from different positions into a panorama"""
         # Get dimensions of a single image
         h, w = images[0].shape
 
-        # Get camera-specific FOV
-        camera_fov = self.get_camera_fov(camera_name)
-
-        # Calculate total width based on full coverage and camera-specific FOV
-        total_width = int(w * full_coverage / camera_fov)
+        # Calculate total width based on full coverage and FOV
+        total_width = int(w * full_coverage / self.camera_fov)
 
         # Create canvas and count arrays for tracking overlaps
         panorama = np.zeros((h, total_width), dtype=np.float32)
@@ -579,11 +621,13 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         # Place images on canvas based on absolute position within the full range
         for img, angle in zip(images, positions):
             # Calculate x offset based on absolute angle position in the full range
+            # Normalize angle to 0-360 range if needed
             norm_angle = angle % full_coverage
 
             # Center the FOV around the camera position by subtracting half FOV
-            centered_angle = (norm_angle - camera_fov / 2) % full_coverage
-            x_offset = int(centered_angle * w / camera_fov)
+            # This makes the camera position the center of the image rather than the left edge
+            centered_angle = (norm_angle - self.camera_fov / 2) % full_coverage
+            x_offset = int(centered_angle * w / self.camera_fov)
 
             # Make sure offset is within bounds
             if x_offset >= 0 and x_offset + w <= total_width:
@@ -659,7 +703,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 )
                 co2_temp = 0.0
 
-            # Calculate colorbar range: CO2 temp to CO2 temp + 15
+            # Calculate colorbar range: CO2 temp to CO2 temp + 20
             colorbar_min = co2_temp
             colorbar_max = co2_temp + 15.0
 
@@ -685,7 +729,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                         if images:  # If we have any images to stitch
                             # Create stitched panorama using CO2 temperature range
                             panorama_norm, panorama = self.stitch_multiple_images(
-                                images, positions, colorbar_min, colorbar_max, camera_name, full_coverage=360
+                                images, positions, colorbar_min, colorbar_max, full_coverage=360
                             )
 
                             # Ensure the panorama is properly sized for 360 degrees
@@ -761,8 +805,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             if hasattr(self.system._thermalcamera, "_stitching_data"):
                 for i, (camera_name, camera_data) in enumerate(self.system._thermalcamera._stitching_data.items()):
                     camera_index = int(camera_name[-1]) + 1
-                    camera_ui_name = f"camera{camera_index}"
-                    
+                    camera_name = f"camera{camera_index}"
                     if camera_data:
                         # Get all images and positions
                         images = []
@@ -775,16 +818,16 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                             if pos_images:
                                 last_img = pos_images[-1]
                                 images.append(last_img)
-                                positions.append(float(pos) + self.camera_positions[camera_ui_name]["position"])
+                                positions.append(float(pos) + self.camera_positions[camera_name]["position"])
 
                                 # Update temperature range based on actual data
                                 temp_min = min(temp_min, last_img.min())
                                 temp_max = max(temp_max, last_img.max())
 
                         if images:
-                            # Create stitched panorama using actual temperature range and camera-specific FOV
+                            # Create stitched panorama using actual temperature range
                             panorama_norm, panorama = self.stitch_multiple_images(
-                                images, positions, temp_min, temp_max, camera_ui_name, full_coverage=360
+                                images, positions, temp_min, temp_max, full_coverage=360
                             )
 
                             # Ensure the panorama is properly sized for 360 degrees
@@ -823,7 +866,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
                             # Add module annotations
                             if self.mounted_modules is not None:
-                                self.add_module_annotations_to_stitched_image(ax, camera_ui_name)
+                                self.add_module_annotations_to_stitched_image(ax, camera_name)
 
                             # Update colorbar with auto-scale range
                             cbar = self.stitched_images[camera_index - 1].colorbar
@@ -908,7 +951,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                             temp_min = min(min_temps.values())
 
                             # Stitch images
-                            stitched_image, _ = self.stitch_multiple_images(images, positions, temp_min, temp_max, camera_name)
+                            stitched_image, _ = self.stitch_multiple_images(images, positions, temp_min, temp_max)
 
                             # Update display
                             if i < len(self.stitched_images):
@@ -1075,9 +1118,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         """Start monitoring module temperatures via MQTT"""
         try:
             self.mqtt_client = ModuleTempMQTT(self.system)
-            self.mqtt_client.set_gui_reference(self)  # Set reference to this GUI instance
             self.mqtt_client.loop_start()
-            logger.info("Started temperature monitoring with calibrated data publishing")
         except Exception as e:
             logger.error(f"Error starting temperature monitoring: {e}")
 
@@ -1102,10 +1143,10 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
             # Get the latest status from the MQTT client
             status = self.mqtt_client.status
-
+            
             # Clear the table first
             self.module_temp_table.clearContents()
-
+            
             # Populate the table only for the fuseId present in the status
             for monitored_fuse_id, temp_data in status.items():
                 for mounted_module, mounted_module_info in self.mounted_modules.items():
@@ -1127,9 +1168,9 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                                         item.setBackground(QColor(255, 0, 0))
                                     row_index = self.temp_keys.index(temp_key)
                                     self.module_temp_table.setItem(row_index, column_index - 1, item)
-
+            
             # Note: Removed the publishing logic from here - it's now handled in handle_message
-
+            
         except Exception as e:
             logger.error(f"Error updating temperature table: {e}")
 
@@ -1141,7 +1182,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 return
 
             to_publish = {}
-
+            
             # Find the mounted module with this fuse_id
             for mounted_module, mounted_module_info in self.mounted_modules.items():
                 mounted_module_fuse_id = mounted_module_info.get("fuseId", None)
@@ -1155,9 +1196,9 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                                 to_publish[original_key] = calibrated_temp
                             else:
                                 logger.warning(f"No offset found for {temp_key} in module {mounted_module}")
-
+                    
                     break  # Found the module, no need to continue
-
+            
             # Publish the calibrated data if we have any
             if to_publish:
                 topic = f"{self.mqtt_client.BASE_TOPIC}/calib_data"
@@ -1166,7 +1207,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 logger.info(f"Published calibrated temperature data for fuse_id {fuse_id}: {to_publish}")
             else:
                 logger.debug(f"No calibrated temperature data to publish for fuse_id {fuse_id}")
-
+                
         except Exception as e:
             logger.error(f"Error publishing calibrated data: {e}")
 
@@ -1234,65 +1275,6 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         except Exception as e:
             logger.error(f"Error changing module temperatures range: {e}")
 
-    def setup_fov_sliders(self):
-        """Setup and connect FOV sliders for each camera"""
-        try:
-            # Dictionary to map sliders to cameras and labels
-            slider_config = {
-                "horizontalSlider": {"camera": "camera1", "label": "label_14"},
-                "horizontalSlider_2": {"camera": "camera2", "label": "label_15"},
-                "horizontalSlider_3": {"camera": "camera3", "label": "label_16"},
-                "horizontalSlider_4": {"camera": "camera4", "label": "label_17"},
-            }
-
-            for slider_name, config in slider_config.items():
-                # Get slider and label widgets
-                slider = self.findChild(QtWidgets.QSlider, slider_name)
-                label = self.findChild(QtWidgets.QLabel, config["label"])
-                
-                if slider and label:
-                    camera_name = config["camera"]
-                    
-                    # Set initial slider value and label text
-                    initial_fov = self.camera_fovs[camera_name]
-                    slider.setValue(initial_fov)
-                    label.setText(str(initial_fov))
-                    
-                    # Connect slider to update function using lambda to capture camera name
-                    slider.valueChanged.connect(
-                        lambda value, cam=camera_name, lbl=label: self.on_fov_changed(cam, value, lbl)
-                    )
-                    
-                    logger.info(f"Connected FOV slider for {camera_name}, initial value: {initial_fov}")
-                else:
-                    logger.warning(f"Could not find slider '{slider_name}' or label '{config['label']}'")
-
-        except Exception as e:
-            logger.error(f"Error setting up FOV sliders: {e}")
-
-    def on_fov_changed(self, camera_name, fov_value, label):
-        """Handle FOV slider value changes"""
-        try:
-            # Update the camera's FOV value
-            self.camera_fovs[camera_name] = fov_value
-            
-            # Update the label to show current value
-            label.setText(str(fov_value))
-            
-            logger.info(f"FOV for {camera_name} changed to {fov_value} degrees")
-            
-            # Optionally trigger immediate update of displays
-            # Note: This might cause frequent updates while dragging the slider
-            # You can uncomment this if you want real-time updates
-            # self.update_displays()
-            
-        except Exception as e:
-            logger.error(f"Error handling FOV change for {camera_name}: {e}")
-
-    def get_camera_fov(self, camera_name):
-        """Get the current FOV for a specific camera"""
-        return self.camera_fovs.get(camera_name, 20)  # Default to 20 if not found
-
 
 class ModuleTempMQTT:
     """MQTT client for module temperature updates"""
@@ -1309,19 +1291,11 @@ class ModuleTempMQTT:
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
         self.mqtt_settings = self.system._settings["mqtt"]
-
-        # Reference to the GUI for publishing calibrated data
-        self.gui_reference = None
-
         try:
             self.client.connect(self.mqtt_settings["broker"], self.mqtt_settings["port"], keepalive=60)
-            logger.info(f"Connected to MQTT broker at {self.mqtt_settings['broker']}:{self.mqtt_settings['port']}")
+            logger.info(f"Connected to MQTT broker at {self.system.BROKER}:{self.system.PORT}")
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
-
-    def set_gui_reference(self, gui_ref):
-        """Set reference to the GUI for publishing calibrated data"""
-        self.gui_reference = gui_ref
 
     def on_connect(self, client, userdata, flags, rc):
         """Handle MQTT connection"""
@@ -1336,12 +1310,7 @@ class ModuleTempMQTT:
         try:
             if msg.topic == self.TOPIC:
                 payload = json.loads(msg.payload.decode("utf-8"))
-                fuse_id, temp_data = self.handle_message(payload)
-
-                # Publish calibrated data immediately when message is received
-                if fuse_id and temp_data and self.gui_reference:
-                    self.gui_reference.publish_calibrated_data(fuse_id, temp_data)
-
+                self.handle_message(payload)
             else:
                 logger.warning(f"Received message on unknown topic: {msg.topic}")
         except Exception as e:
@@ -1371,10 +1340,9 @@ class ModuleTempMQTT:
             logger.error(f"Error stopping MQTT loop: {e}")
 
     def handle_message(self, payload):
-        """Handle incoming MQTT messages and return processed data"""
+        """Handle incoming MQTT messages"""
         result = {}
         fuseId = None
-
         for key in payload.keys():
             if "fuseId" in key:
                 fuseId = payload[key]
@@ -1389,10 +1357,5 @@ class ModuleTempMQTT:
                 new_key = f"{component}_H{hybrid_id}_{chip_id}"
                 result[new_key] = temperature
                 self.key_map[new_key] = key
-
         # Update the system status with the new temperature data
-        if fuseId:
-            self.status.update({fuseId: result})
-            logger.debug(f"Updated temperature data for fuse_id {fuseId}")
-
-        return fuseId, result
+        self.status.update({fuseId: result})
