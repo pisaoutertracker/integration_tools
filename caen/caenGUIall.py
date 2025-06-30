@@ -50,6 +50,7 @@ class CAENQueryThread(QThread):
         #        print("Running query thread",self.message)
 
         while self.queue:
+            #create lock
             self.message = self.queue.pop(0)
             self.receive = self.receiveQueue.pop(0)
             try:

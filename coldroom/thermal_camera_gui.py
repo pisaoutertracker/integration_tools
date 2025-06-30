@@ -274,7 +274,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             self.ui.calibrate_PB,
             self.ui.set_abs_pos_PB,
             self.ui.export_abs_pos_PB,
-            self.ui.get_frms_PB,
+#            self.ui.get_frms_PB,
             self.ui.relse_mtr_PB,
             self.ui.run_PB,
             self.ui.stop_PB,
@@ -297,7 +297,7 @@ class ThermalCameraTab(QtWidgets.QWidget):
             self.ui.calibrate_PB.clicked.connect(self.calibrate)
             self.ui.set_abs_pos_PB.clicked.connect(self.set_absolute_position)
             self.ui.export_abs_pos_PB.clicked.connect(self.export_absolute_position)
-            self.ui.get_frms_PB.clicked.connect(self.get_frames)
+ #           self.ui.get_frms_PB.clicked.connect(self.get_frames)
             self.ui.relse_mtr_PB.clicked.connect(self.release_motor)
             self.ui.run_PB.clicked.connect(self.run)
             self.ui.stop_PB.clicked.connect(self.stop)
