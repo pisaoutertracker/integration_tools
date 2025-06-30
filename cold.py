@@ -156,7 +156,7 @@ class MainApp(QtWidgets.QMainWindow):
         self.module_db = ModuleDB()
         self.tab_widget.addTab(self.module_db.ui.tab_2, "Module Inventory")
         self.tab_widget.addTab(self.module_db.ui.moduleDetailsTab, "Module Details")
-        self.module_db.ui.viewDetailsPB.clicked.connect(lambda: self.tab_widget.setCurrentIndex(4))
+        self.module_db.ui.viewDetailsPB.clicked.connect(lambda: self.tab_widget.setCurrentIndex(self.tab_widget.indexOf(self.module_db.ui.moduleDetailsTab))) 
         self.module_db.ui.selectModulePB.setEnabled(False)
 
         # Load settings tab from UI file
