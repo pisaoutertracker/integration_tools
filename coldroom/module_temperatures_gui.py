@@ -152,17 +152,17 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 # Create figure and canvas with proper aspect ratio for 360-degree view
                 fig = Figure(figsize=(12, 3.5), dpi=100, tight_layout=True)
                 canvas = FigureCanvas(fig)
-                
+
                 # Create navigation toolbar
                 toolbar = NavigationToolbar(canvas, self)
-                
+
                 # Create widget to hold toolbar and canvas
                 plot_widget = QtWidgets.QWidget()
                 plot_layout = QtWidgets.QVBoxLayout(plot_widget)
                 plot_layout.addWidget(toolbar)
                 plot_layout.addWidget(canvas)
                 plot_layout.setContentsMargins(0, 0, 0, 0)
-                
+
                 # Add the combined widget to the scene
                 scene.addWidget(plot_widget)
 
@@ -210,22 +210,22 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         try:
             # Get the image data
             data = img.get_array()
-            
+
             # Convert coordinates to array indices
             numrows, numcols = data.shape
             col = int(x * numcols / 360)  # Convert angle to column index
             row = int(y)  # Direct pixel row
-            
+
             # Check if coordinates are within bounds
             if 0 <= col < numcols and 0 <= row < numrows:
                 temp_value = data[row, col]
-                return f'Angle={x:.1f}°, Row={row}, T={temp_value:.1f}°C'
+                return f"Angle={x:.1f}°, Row={row}, T={temp_value:.1f}°C"
             else:
-                return f'Angle={x:.1f}°, Row={y:.1f}'
-                
+                return f"Angle={x:.1f}°, Row={y:.1f}"
+
         except Exception as e:
             logger.error(f"Error formatting stitched coordinates: {e}")
-            return f'Angle={x:.1f}°, Row={y:.1f}'
+            return f"Angle={x:.1f}°, Row={y:.1f}"
 
     def snapshot(self):
         """Save current camera views and temperature plot, using timedate for unique filenames"""
@@ -283,17 +283,17 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             # Create matplotlib figure for temperature plot
             self.temp_fig = Figure(figsize=(12, 4), dpi=100, tight_layout=True)
             self.temp_canvas = FigureCanvas(self.temp_fig)
-            
+
             # Create navigation toolbar for temperature plot
             self.temp_toolbar = NavigationToolbar(self.temp_canvas, self)
-            
+
             # Create widget to hold toolbar and canvas
             temp_plot_widget = QtWidgets.QWidget()
             temp_plot_layout = QtWidgets.QVBoxLayout(temp_plot_widget)
             temp_plot_layout.addWidget(self.temp_toolbar)
             temp_plot_layout.addWidget(self.temp_canvas)
             temp_plot_layout.setContentsMargins(0, 0, 0, 0)
-            
+
             # Add to scene
             temp_scene.addWidget(temp_plot_widget)
 
@@ -305,7 +305,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             self.temp_ax.set_xlim(0, 360)
 
             # Set up coordinate formatter for temperature plot
-            self.temp_ax.format_coord = lambda x, y: f'Angle={x:.1f}°, T={y:.1f}°C'
+            self.temp_ax.format_coord = lambda x, y: f"Angle={x:.1f}°, T={y:.1f}°C"
 
             # Set x-axis ticks every 45 degrees for better readability
             self.temp_ax.set_xticks(np.linspace(0, 360, 9))
@@ -1143,10 +1143,10 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
             # Get the latest status from the MQTT client
             status = self.mqtt_client.status
-            
+
             # Clear the table first
             self.module_temp_table.clearContents()
-            
+
             # Populate the table only for the fuseId present in the status
             for monitored_fuse_id, temp_data in status.items():
                 for mounted_module, mounted_module_info in self.mounted_modules.items():
@@ -1168,9 +1168,9 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                                         item.setBackground(QColor(255, 0, 0))
                                     row_index = self.temp_keys.index(temp_key)
                                     self.module_temp_table.setItem(row_index, column_index - 1, item)
-            
+
             # Note: Removed the publishing logic from here - it's now handled in handle_message
-            
+
         except Exception as e:
             logger.error(f"Error updating temperature table: {e}")
 
@@ -1182,7 +1182,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 return
 
             to_publish = {}
-            
+
             # Find the mounted module with this fuse_id
             for mounted_module, mounted_module_info in self.mounted_modules.items():
                 mounted_module_fuse_id = mounted_module_info.get("fuseId", None)
@@ -1196,9 +1196,9 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                                 to_publish[original_key] = calibrated_temp
                             else:
                                 logger.warning(f"No offset found for {temp_key} in module {mounted_module}")
-                    
+
                     break  # Found the module, no need to continue
-            
+
             # Publish the calibrated data if we have any
             if to_publish:
                 topic = f"{self.mqtt_client.BASE_TOPIC}/calib_data"
@@ -1207,7 +1207,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 logger.info(f"Published calibrated temperature data for fuse_id {fuse_id}: {to_publish}")
             else:
                 logger.debug(f"No calibrated temperature data to publish for fuse_id {fuse_id}")
-                
+
         except Exception as e:
             logger.error(f"Error publishing calibrated data: {e}")
 
@@ -1291,6 +1291,7 @@ class ModuleTempMQTT:
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
         self.mqtt_settings = self.system._settings["mqtt"]
+        self.gui_reference = None
         try:
             self.client.connect(self.mqtt_settings["broker"], self.mqtt_settings["port"], keepalive=60)
             logger.info(f"Connected to MQTT broker at {self.system.BROKER}:{self.system.PORT}")
@@ -1310,7 +1311,9 @@ class ModuleTempMQTT:
         try:
             if msg.topic == self.TOPIC:
                 payload = json.loads(msg.payload.decode("utf-8"))
-                self.handle_message(payload)
+                fuse_id, temp_data = self.handle_message(payload)
+                if fuse_id and temp_data and self.gui_reference:
+                    self.gui_reference.publish_calibrated_data(fuse_id, temp_data)
             else:
                 logger.warning(f"Received message on unknown topic: {msg.topic}")
         except Exception as e:
@@ -1346,7 +1349,7 @@ class ModuleTempMQTT:
         for key in payload.keys():
             if "fuseId" in key:
                 fuseId = payload[key]
-            if "_temp" in key:
+            if "_temp" in key and "_C" in key:
                 # e.g. SSA_H7_C6_temp or MPA_H0_C7_temp
                 split = key.split("_")
                 component = split[0]
@@ -1358,4 +1361,8 @@ class ModuleTempMQTT:
                 result[new_key] = temperature
                 self.key_map[new_key] = key
         # Update the system status with the new temperature data
-        self.status.update({fuseId: result})
+        if fuseId:
+            self.status.update({fuseId: result})
+            logger.debug(f"Updated temperature data for fuse_id {fuseId}")
+
+        return fuseId, result
