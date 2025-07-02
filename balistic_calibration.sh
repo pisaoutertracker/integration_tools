@@ -1,7 +1,7 @@
 #!/bin/bash
 # Usage: ./balistic_calibration.sh modulename co2temperature
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 modulename co2temperature"
+if [ $# -le 2 ]; then
+    echo "Usage: $0 modulename co2temperature [tag]"
     exit 1
 fi
 
@@ -65,7 +65,7 @@ echo "$mqtt_output" | while IFS= read -r line; do
         
         # Build JSON payload for temperature offsets
         module_name=$(echo "$1" | tr '[:lower:]' '[:upper:]')
-        json_payload='{"temperature_offsets":{'
+        json_payload='{"temperature_offsets'$3'":{'
         first_entry=true
         
         for field in $(echo "$line" | grep -o '"[^"]*_temp":[^,}]*'); do
