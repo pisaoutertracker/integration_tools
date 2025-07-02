@@ -28,7 +28,14 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         self.use_co2_scaling_temperature_plot = True  # Default to CO2 scaling for temperature plot
 
         # Initialize stitching-related attributes
-        self.camera_fov = 20  # Field of view in degrees for each camera
+        # Initialize camera-specific FOV values (default to 20 degrees for all cameras)
+        self.camera_fovs = {
+            "camera1": 20,
+            "camera2": 20,
+            "camera3": 20,
+            "camera4": 20,
+        }
+
         self.config_file = os.path.join(os.path.dirname(__file__), "camera_config.yaml")
         self.camera_positions = self.load_camera_config()
         self.mounted_modules = None
@@ -38,6 +45,8 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         self.setup_stitched_views()
         self.reset_figures_PB.clicked.connect(self.reset_camera_views)
         self.snapshot_PB.clicked.connect(self.snapshot)
+
+        self.setup_fov_sliders()
 
         # Set default temperature range to CO2 and connect signal
         if hasattr(self, "t_range_comboBox"):
@@ -606,13 +615,15 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
         return filtered
 
-    def stitch_multiple_images(self, images, positions, temp_min, temp_max, full_coverage=360):
+    def stitch_multiple_images(self, images, positions, temp_min, temp_max, camera_name, full_coverage=360):
         """Stitch multiple images from different positions into a panorama"""
         # Get dimensions of a single image
         h, w = images[0].shape
 
+        camera_fov = self.get_camera_fov(camera_name)
+
         # Calculate total width based on full coverage and FOV
-        total_width = int(w * full_coverage / self.camera_fov)
+        total_width = int(w * full_coverage / camera_fov)
 
         # Create canvas and count arrays for tracking overlaps
         panorama = np.zeros((h, total_width), dtype=np.float32)
@@ -626,8 +637,8 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
             # Center the FOV around the camera position by subtracting half FOV
             # This makes the camera position the center of the image rather than the left edge
-            centered_angle = (norm_angle - self.camera_fov / 2) % full_coverage
-            x_offset = int(centered_angle * w / self.camera_fov)
+            centered_angle = (norm_angle - camera_fov / 2) % full_coverage
+            x_offset = int(centered_angle * w / camera_fov)
 
             # Make sure offset is within bounds
             if x_offset >= 0 and x_offset + w <= total_width:
@@ -729,7 +740,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                         if images:  # If we have any images to stitch
                             # Create stitched panorama using CO2 temperature range
                             panorama_norm, panorama = self.stitch_multiple_images(
-                                images, positions, colorbar_min, colorbar_max, full_coverage=360
+                                images, positions, colorbar_min, colorbar_max, camera_name, full_coverage=360
                             )
 
                             # Ensure the panorama is properly sized for 360 degrees
@@ -805,7 +816,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
             if hasattr(self.system._thermalcamera, "_stitching_data"):
                 for i, (camera_name, camera_data) in enumerate(self.system._thermalcamera._stitching_data.items()):
                     camera_index = int(camera_name[-1]) + 1
-                    camera_name = f"camera{camera_index}"
+                    camera_ui_name = f"camera{camera_index}"
                     if camera_data:
                         # Get all images and positions
                         images = []
@@ -818,7 +829,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                             if pos_images:
                                 last_img = pos_images[-1]
                                 images.append(last_img)
-                                positions.append(float(pos) + self.camera_positions[camera_name]["position"])
+                                positions.append(float(pos) + self.camera_positions[camera_ui_name]["position"])
 
                                 # Update temperature range based on actual data
                                 temp_min = min(temp_min, last_img.min())
@@ -827,7 +838,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                         if images:
                             # Create stitched panorama using actual temperature range
                             panorama_norm, panorama = self.stitch_multiple_images(
-                                images, positions, temp_min, temp_max, full_coverage=360
+                                images, positions, temp_min, temp_max, camera_ui_name, full_coverage=360
                             )
 
                             # Ensure the panorama is properly sized for 360 degrees
@@ -866,7 +877,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
                             # Add module annotations
                             if self.mounted_modules is not None:
-                                self.add_module_annotations_to_stitched_image(ax, camera_name)
+                                self.add_module_annotations_to_stitched_image(ax, camera_ui_name)
 
                             # Update colorbar with auto-scale range
                             cbar = self.stitched_images[camera_index - 1].colorbar
@@ -951,7 +962,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                             temp_min = min(min_temps.values())
 
                             # Stitch images
-                            stitched_image, _ = self.stitch_multiple_images(images, positions, temp_min, temp_max)
+                            stitched_image, _ = self.stitch_multiple_images(images, positions, temp_min, temp_max, camera_name)
 
                             # Update display
                             if i < len(self.stitched_images):
@@ -1058,6 +1069,65 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         except Exception as e:
             logger.error(f"Error adding module annotations: {e}")
 
+    def setup_fov_sliders(self):
+        """Setup and connect FOV sliders for each camera"""
+        try:
+            # Dictionary to map sliders to cameras and labels
+            slider_config = {
+                "horizontalSlider": {"camera": "camera1", "label": "label_14"},
+                "horizontalSlider_2": {"camera": "camera2", "label": "label_15"},
+                "horizontalSlider_3": {"camera": "camera3", "label": "label_16"},
+                "horizontalSlider_4": {"camera": "camera4", "label": "label_17"},
+            }
+
+            for slider_name, config in slider_config.items():
+                # Get slider and label widgets
+                slider = self.findChild(QtWidgets.QSlider, slider_name)
+                label = self.findChild(QtWidgets.QLabel, config["label"])
+                
+                if slider and label:
+                    camera_name = config["camera"]
+                    
+                    # Set initial slider value and label text
+                    initial_fov = self.camera_fovs[camera_name]
+                    slider.setValue(initial_fov)
+                    label.setText(str(initial_fov))
+                    
+                    # Connect slider to update function using lambda to capture camera name
+                    slider.valueChanged.connect(
+                        lambda value, cam=camera_name, lbl=label: self.on_fov_changed(cam, value, lbl)
+                    )
+                    
+                    logger.info(f"Connected FOV slider for {camera_name}, initial value: {initial_fov}")
+                else:
+                    logger.warning(f"Could not find slider '{slider_name}' or label '{config['label']}'")
+
+        except Exception as e:
+            logger.error(f"Error setting up FOV sliders: {e}")
+
+    def on_fov_changed(self, camera_name, fov_value, label):
+        """Handle FOV slider value changes"""
+        try:
+            # Update the camera's FOV value
+            self.camera_fovs[camera_name] = fov_value
+            
+            # Update the label to show current value
+            label.setText(str(fov_value))
+            
+            logger.info(f"FOV for {camera_name} changed to {fov_value} degrees")
+            
+            # Optionally trigger immediate update of displays
+            # Note: This might cause frequent updates while dragging the slider
+            # You can uncomment this if you want real-time updates
+            # self.update_displays()
+            
+        except Exception as e:
+            logger.error(f"Error handling FOV change for {camera_name}: {e}")
+
+    def get_camera_fov(self, camera_name):
+        """Get the current FOV for a specific camera"""
+        return self.camera_fovs.get(camera_name, 20)  # Default to 20 if not found
+
     def generate_module_temperature_names(self):
         objs = ["SSA", "MPA"]
         hybrids = ["H0", "H1"]
@@ -1118,6 +1188,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
         """Start monitoring module temperatures via MQTT"""
         try:
             self.mqtt_client = ModuleTempMQTT(self.system)
+            self.mqtt_client.gui_reference = self
             self.mqtt_client.loop_start()
         except Exception as e:
             logger.error(f"Error starting temperature monitoring: {e}")
