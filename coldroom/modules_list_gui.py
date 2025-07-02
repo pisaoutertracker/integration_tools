@@ -77,9 +77,6 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
         # Create a message box for displaying the camera status
         self.camera_status_message_box = QtWidgets.QMessageBox()
-        self.camera_status_message_box.setWindowTitle("Camera Status")
-        self.camera_status_message_box.setIcon(QtWidgets.QMessageBox.Information)
-        self.camera_status_message_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
 
     # Modified power control methods to use queue
     def turn_on_lv_for_selected_modules(self):
@@ -575,9 +572,9 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
         # Move the camera to the angular position using the thermal camera system
         if thermal_camera_system:
-            self.camera_status_message_box.setText(
-                f"Moving camera {selected_camera} to {angular_position}° for module {module_name} (side {side})"
-            )
+            # self.camera_status_message_box.setText(
+            #     f"Moving camera {selected_camera} to {angular_position}° for module {module_name} (side {side})"
+            # )
             # self.camera_status_message_box.exec_()
             self._move_camera_to_angular_position(thermal_camera_system, selected_camera, angular_position)
         else:
@@ -593,6 +590,19 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
         return camera_pairs.get(side, None)
 
+    def __fill_message_box(self, camera_pair, angular_position):
+        """Fill the message box with camera selection options based on angular position."""
+        self.camera_status_message_box = QtWidgets.QMessageBox()
+        self.camera_status_message_box.setWindowTitle("Camera Selection")
+        self.camera_status_message_box.setIcon(QtWidgets.QMessageBox.Information)
+        self.camera_status_message_box.setText(f"Select camera for angular position {angular_position}°:")
+        for camera_name in camera_pair:
+            shown_camera_name = camera_name.replace("camera", "Camera ")
+            self.camera_status_message_box.addButton(shown_camera_name, QtWidgets.QMessageBox.AcceptRole)
+        self.camera_status_message_box.setStandardButtons(QtWidgets.QMessageBox.Cancel)
+        self.camera_status_message_box.setDefaultButton(QtWidgets.QMessageBox.Cancel)
+        self.camera_status_message_box.setEscapeButton(QtWidgets.QMessageBox.Cancel)
+
     def _select_camera_for_position(self, camera_pair, angular_position):
         """Select the appropriate camera based on angular position within the pair."""
 
@@ -602,13 +612,21 @@ class ModulesListTab(QtWidgets.QMainWindow):
         # Get camera names from the pair
         camera_names = list(camera_pair.keys())
 
-        # Simple logic: use first camera for 0-180°, second for 180-360°
-        # Adjust this logic based on your actual camera positioning
-        if normalized_angle <= 180:
-            selected_camera = camera_names[0]
-        else:
-            selected_camera = camera_names[1]
+        # # Simple logic: use first camera for 0-180°, second for 180-360°
+        # # Adjust this logic based on your actual camera positioning
+        # if normalized_angle <= 180:
+        #     selected_camera = camera_names[0]
+        # else:
+        #     selected_camera = camera_names[1]
 
+        # Open a dialog to select camera based on angular position
+        self.__fill_message_box(camera_pair, normalized_angle)
+        result = self.camera_status_message_box.exec_()
+        if result == QtWidgets.QMessageBox.Cancel:
+            logger.debug("Camera selection cancelled by user.")
+            return None
+        selected_camera = self.camera_status_message_box.clickedButton().text()
+        selected_camera = selected_camera.replace("Camera ", "camera")
         return camera_pair[selected_camera]
 
     def _move_camera_to_angular_position(self, thermal_camera, camera_id, angular_position):
