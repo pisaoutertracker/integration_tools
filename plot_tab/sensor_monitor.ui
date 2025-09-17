@@ -6,59 +6,201 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1000</width>
-    <height>700</height>
+    <width>1400</width>
+    <height>900</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Sensor Data Monitor</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout">
+   <layout class="QHBoxLayout" name="mainLayout">
     <item>
-     <widget class="QTabWidget" name="tabWidget">
-      <property name="currentIndex">
-       <number>0</number>
+     <widget class="QSplitter" name="splitter">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
       </property>
-      <widget class="QWidget" name="hierarchyTab">
-       <attribute name="title">
-        <string>Sensor Hierarchy</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_2">
+      <widget class="QWidget" name="leftPanel">
+       <property name="minimumSize">
+        <size>
+         <width>300</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>350</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <layout class="QVBoxLayout" name="leftLayout">
         <item>
-         <widget class="QPushButton" name="refreshButton">
-          <property name="text">
-           <string>Refresh Sensor List</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QTreeWidget" name="sensorTree">
-          <property name="headerHidden">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="statusLabel">
-          <property name="text">
-           <string>Status: Ready</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </widget>
-      <widget class="QWidget" name="plotTab">
-       <attribute name="title">
-        <string>Plot Data</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="verticalLayout_3">
-        <item>
-         <widget class="QGroupBox" name="selectionGroup">
+         <widget class="QGroupBox" name="controlGroup">
           <property name="title">
-           <string>Sensor Selection</string>
+           <string>Control Panel</string>
           </property>
-          <layout class="QHBoxLayout" name="horizontalLayout">
+          <layout class="QVBoxLayout" name="controlLayout">
+           <item>
+            <layout class="QHBoxLayout" name="refreshLayout">
+             <item>
+              <widget class="QPushButton" name="refreshButton">
+               <property name="text">
+                <string>Refresh Data</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="autoRefreshButton">
+               <property name="text">
+                <string>Auto: OFF</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="intervalLayout">
+             <item>
+              <widget class="QLabel" name="intervalLabel">
+               <property name="text">
+                <string>Interval (s):</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSpinBox" name="intervalSpinBox">
+               <property name="minimum">
+                <number>5</number>
+               </property>
+               <property name="maximum">
+                <number>300</number>
+               </property>
+               <property name="value">
+                <number>30</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="timeGroup">
+          <property name="title">
+           <string>Time Range</string>
+          </property>
+          <layout class="QVBoxLayout" name="timeLayout">
+           <item>
+            <layout class="QHBoxLayout" name="timeButtonsLayout">
+             <item>
+              <widget class="QPushButton" name="lastHourButton">
+               <property name="text">
+                <string>1H</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="last6HoursButton">
+               <property name="text">
+                <string>6H</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="last24HoursButton">
+               <property name="text">
+                <string>24H</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QGridLayout" name="timeGridLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="startLabel">
+               <property name="text">
+                <string>Start:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QDateTimeEdit" name="startTime">
+               <property name="displayFormat">
+                <string>MM-dd hh:mm</string>
+               </property>
+               <property name="calendarPopup">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="endLabel">
+               <property name="text">
+                <string>End:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QDateTimeEdit" name="endTime">
+               <property name="displayFormat">
+                <string>MM-dd hh:mm</string>
+               </property>
+               <property name="calendarPopup">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="plotSelectionGroup">
+          <property name="title">
+           <string>Plot Selection</string>
+          </property>
+          <layout class="QVBoxLayout" name="plotSelectionLayout">
+           <item>
+            <layout class="QHBoxLayout" name="plotSelectorLayout">
+             <item>
+              <widget class="QLabel" name="plotLabel">
+               <property name="text">
+                <string>Plot:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="plotCombo">
+               <item>
+                <property name="text">
+                 <string>Plot 1</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Plot 2</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Plot 3</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Plot 4</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+            </layout>
+           </item>
            <item>
             <layout class="QVBoxLayout" name="topicLayout">
              <item>
@@ -84,6 +226,12 @@
              </item>
              <item>
               <widget class="QListWidget" name="sensorList">
+               <property name="maximumSize">
+                <size>
+                 <width>16777215</width>
+                 <height>100</height>
+                </size>
+               </property>
                <property name="selectionMode">
                 <enum>QAbstractItemView::MultiSelection</enum>
                </property>
@@ -91,88 +239,32 @@
              </item>
             </layout>
            </item>
-          </layout>
-         </widget>
-        </item>
-        <item>
-         <widget class="QGroupBox" name="timeGroup">
-          <property name="title">
-           <string>Time Range</string>
-          </property>
-          <layout class="QGridLayout" name="gridLayout">
-           <item row="0" column="0">
-            <widget class="QLabel" name="startLabel">
+           <item>
+            <widget class="QPushButton" name="updatePlotButton">
              <property name="text">
-              <string>Start Time:</string>
+              <string>Update Selected Plot</string>
              </property>
             </widget>
-           </item>
-           <item row="0" column="1">
-            <widget class="QDateTimeEdit" name="startTime">
-             <property name="displayFormat">
-              <string>yyyy-MM-dd hh:mm:ss</string>
-             </property>
-             <property name="calendarPopup">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="endLabel">
-             <property name="text">
-              <string>End Time:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1">
-            <widget class="QDateTimeEdit" name="endTime">
-             <property name="displayFormat">
-              <string>yyyy-MM-dd hh:mm:ss</string>
-             </property>
-             <property name="calendarPopup">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="0" colspan="2">
-            <layout class="QHBoxLayout" name="timeButtonsLayout">
-             <item>
-              <widget class="QPushButton" name="lastHourButton">
-               <property name="text">
-                <string>Last Hour</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="last24HoursButton">
-               <property name="text">
-                <string>Last 24 Hours</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
            </item>
           </layout>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="plotButton">
-          <property name="text">
-           <string>Plot Selected Sensors</string>
+         <widget class="QTreeWidget" name="sensorTree">
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>150</height>
+           </size>
           </property>
+          <property name="headerHidden">
+           <bool>true</bool>
+          </property>
+          <column>
+           <property name="text">
+            <string notr="true">1</string>
+           </property>
+          </column>
          </widget>
         </item>
         <item>
@@ -190,17 +282,186 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="plotPanel">
+       <layout class="QGridLayout" name="plotGridLayout">
+        <item row="0" column="0">
+         <widget class="QGroupBox" name="fixedPlot1Group">
+          <property name="minimumSize">
+           <size>
+            <width>400</width>
+            <height>250</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>Fixed Plot 1</string>
+          </property>
+          <layout class="QVBoxLayout" name="fixedPlot1Layout">
+           <item>
+            <widget class="QWidget" name="plotWidget1" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>380</width>
+               <height>200</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QGroupBox" name="fixedPlot2Group">
+          <property name="minimumSize">
+           <size>
+            <width>400</width>
+            <height>250</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>Fixed Plot 2</string>
+          </property>
+          <layout class="QVBoxLayout" name="fixedPlot2Layout">
+           <item>
+            <widget class="QWidget" name="plotWidget2" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>380</width>
+               <height>200</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QGroupBox" name="changePlot1Group">
+          <property name="minimumSize">
+           <size>
+            <width>400</width>
+            <height>250</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>Plot 1</string>
+          </property>
+          <layout class="QVBoxLayout" name="changePlot1Layout">
+           <item>
+            <widget class="QWidget" name="plotWidget3" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>380</width>
+               <height>200</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QGroupBox" name="changePlot2Group">
+          <property name="minimumSize">
+           <size>
+            <width>400</width>
+            <height>250</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>Plot 2</string>
+          </property>
+          <layout class="QVBoxLayout" name="changePlot2Layout">
+           <item>
+            <widget class="QWidget" name="plotWidget4" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>380</width>
+               <height>200</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QGroupBox" name="changePlot3Group">
+          <property name="minimumSize">
+           <size>
+            <width>400</width>
+            <height>250</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>Plot 3</string>
+          </property>
+          <layout class="QVBoxLayout" name="changePlot3Layout">
+           <item>
+            <widget class="QWidget" name="plotWidget5" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>380</width>
+               <height>200</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QGroupBox" name="changePlot4Group">
+          <property name="minimumSize">
+           <size>
+            <width>400</width>
+            <height>250</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>Plot 4</string>
+          </property>
+          <layout class="QVBoxLayout" name="changePlot4Layout">
+           <item>
+            <widget class="QWidget" name="plotWidget6" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>380</width>
+               <height>200</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
    </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar">
+   <widget class="QLabel" name="statusLabel">
+    <property name="geometry">
+     <rect>
+      <x>0</x>
+      <y>0</y>
+      <width>100</width>
+      <height>30</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Status: Ready</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1000</width>
-     <height>22</height>
+     <width>1400</width>
+     <height>23</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -218,7 +479,6 @@
    <addaction name="menuFile"/>
    <addaction name="menuHelp"/>
   </widget>
-  <widget class="QStatusBar" name="statusbar"/>
   <action name="actionExit">
    <property name="text">
     <string>Exit</string>
