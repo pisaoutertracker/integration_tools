@@ -35,6 +35,7 @@ class MainApp(QtWidgets.QMainWindow):
         # Create system instance to hold references to all components
         self.system = System()
         self.mounted_modules = None
+        self.number_of_modules = 0  # Add this line
         # Set up the main UI
         self.setup_ui()
 
@@ -179,6 +180,7 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info("UI setup completed")
 
     def get_ring_id(self):
+        self.number_of_modules = 0  # Add default at the start
         ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
         if os.path.exists(ring_history_file):
             with open(ring_history_file, "r") as f:
