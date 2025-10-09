@@ -137,12 +137,20 @@ def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
         door_closed = not check_door_status(system_status)
         if not door_closed and not (hv_safe or dew_point_safe):
             log_msg += f"!!! Warning: Door open when conditions are unsafe !!!\n"
+            
+        #5. Check marta status
+        marta_is_good = check_marta_safe_to_run(system_status) # Returns (bool, log_msg)
+        marta_is_good = marta_is_good[0]
+        log_msg += f"Marta good to run: {marta_is_good}\n"
+        if marta_is_good is False:
+            log_msg += f"!!! Warning: Marta not good to run !!!\n"
 
         # It's safe to open the door if:
         # - Dew point conditions are safe
         # - High voltage is safe
         # - Light is off
         # - Door is currently closed
+        # - Marta is good to run
         is_safe = dew_point_safe and hv_safe
         return is_safe, log_msg
 
@@ -170,4 +178,52 @@ def check_light_safe_to_turn_on(system_status, caen_ch_status, used_channels):
 
     except Exception as e:
         logger.debug(f"Error in check_light_safe_to_turn_on: {str(e)}")
+        return False  # Conservative approach - if we can't check, assume it's unsafe
+
+def check_marta_expired(elapsed_time, threshold=300):
+    return elapsed_time > threshold
+
+def check_marta_working(system_status):
+    # try:
+    #     if "marta" not in system_status:
+    #         return False  # Conservative approach
+    #     marta_status = system_status["marta"].get("status", "").lower()
+    #     return marta_status == "working"
+    # except Exception as e:
+    #     logger.debug(f"Error in check_marta_working: {str(e)}")
+    #     return False  # Conservative approach
+    
+    # Placeholder until we have a better way to check if MARTA is working
+    
+    working = False # Assume not working, change to true if you know it's working
+    if working == True:
+        return True
+    else:
+        return False
+    
+
+def check_marta_safe_to_run(system_status):
+    """
+    Check if it's safe to run MARTA based on dew point conditions.
+    Returns True if it's safe to run MARTA, False otherwise.
+    """
+    log_msg = ""
+    try:
+        # Check if we have all necessary data
+        if "marta" not in system_status:
+            return False  # Conservative approach - if we can't check, assume it's unsafe
+
+        # Check if dew point conditions are safe
+        marta_expired = check_marta_expired(system_status["cleanroom"]["elapsed_time"]) # Using cleanroom elapsed time as a proxy for Marta data, we should have a separate timestamp for Marta data
+        if marta_expired:
+            marta_safe = False 
+            log_msg += f"!!! Warning: Marta data expired, not able to if Marta Working !!!\n"
+        else:
+            marta_safe = check_marta_working(system_status)
+            log_msg += f"Marta working status: {marta_safe}"
+
+        return marta_safe, log_msg
+    
+    except Exception as e:
+        logger.debug(f"Error in check_marta_safe_to_run: {str(e)}")
         return False  # Conservative approach - if we can't check, assume it's unsafe
