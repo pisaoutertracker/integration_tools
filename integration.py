@@ -1787,7 +1787,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Update only the relevant fields while preserving others
         module_data["mounted_on"] = mounted_on
         module_data["status"] = "MOUNTED"
-        
+        module_data["position"] = "OnDet@ " + mounted_on
         # Remove _id from mounted_on 
         if "_id" in module_data:
             del module_data["_id"]
