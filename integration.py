@@ -1096,30 +1096,14 @@ class MainApp(integration_gui.Ui_MainWindow):
     def disconnect_connection(self, cable_id, port):
         """Disconnect a cable's detSide connections"""
         try:
-            # Get current connections
-            response = requests.post(
-                f"{self.dbEndpointLE.text()}/snapshot",
-                json={"cable": cable_id, "side": "detSide"}
-            )
-            if response.status_code == 200:
-                snapshot = response.json()
-                for line in snapshot:
-                    if snapshot[line]["connections"]:
-                        # Get the connected module
-                        connected_module = snapshot[line]["connections"][-1]["cable"]
-                        # Disconnect it
                         data = {
-                            "cable2": cable_id,
-                            "cable1": connected_module,
-                            "port2": port ,
-                            "port1": port if port=="power" else "fiber"
+                            "cable": cable_id,
                         }
                         self.make_api_request(
-                            endpoint="disconnect",
+                            endpoint="disconnect_all_detSide",
                             method="POST",
                             data=data
                         )
-                        return #only disconnect the first
         except Exception as e:
             self.log_output(f"Error disconnecting: {str(e)}")
 
@@ -1200,46 +1184,16 @@ class MainApp(integration_gui.Ui_MainWindow):
         """Disconnect all connections for a module"""
         try:
             self.log_output(f"Disconnecting module: {module_id}")
-            
-            # Get module data directly from the API
-            response = requests.get(self.get_api_url(f'modules/{module_id}'))
-            if response.status_code != 200:
-                raise Exception(f"Failed to get module data: {response.status_code}")
-                
-            module_data = response.json()
-            crate_side = module_data.get("crateSide", {})
-            
-            # Get unique cables from crateSide connections
-            # Each line in crateSide contains a list where first element is the cable name
-            connected_cables = set()
-            for line_connections in crate_side.values():
-                if line_connections and len(line_connections) > 0:
-                    connected_cables.add(line_connections[0])
-            
-            if not connected_cables:
-                self.log_output(f"No connections found for module {module_id}")
-                return
-                
-            self.log_output(f"Found connections to disconnect: {connected_cables}")
-            
-            # Disconnect each cable
-            for cable in connected_cables:
-                data = {
-                    "cable1": module_id,
-                    "cable2": cable
+            data = {
+                    "cable": module_id,
                 }
                 
-                success, result = self.make_api_request(
-                    endpoint="disconnect",
+            success, result = self.make_api_request(
+                    endpoint="disconnect_all_crateSide",
                     method="POST",
                     data=data
                 )
                 
-                if success:
-                    self.log_output(f"Successfully disconnected {cable}")
-                else:
-                    self.log_output(f"Failed to disconnect {cable}")
-            
             # Update the display
             self.update_module_list()
             self.update_connection_status()

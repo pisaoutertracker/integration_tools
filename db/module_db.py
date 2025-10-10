@@ -608,27 +608,16 @@ class ModuleDB(QWidget):
         """Disconnect the current module"""
         
         try:
-            # Get current module data
-            success, current_data = self.make_api_request(f'modules/{m}')
-            if not success:
-                self.show_error_dialog(f"Error fetching module: {current_data}")
-                return
-            
-            # Clear connections and mounted_on fields
-            current_data['connections'] = {}
-            current_data['mounted_on'] = ''
-            
-            # Remove _id if present
-            if '_id' in current_data:
-                del current_data['_id']
-            
-            # Update module in database
+            data = {
+                    "cable": m,
+                }
+
             success, result = self.make_api_request(
-                endpoint=f'modules/{m}',
-                method='PUT',
-                data=current_data
-            )
-            
+                    endpoint="disconnect_all_crateSide",
+                    method="POST",
+                    data=data
+                )
+ 
             if success:
                 self.show_info_dialog("Module disconnected successfully")
                 self.update_module_list()  # Refresh the module list
