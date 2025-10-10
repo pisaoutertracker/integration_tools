@@ -18,6 +18,7 @@ from coldroom.safety import (
     check_light_status,
     check_door_status,
     check_light_safe_to_turn_on,
+    check_marta_safe
 )
 from caen.caenGUIall import caenGUIall
 from db.module_db import ModuleDB
@@ -159,6 +160,7 @@ class MainApp(QtWidgets.QMainWindow):
         self.tab_widget.addTab(self.module_db.ui.moduleDetailsTab, "Module Details")
         self.module_db.ui.viewDetailsPB.clicked.connect(lambda: self.tab_widget.setCurrentIndex(self.tab_widget.indexOf(self.module_db.ui.moduleDetailsTab))) 
         self.module_db.ui.selectModulePB.setEnabled(False)
+        self.modules_list_tab.db_url = self.module_db.db_url
 
         # Load settings tab from UI file
         self.settings_tab = QtWidgets.QWidget()
@@ -818,6 +820,7 @@ class MainApp(QtWidgets.QMainWindow):
             # =========================================================================================== MARTA    ===========================================================================================
             # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
+            self.modules_list_tab.marta_safe, self.modules_list_tab.marta_log_msg = check_marta_safe(self.system.status)
             # Update MARTA CO2 Plant values
             if "marta" in self.system.status:
                 marta = self.system.status["marta"]

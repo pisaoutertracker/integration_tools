@@ -2,8 +2,11 @@ from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal
 import os
 import time
+from datetime import datetime
 from .command_worker import CommandWorker
 import logging
+import requests
+from .module_tests import TEST_SPECS_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +19,18 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.mounted_modules = {}
         self.caen = None  # Placeholder for CAEN object
         self.light_on = True  # Conservative approach, assume light is on
+        self.marta_safe = False  # Conservative approach, assume Marta is not safe
+        self.marta_log_msg = ""
         self.current_worker = None  # Placeholder for the current worker
         self.test_queue = []  # Queue for test commands
         self._show_test_results = True  # Control test result popups
         self.ring_id = ""  # Placeholder for ring ID
         self.thermal_camera = None  # Placeholder for thermal camera system
         self.module_temperature_tab = None  # Placeholder for module temperature tab
+        self.test_command = None  # Current test command
+        self.test_spec = None  # Current test specification\
+        self.current_session = None
+        self.db_url = None
 
         # Set column widths for better button visibility in Actions
         self.moduleList.setColumnWidth(0, 60)  # Position
@@ -51,7 +60,6 @@ class ModulesListTab(QtWidgets.QMainWindow):
         # Connect test control buttons
         self.start_test_all_button.clicked.connect(self.run_test_for_selected_modules)
         self.cancel_test_all_button.clicked.connect(self.stop_all_tests)
-        self.enter_test_cmd_button.clicked.connect(self.set_test_command)
         self.start_t_monitor_button.clicked.connect(
             lambda: self.start_temperature_monitoring(self.module_temperature_tab)
         )
@@ -59,39 +67,82 @@ class ModulesListTab(QtWidgets.QMainWindow):
             lambda: self.stop_temperature_monitoring(self.module_temperature_tab)
         )
 
+        # Tests Combobox
+        self.set_test_command()  # Initialize test command
+        self.select_test_combobox.clear()
+        self.select_test_combobox.addItems(list(TEST_SPECS_MAP.keys()))
+        self.select_test_combobox.currentIndexChanged.connect(self.set_test_command)
+
         # Message box setup (keep for HV safety warnings)
         self.message_box = QtWidgets.QMessageBox()
         self.message_box.setWindowTitle("Safety Warning")
         self.message_box.setIcon(QtWidgets.QMessageBox.Warning)
         self.message_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
 
-        # Test command persistence
-        self.test_command = None
-        self.test_command_history = os.path.join(os.path.dirname(__file__), "test_command_history.txt")
-        if os.path.exists(self.test_command_history):
-            with open(self.test_command_history, "r") as f:
-                lines = f.readlines()
-                if lines:
-                    self.test_command = lines[-1].strip()
-            self.test_cmd_le.setText(self.test_command)
-
         # Create a message box for displaying the camera status
         self.camera_status_message_box = QtWidgets.QMessageBox()
+
+    def get_session(self):
+        if self.current_session is None:
+            return self._new_session()
+        if (
+            self.current_session_operator != self.operator_le.text()
+            or self.current_session_comments != self.comments_le.text()
+        ):
+            return self._new_session()
+        return self.current_session
+
+    def _make_api_request(self, endpoint, method, data=None):
+        """Make API request and return result"""
+        url = f"{self.db_url.rstrip('/')}/{endpoint.lstrip('/')}"
+        try:
+            # Simulate API response for demonstration purposes
+            result = {"sessionName": "SIMULATED_SESSION_12345"} 
+            # response = requests.request(method=method.lower(), url=url, json=data if data else None)
+            # if response.status_code != 200 and response.status_code != 201:
+            #     logger.error(f"API Error ({response.status_code}): {response.text}")
+            #     return False, None
+            # result = response.json()
+            return True, result
+        except requests.RequestException as e:
+            logger.error(f"API Error: {str(e)}")
+            return False, str(e)
+
+    def _new_session(self):
+        session = {
+            "operator": self.operator_le.text(),
+            "description": f"INTEGRATION: {self.comments_le.text()}",
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "modulesList": list(self.mounted_modules.keys()),
+            "ringId": self.ring_id,
+        }
+        # create new session in DB
+        _, result = self._make_api_request("sessions", "POST", session)
+        self.current_session = result["sessionName"]
+        self.current_session_operator = self.operator_le.text()
+        self.current_session_comments = self.comments_le.text()
+        return self.current_session
 
     # Modified power control methods to use queue
     def turn_on_lv_for_selected_modules(self):
         """Turn on LV for all selected modules."""
+        if not self.marta_safe:
+            self.message_box.setText(f"MARTA not safe, cannot turn on LV:\n{self.marta_log_msg}")
+            self.message_box.exec_()
+            return
+
         for item in self.moduleList.selectedItems():
             module_name = item.text(1)
             if module_name in self.mounted_modules:
                 module_info = self.mounted_modules[module_name]
                 lv_channel = module_info.get("LV")
                 if lv_channel:
-                    self.caen_lv_on(lv_channel)
+                    self.caen_lv_on_wrap(lv_channel)
             time.sleep(0.1)
 
     def turn_off_lv_for_selected_modules(self):
         """Turn off LV for all selected modules."""
+
         for item in self.moduleList.selectedItems():
             module_name = item.text(1)
             if module_name in self.mounted_modules:
@@ -135,11 +186,16 @@ class ModulesListTab(QtWidgets.QMainWindow):
             self.message_box.exec_()
             return
         else:
-            self._add_caen_command_to_queue("on", channel)
+            self.caen.on(channel)
 
-    def caen_lv_on(self, channel):
-        """Queue LV on command."""
-        self.caen.on(channel)
+    def caen_lv_on_wrap(self, channel):
+        """Wrapper for LV on with safety check."""
+        if not self.marta_safe:
+            self.message_box.setText(f"MARTA not safe, cannot turn on LV:\n{self.marta_log_msg}")
+            self.message_box.exec_()
+            return
+        else:
+            self.caen.on(channel)
 
     def caen_lv_off(self, channel):
         """Queue LV off command."""
@@ -215,7 +271,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
                 # Use queued commands for buttons
                 btn_lv_on = QtWidgets.QPushButton("LV On")
-                btn_lv_on.clicked.connect(lambda checked, ch=module_info.get("LV"): self.caen_lv_on(ch))
+                btn_lv_on.clicked.connect(lambda checked, ch=module_info.get("LV"): self.caen_lv_on_wrap(ch))
 
                 btn_lv_off = QtWidgets.QPushButton("LV Off")
                 btn_lv_off.clicked.connect(lambda checked, ch=module_info.get("LV"): self.caen_lv_off(ch))
@@ -256,16 +312,15 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.update_timer.start(self.update_interval)
 
     def set_test_command(self):
-        """Set the test command from the input field."""
-        command = self.test_cmd_le.text().strip()
-        if os.path.exists(self.test_command_history):
-            mode = "a"
+        """Set the test command from the combobox selection."""
+        if not self.test_command:
+            self.test_command = list(TEST_SPECS_MAP.keys())[0]
+            self.test_spec
         else:
-            mode = "w"
-        with open(self.test_command_history, mode) as f:
-            f.write(command + "\n")
-        self.test_command = command
-        logger.debug(f"Test command set: {self.test_command}")
+            selected_test = self.select_test_combobox.currentText()
+            self.test_command = selected_test
+        self.test_spec = TEST_SPECS_MAP.get(self.test_command)
+        print(f"Test command set to: {self.test_command}")
 
     def run_test_for_selected_modules(self):
         """Run the test command for all selected modules."""
@@ -309,12 +364,12 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self._update_module_testing_status(module_name, "Running")
 
         # Create and configure worker
-        self.current_worker = CommandWorker(self.test_cmd_le.text())
+        self.current_worker = CommandWorker(self.test_spec.command)
         self.current_worker.placeholders = {
             "module_id": module_name,
             "ring_id": self.ring_id,
             "fiber_endpoint": self.mounted_modules[module_name].get("FC7", "N/A"),
-            "session": "1",
+            "session": self.get_session(),
         }
 
         # Connect signals and start
@@ -334,6 +389,7 @@ class ModulesListTab(QtWidgets.QMainWindow):
         if success:
             logger.debug(f"Test completed successfully for module: {module_name}")
             logger.debug(f"Output: {stdout}")
+            self.test_spec.process_result(stdout)
         else:
             logger.debug(f"Test failed for module: {module_name}")
             logger.debug(f"Error: {stderr}")
