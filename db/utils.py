@@ -36,6 +36,20 @@ def get_module(module_id, db_url="http://cmslabserver:5000"):
         print(f"Error making request to {url}: {str(e)}")
         return None
 
+def get_module_lpgbtVersion(module, db_url="http://cmslabserver:5000"):
+    # the version is under childer, PS Read-out Hybrid, details, ALPGBT_VERSION
+    if isinstance(module, str):
+        module = get_module(module, db_url)
+    if not module:
+        print(f"Module {module} not found.")
+        return ""
+    lpgbtVersion = "N/A"
+    if isinstance(module.get("children"), dict):
+        if isinstance(module.get("children").get("PS Read-out Hybrid"), dict):
+            if isinstance(module.get("children").get("PS Read-out Hybrid").get("details"), dict):
+                if module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_VERSION") is not None:
+                    lpgbtVersion = module.get("children").get("PS Read-out Hybrid").get("details").get("ALPGBT_VERSION")
+    return lpgbtVersion
 
 def get_module_speed(module, db_url="http://cmslabserver:5000"):
     # check if the name or the object is given
