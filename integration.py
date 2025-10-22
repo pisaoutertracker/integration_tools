@@ -517,7 +517,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.log_output("Connected to MQTT server")
                 mqtt_topic = self.mqttTopicLE.text()
                 self.log_output(f"Subscribing to topic: {mqtt_topic}")
-                client.subscribe([("/air/status", 0), (mqtt_topic, 0)])
+                client.subscribe([("/air/status", 0), (mqtt_topic, 0),("shellies/ventola/status/switch:0",0)])
             else:
                 self.log_output(f"MQTT Connection failed with code {rc}")
         except Exception as e:
@@ -535,7 +535,15 @@ class MainApp(integration_gui.Ui_MainWindow):
     def on_mqtt_message(self, client, userdata, msg):
         """Handle MQTT messages with error protection"""
 #        print(msg.topic)
-        if msg.topic == "/air/status":
+        if msg.topic == "shellies/ventola/status/switch:0" : 
+            j=json.loads(msg.payload) 
+            print(j)
+            if j.get("apower",0) > 0.1 :
+                self.airLed.setStyleSheet("background-color: green;")
+            else:
+                self.airLed.setStyleSheet("background-color: red;")
+  
+        elif msg.topic == "/air/status":
  #           print(msg.payload)
             if int(msg.payload)==1:
                 self.airLed.setStyleSheet("background-color: green;")
@@ -1878,7 +1886,8 @@ class MainApp(integration_gui.Ui_MainWindow):
     def control_air(self, turn_on):
         """Control air system"""
         self.air_state = turn_on
-        command = self.airCommandLE.text().format(airOn="1" if turn_on else "0")
+#       command = self.airCommandLE.text().format(airOn="1" if turn_on else "0")
+        command = self.airCommandLE.text().format(airOn="on" if turn_on else "off")
         
         def handle_air_result(success, stdout, stderr):
             pass
