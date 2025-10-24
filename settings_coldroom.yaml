@@ -3,6 +3,7 @@ Cleanroom:
 Coldroom:
   co2_sensor_topic: /ble/CO2-1
   mqtt_topic: /coldroom/#
+  shellies_air_topic: /shellies/coldroomair/status/switch:0
 MARTA:
   mqtt_topic: /MARTA/#
 ThermalCamera:
@@ -10,5 +11,4 @@ ThermalCamera:
   stitch_camera: camera0
 mqtt:
   broker: 192.168.0.45
-    #broker: pccmslab1
   port: 1883

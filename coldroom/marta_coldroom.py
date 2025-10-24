@@ -1,5 +1,6 @@
 import json
 import paho.mqtt.client as mqtt
+import requests
 import sys
 import logging
 import datetime
@@ -23,7 +24,10 @@ class MartaColdRoomMQTTClient:
         self.TOPIC_COLDROOM = system_obj.settings["Coldroom"]["mqtt_topic"]
         self.TOPIC_BASE_COLDROOM = self.TOPIC_COLDROOM.replace("#", "")
         self.TOPIC_CO2_SENSOR = system_obj.settings["Coldroom"]["co2_sensor_topic"]
+        self.TOPIC_COLDROOM_AIR = system_obj.settings["Coldroom"]["shellies_air_topic"]
         self.TOPIC_ALARM = "/alarm"
+        
+        self.DRY_AIR_BYPASS_URL = "http://192.168.0.204/relay/0?turn="
 
         logger.info("Initializing MQTT client with topics:")
         logger.info(f"Cleanroom topic: {self.TOPIC_CLEANROOM}")
@@ -87,6 +91,8 @@ class MartaColdRoomMQTTClient:
             logger.info(f"Subscribed to CO2 sensor topic: {self.TOPIC_CO2_SENSOR}")
             self._client.subscribe(self.TOPIC_ALARM)
             self.publish_cmd("refresh", "marta", "")
+            self._client.subscribe(self.TOPIC_COLDROOM_AIR)
+            logger.info(f"Subscribed to Coldroom Air topic: {self.TOPIC_COLDROOM_AIR}")
         else:
             logger.error(f"Connection failed with result code {rc}")
 
@@ -109,6 +115,12 @@ class MartaColdRoomMQTTClient:
             logger.info(f"Processing Cleanroom environment message: {msg.topic}")
             self.handle_cleanroom_status_message(msg.payload)
             logger.info(f"Updated Cleanroom status: {self._cleanroom_status}")
+
+        # Handle Coldroom Air messages
+        elif msg.topic.startswith(self.TOPIC_COLDROOM_AIR):  # Add Coldroom Air topic
+            logger.info("Processing Coldroom Air message")
+            self.handle_air_bypass_message(msg.payload)
+            logger.info(f"Updated Coldroom Air status: {self._coldroom_state.get('air_bypass_status', None)}")
 
         # Handle MARTA messages
         elif msg.topic.startswith(self.TOPIC_BASE_MARTA):  # Add MARTA topic
@@ -275,6 +287,16 @@ class MartaColdRoomMQTTClient:
         except Exception as e:
             logger.error(f"Error parsing Coldroom state message: {e}")
 
+    def handle_air_bypass_message(self, payload):
+        try:
+            data = json.loads(payload)
+            logger.debug(f"Parsed Coldroom air bypass data: {data}")
+            self._coldroom_state["air_bypass_status"] = data["apower"] > 0.1
+            self._system.update_status({"coldroom": self._coldroom_state})
+            print(self._system.status["coldroom"])
+        except Exception as e:
+            logger.error(f"Error parsing Coldroom air bypass message: {e}")
+
     ## Commands ##
 
     def set_temperature(self, payload):
@@ -313,6 +335,29 @@ class MartaColdRoomMQTTClient:
             self._system.update_status({"co2_sensor": self._co2_sensor_data})
         except Exception as e:
             logger.error(f"Error parsing CO2 sensor message: {e}")
+
+    ### Http Methods ###
+    def dry_air_bypass_on(self):
+        """Turn on dry air bypass via HTTP request to Shellie device"""
+        try:
+            response = requests.get(self.DRY_AIR_BYPASS_URL + "on", timeout=5)
+            if response.status_code == 200:
+                logger.info("Dry air bypass turned ON successfully")
+            else:
+                logger.error(f"Failed to turn ON dry air bypass, status code: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error turning ON dry air bypass: {e}")
+
+    def dry_air_bypass_off(self):
+        """Turn off dry air bypass via HTTP request to Shellie device"""
+        try:
+            response = requests.get(self.DRY_AIR_BYPASS_URL + "off", timeout=5)
+            if response.status_code == 200:
+                logger.info("Dry air bypass turned OFF successfully")
+            else:
+                logger.error(f"Failed to turn OFF dry air bypass, status code: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error turning OFF dry air bypass: {e}")
 
     ### Properties ###
     @property

@@ -18,7 +18,7 @@ from coldroom.safety import (
     check_light_status,
     check_door_status,
     check_light_safe_to_turn_on,
-    check_marta_safe
+    check_marta_safe,
 )
 from caen.caenGUIall import caenGUIall
 from db.module_db import ModuleDB
@@ -158,7 +158,9 @@ class MainApp(QtWidgets.QMainWindow):
         self.module_db = ModuleDB()
         self.tab_widget.addTab(self.module_db.ui.tab_2, "Module Inventory")
         self.tab_widget.addTab(self.module_db.ui.moduleDetailsTab, "Module Details")
-        self.module_db.ui.viewDetailsPB.clicked.connect(lambda: self.tab_widget.setCurrentIndex(self.tab_widget.indexOf(self.module_db.ui.moduleDetailsTab))) 
+        self.module_db.ui.viewDetailsPB.clicked.connect(
+            lambda: self.tab_widget.setCurrentIndex(self.tab_widget.indexOf(self.module_db.ui.moduleDetailsTab))
+        )
         self.module_db.ui.selectModulePB.setEnabled(False)
         self.modules_list_tab.db_url = self.module_db.db_url
 
@@ -280,14 +282,28 @@ class MainApp(QtWidgets.QMainWindow):
                 le.editingFinished.connect(lambda: le.setPlaceholderText(placeholder) if le.text() == "" else None)
 
         # Light controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
-        if button:
-            button.clicked.connect(self.toggle_coldroom_light)
+        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_light_on_PB").clicked.connect(
+            self.coldroom_light_on
+        )
+        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_light_off_PB").clicked.connect(
+            self.coldroom_light_off
+        )
 
         # Dry air controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_toggle_PB")
-        if button:
-            button.clicked.connect(self.toggle_coldroom_dry)
+        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_air_on_PB").clicked.connect(
+            self.coldroom_dry_air_on
+        )
+        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_air_off_PB").clicked.connect(
+            self.coldroom_dry_air_off
+        )
+
+        # Dry air bypass controls
+        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_air_bypass_on_PB").clicked.connect(
+            self.coldroom_dry_air_bypass_on
+        )
+        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_air_bypass_off_PB").clicked.connect(
+            self.coldroom_dry_air_bypass_off
+        )
 
         # Door controls
         button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_door_toggle_PB")
@@ -729,7 +745,7 @@ class MainApp(QtWidgets.QMainWindow):
                             is_safe = check_light_safe_to_turn_on(
                                 self.system.status, self.caen_tab.last_response, used_caen_channels
                             )
-                            button = central.findChild(QtWidgets.QPushButton, "coldroom_light_toggle_PB")
+                            button = central.findChild(QtWidgets.QPushButton, "coldroom_light_on_PB")
                             if not is_safe:
                                 logger.debug("not safe")
                                 if button:
@@ -739,6 +755,19 @@ class MainApp(QtWidgets.QMainWindow):
                                 if button:
                                     button.setEnabled(True)
                                     logger.debug("Enabled light button after safety check")
+                # Dry air bypass
+                dryair_bypass_led = central.findChild(QtWidgets.QFrame, "dryair_bypass_LED")
+                if dryair_bypass_led:
+                    if "air_bypass_status" in coldroom:
+                        dryair_bypass_led.setStyleSheet(
+                            "background-color: green;" if coldroom["air_bypass_status"] else "background-color: red;"
+                        )
+                        logger.debug(
+                            f"Updated dry air bypass LED: {'green' if coldroom['air_bypass_status'] else 'red'}"
+                        )
+                    else:
+                        dryair_bypass_led.setStyleSheet("background-color: yellow;")
+                        logger.debug("Set dry air bypass LED to grey (unknown status)")
 
                 # =========================================================================================== COLDROOM DOOR PROCESS ===========================================================================================
                 # Door status and LED
@@ -1069,13 +1098,35 @@ class MainApp(QtWidgets.QMainWindow):
             self.statusBar().showMessage(msg)
             logger.error(msg)
 
-    def toggle_coldroom_light(self):
-        coldroom = self.system.status.get("coldroom", {})
-        current_state = coldroom.get("light", 0)
-        new_state = 0 if current_state else 1
+    # def toggle_coldroom_light(self):
+    #     coldroom = self.system.status.get("coldroom", {})
+    #     current_state = coldroom.get("light", 0)
+    #     new_state = 0 if current_state else 1
+    #     if self.system._martacoldroom:
+    #         self.system._martacoldroom.control_light(str(new_state))
+    #         msg = f"Set coldroom light to {'ON' if new_state else 'OFF'}"
+    #         self.statusBar().showMessage(msg)
+    #         logger.info(msg)
+    #     else:
+    #         msg = "MARTA Cold Room client not initialized"
+    #         self.statusBar().showMessage(msg)
+    #         logger.error(msg)
+
+    def coldroom_light_on(self):
         if self.system._martacoldroom:
-            self.system._martacoldroom.control_light(str(new_state))
-            msg = f"Set coldroom light to {'ON' if new_state else 'OFF'}"
+            self.system._martacoldroom.control_light("1")
+            msg = "Set coldroom light to ON"
+            self.statusBar().showMessage(msg)
+            logger.info(msg)
+        else:
+            msg = "MARTA Cold Room client not initialized"
+            self.statusBar().showMessage(msg)
+            logger.error(msg)
+
+    def coldroom_light_off(self):
+        if self.system._martacoldroom:
+            self.system._martacoldroom.control_light("0")
+            msg = "Set coldroom light to OFF"
             self.statusBar().showMessage(msg)
             logger.info(msg)
         else:
@@ -1097,13 +1148,43 @@ class MainApp(QtWidgets.QMainWindow):
         #     self.statusBar().showMessage(msg)
         #     logger.error(msg)
 
-    def toggle_coldroom_dry(self):
-        coldroom = self.system.status.get("coldroom", {})
-        current_state = coldroom.get("dry_air_status", 0)
-        new_state = 0 if current_state else 1
+    def coldroom_dry_air_on(self):
         if self.system._martacoldroom:
-            self.system._martacoldroom.control_external_dry_air(str(new_state))
-            msg = f"Set external dry air to {'ON' if new_state else 'OFF'}"
+            self.system._martacoldroom.control_external_dry_air("1")
+            msg = "Set external dry air to ON"
+            self.statusBar().showMessage(msg)
+            logger.info(msg)
+        else:
+            msg = "MARTA Cold Room client not initialized"
+            self.statusBar().showMessage(msg)
+            logger.error(msg)
+
+    def coldroom_dry_air_off(self):
+        if self.system._martacoldroom:
+            self.system._martacoldroom.control_external_dry_air("0")
+            msg = "Set external dry air to OFF"
+            self.statusBar().showMessage(msg)
+            logger.info(msg)
+        else:
+            msg = "MARTA Cold Room client not initialized"
+            self.statusBar().showMessage(msg)
+            logger.error(msg)
+
+    def coldroom_dry_air_bypass_on(self):
+        if self.system._martacoldroom:
+            self.system._martacoldroom.dry_air_bypass_on()
+            msg = "Set dry air bypass to ON"
+            self.statusBar().showMessage(msg)
+            logger.info(msg)
+        else:
+            msg = "MARTA Cold Room client not initialized"
+            self.statusBar().showMessage(msg)
+            logger.error(msg)
+
+    def coldroom_dry_air_bypass_off(self):
+        if self.system._martacoldroom:
+            self.system._martacoldroom.dry_air_bypass_off()
+            msg = "Set dry air bypass to OFF"
             self.statusBar().showMessage(msg)
             logger.info(msg)
         else:
