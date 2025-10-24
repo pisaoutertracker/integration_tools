@@ -120,6 +120,7 @@ class Ui_ModuleDBWidget(object):
         self.verticalLayout.addWidget(self.tabWidget)
 
         self.retranslateUi(ModuleDBWidget)
+        self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(ModuleDBWidget)
 
     def retranslateUi(self, ModuleDBWidget):

@@ -94,7 +94,7 @@ class ModuleDB(QWidget):
         
         # Set column widths
         self.ui.treeWidget.setColumnWidth(0, 150)  # Name
-        self.ui.treeWidget.setColumnWidth(1, 100)  # Inventory Slot
+        self.ui.treeWidget.setColumnWidth(1, 70)  # Inventory Slot
         self.ui.treeWidget.setColumnWidth(2, 70)   # Speed
         self.ui.treeWidget.setColumnWidth(3, 70)   # Spacer
         self.ui.treeWidget.setColumnWidth(4, 100)  # Status
@@ -257,7 +257,8 @@ class ModuleDB(QWidget):
             # Add matching module to tree
             item = QTreeWidgetItem(self.ui.treeWidget)
             item.setText(0, module.get("moduleName", ""))
-            item.setText(1, module.get("inventorySlot", ""))
+#            item.setText(1, module.get("inventorySlot", ""))
+            item.setText(1, module.get("position",""))
             item.setText(2, module.get("speed", ""))
             item.setText(3, str(module.get("spacer", "")))
             item.setText(4, module.get("status",""))
@@ -293,7 +294,7 @@ class ModuleDB(QWidget):
                 layout.addWidget(disconnect_button)
                 self.ui.treeWidget.setItemWidget(item, 5, container)
             
-            item.setText(7, module.get("mounted_on", ""))
+            item.setText(8, module.get("mounted_on", ""))
             
         # Resize columns to content
         for i in range(self.ui.treeWidget.columnCount()):

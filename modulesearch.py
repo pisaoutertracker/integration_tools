@@ -23,5 +23,6 @@ def main():
         module= get_module(module_name)
         print(f"Mounted_on: {module.get('mounted_on', 'N/A')}")
         print(f"Speed: {get_module_speed(module)}")
+        print(f"lpGBT_Version: {get_module_lpgbtVersion(module)}")
 if __name__ == "__main__":
     main()
