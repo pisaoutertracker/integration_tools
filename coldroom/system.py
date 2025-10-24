@@ -34,7 +34,7 @@ class System:
         # Global variables
         self.BROKER = self._settings["mqtt"]["broker"]
         self.PORT = self._settings["mqtt"]["port"]
-        self._status = {"marta": {}, "coldroom": {}, "thermal_camera": {}, "caen": {}, "cleanroom": {}}
+        self._status = {"marta": {}, "coldroom": {}, "thermal_camera": {}, "caen": {}, "cleanroom": {}, "coldroomair": {}}
         self.safety_flags = {"door_locked": True, "sleep": True, "hv_safe": False}  # Default value to safest state
 
         # Thread control

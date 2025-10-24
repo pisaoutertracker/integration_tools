@@ -47,6 +47,7 @@ class MartaColdRoomMQTTClient:
         # Initialize status dictionaries
         self._marta_status = {}
         self._coldroom_state = {}
+        self._dry_air_bypass_status = None
         self._cleanroom_status = {}
         self._co2_sensor_data = {}
         self._current_topic = None
@@ -282,7 +283,6 @@ class MartaColdRoomMQTTClient:
             if "ch_humidity" in self._coldroom_state:
                 if "status" in self._coldroom_state["ch_humidity"]:
                     self._coldroom_state["humidity_control"] = self._coldroom_state["ch_humidity"]["status"]
-
             self._system.update_status({"coldroom": self._coldroom_state})
         except Exception as e:
             logger.error(f"Error parsing Coldroom state message: {e}")
@@ -291,9 +291,8 @@ class MartaColdRoomMQTTClient:
         try:
             data = json.loads(payload)
             logger.debug(f"Parsed Coldroom air bypass data: {data}")
-            self._coldroom_state["air_bypass_status"] = data["apower"] > 0.1
-            self._system.update_status({"coldroom": self._coldroom_state})
-            print(self._system.status["coldroom"])
+            self._dry_air_bypass_status = data["apower"] > 0.1
+            self._system._status["coldroomair"]["air_bypass_status"] = self._dry_air_bypass_status
         except Exception as e:
             logger.error(f"Error parsing Coldroom air bypass message: {e}")
 

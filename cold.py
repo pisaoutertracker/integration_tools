@@ -757,13 +757,14 @@ class MainApp(QtWidgets.QMainWindow):
                                     logger.debug("Enabled light button after safety check")
                 # Dry air bypass
                 dryair_bypass_led = central.findChild(QtWidgets.QFrame, "dryair_bypass_LED")
+                coldroom_air = self.system.status.get("coldroomair", {})
                 if dryair_bypass_led:
-                    if "air_bypass_status" in coldroom:
+                    if "air_bypass_status" in coldroom_air:
                         dryair_bypass_led.setStyleSheet(
-                            "background-color: green;" if coldroom["air_bypass_status"] else "background-color: red;"
+                            "background-color: green;" if coldroom_air["air_bypass_status"] else "background-color: red;"
                         )
                         logger.debug(
-                            f"Updated dry air bypass LED: {'green' if coldroom['air_bypass_status'] else 'red'}"
+                            f"Updated dry air bypass LED: {'green' if coldroom_air['air_bypass_status'] else 'red'}"
                         )
                     else:
                         dryair_bypass_led.setStyleSheet("background-color: yellow;")
