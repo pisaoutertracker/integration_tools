@@ -61,10 +61,10 @@ class ModulesListTab(QtWidgets.QMainWindow):
         self.start_test_all_button.clicked.connect(self.run_test_for_selected_modules)
         self.cancel_test_all_button.clicked.connect(self.stop_all_tests)
         self.start_t_monitor_button.clicked.connect(
-            lambda: self.start_temperature_monitoring(self.module_temperature_tab)
+            lambda: self.start_temperature_monitoring() #self.module_temperature_tab)
         )
         self.stop_t_monitor_button.clicked.connect(
-            lambda: self.stop_temperature_monitoring(self.module_temperature_tab)
+            lambda: self.stop_temperature_monitoring() #self.module_temperature_tab)
         )
 
         # Tests Combobox

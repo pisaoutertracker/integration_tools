@@ -200,6 +200,7 @@ class ModuleDB(QWidget):
         self.ui.treeWidget.clear()
         
         for module in self.all_modules:
+            print(module["moduleName"])
             # Get module speed
             module_speed = ""
             if "_5_" in module.get("moduleName", "") or "_05_" in module.get("moduleName", "") or "_5-" in module.get("moduleName", "") or "_05-" in module.get("moduleName", ""):
@@ -224,17 +225,18 @@ class ModuleDB(QWidget):
             fields = module.get("moduleName", "").split("_")
             spacer = fields[1] if len(fields) > 2 else ""
             module["spacer"] = spacer
-            
-            if not "Pisa" in module.get("Current Center",""):
+            if not "Pisa" in module.get("details",{}).get("LOCATION",""):
                 continue 
+            print("In Pisa")
             # Apply all filters
             if search_text and search_text not in module.get('moduleName', ''):
                 continue
+            print("search ok")
             
             speed = self.ui.speedCB.currentText()
             if speed != 'any' and module_speed != speed:
                 continue
-            
+            print("Speed ok")
             spacer_filter = self.ui.spacerCB.currentText()
             spacer_dict = {
                 "4.0mm": "40",
@@ -245,6 +247,7 @@ class ModuleDB(QWidget):
             spacer_filter = spacer_dict[spacer_filter]
             if spacer_filter != 'any' and spacer != spacer_filter:
                 continue
+            print("Spacer ok")
             
             grade = self.ui.spacerCB_2.currentText()
             if grade != 'any' and module.get('grade') != grade:

@@ -558,7 +558,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             
             # Update image plot
             self.im.set_data(np.array(flo_arr).reshape(24, 32))
-            self.im.set_clim(18, 30)
+            self.im.set_clim(18, 35)
             
             # Update trend plot
             if len(self.time) == 0:
