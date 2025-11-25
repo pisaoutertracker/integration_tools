@@ -84,7 +84,7 @@ class CAENQueryThread(QThread):
     dataReady = pyqtSignal(dict)  # Emitted when parsed data is ready
     error = pyqtSignal(str)       # Emitted when an error occurs
 
-    def __init__(self, ip="192.168.404.45", port=7000):
+    def __init__(self, ip="192.168.0.45", port=7000):
         super().__init__()
         self.ip = ip
         self.port = port
@@ -153,7 +153,7 @@ class caenGUI8LV(QWidget):
     - Current setpoint QLineEdit + 'Set I' button
     """
 
-    def __init__(self, ip="192.168.404.45", port=7000):
+    def __init__(self, ip="192.168.0.45", port=7000):
         super().__init__()
     
         # Create timer for periodic update
@@ -205,8 +205,8 @@ class caenGUI8LV(QWidget):
         self.enable_current_checkbox.stateChanged.connect(self.toggle_current_setting)
         self.main_layout.addWidget(self.enable_current_checkbox)
 
-        # Define 8 LV channels: LV15.0 ... LV15.7
-        for i in range(8):
+        # Define 8 LV channels: LV15.1 ... LV15.8
+        for i in range(1,9):
             self.channels.append(f"LV15.{i}")
 
         for channel in self.channels:
@@ -399,7 +399,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ip",
         type=str,
-        default="192.168.404.45",
+        default="192.168.0.45",
         help="IP address of the CAEN server",
     )
     parser.add_argument(
