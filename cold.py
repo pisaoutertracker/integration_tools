@@ -21,6 +21,7 @@ from coldroom.safety import (
     check_marta_safe,
 )
 from caen.caenGUIall import caenGUIall
+from Inner_tracker_GUI.caenGUIall_v2 import caenGUI8LV
 from db.module_db import ModuleDB
 from db.utils import get_modules_on_ring, get_module_endpoints, get_module_speed, get_module_fuse_id, get_module
 
@@ -150,7 +151,7 @@ class MainApp(QtWidgets.QMainWindow):
         self.module_temperatures_tab = ModuleTemperaturesTAB(self.system)
         self.tab_widget.addTab(self.module_temperatures_tab, "Module Temperatures")
 
-        # Add CAEN tab
+        # Add OT_CAEN tab
         self.caen_tab = caenGUIall()
         self.tab_widget.addTab(self.caen_tab, "CAEN")
 
@@ -169,6 +170,10 @@ class MainApp(QtWidgets.QMainWindow):
         settings_ui_file = os.path.join(os.path.dirname(__file__), "coldroom", "settings_coldroom.ui")
         uic.loadUi(settings_ui_file, self.settings_tab)
         self.tab_widget.addTab(self.settings_tab, "Settings")
+
+        # Add IT_CAEN tab
+        self.IT_caen_tab = caenGUI8LV()
+        self.tab_widget.addTab(self.IT_caen_tab, "IT CAEN")
 
         # Pre-fill settings with values from system
         self.load_settings_to_ui()
