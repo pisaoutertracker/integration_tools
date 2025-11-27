@@ -381,7 +381,7 @@ class caenGUI8LV(QWidget):
 
         # Adjust "SetCurrent" to your actual server protocol if needed.
         message = (
-            f"SetCurrent,PowerSupplyId:caen,ChannelId:{channel},Value:{value}"
+            f"SetCurrent,PowerSupplyId:caen,ChannelId:{channel},Current:{value}"
         )
         print(message)
         self.queryThread.setup_query(message, receive=False)
