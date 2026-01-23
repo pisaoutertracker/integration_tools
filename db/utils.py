@@ -1,6 +1,22 @@
 import requests
 
 
+def get_module_name_from_fc7(fc7, optical_group, db_url="http://cmslabserver:5000"):
+    """Get the module name from the FC7 and optical group."""
+    url = f"{db_url}/snapshot"
+    response = requests.post(url, json={"cable": fc7, "port": optical_group, "side": "detSide"})
+    if response.status_code == 200:
+        snapshot = response.json()
+        for line in snapshot:
+            if snapshot[line]["connections"]:
+                last_conn = snapshot[line]["connections"][-1]
+                #{'cable': 'PS_40_IBA-10003', 'line': 1, 'det_port': [], 'crate_port': ['fiber']}
+                #{'cable': 'PS_40_IBA-10003', 'line': 2, 'det_port': [], 'crate_port': ['fiber']}   
+                if 'fiber' in last_conn["crate_port"]:
+                    return last_conn["cable"]
+    return None
+
+
 def get_modules_on_ring(ring_id, db_url="http://cmslabserver:5000"):
     """Get the modules on a specific ring from the database snapshot."""
     url = f"{db_url}/generic_module_query"
