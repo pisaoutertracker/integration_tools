@@ -97,12 +97,12 @@ class ModulesListTab(QtWidgets.QMainWindow):
         url = f"{self.db_url.rstrip('/')}/{endpoint.lstrip('/')}"
         try:
             # Simulate API response for demonstration purposes
-            result = {"sessionName": "SIMULATED_SESSION_12345"} 
-            # response = requests.request(method=method.lower(), url=url, json=data if data else None)
-            # if response.status_code != 200 and response.status_code != 201:
-            #     logger.error(f"API Error ({response.status_code}): {response.text}")
-            #     return False, None
-            # result = response.json()
+            #result = {"sessionName": "SIMULATED_SESSION_12345"} 
+            response = requests.request(method=method.lower(), url=url, json=data if data else None)
+            if response.status_code != 200 and response.status_code != 201:
+                logger.error(f"API Error ({response.status_code}): {response.text}")
+                return False, None
+            result = response.json()
             return True, result
         except requests.RequestException as e:
             logger.error(f"API Error: {str(e)}")
@@ -324,6 +324,10 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
     def run_test_for_selected_modules(self):
         """Run the test command for all selected modules."""
+        #check if operator field is  non empty
+        if not self.operator_le.text().strip():
+            self._show_message("Please enter operator name before starting a test.")
+            return
         selected_modules = [item.text(1) for item in self.moduleList.selectedItems()]
         if not selected_modules:
             self._show_message("No modules selected for testing.")
@@ -437,6 +441,10 @@ class ModulesListTab(QtWidgets.QMainWindow):
 
     def start_single_module_test(self, module_name):
         """Start test for a single module via button click."""
+        #check if operator field is  non empty
+#        if not self.operator_field.text().strip():
+#            self._show_message("Please enter operator name before starting a test.")
+            
         if self._add_module_to_queue(module_name):
             logger.debug(f"Added module {module_name} to test queue via button click")
             self.process_test_queue()

@@ -1223,7 +1223,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
                 for mounted_module, mounted_module_info in self.mounted_modules.items():
                     mounted_module_fuse_id = mounted_module_info.get("fuseId", None)
                     if mounted_module_fuse_id is None:
-                        logger.warning(f"Mounted module {mounted_module} does not have a fuseId, skipping")
+                       # logger.warning(f"Mounted module {mounted_module} does not have a fuseId, skipping")
                         continue
                     if mounted_module_fuse_id == monitored_fuse_id:
                         column_index = int(mounted_module_info.get("mounted_on", "-").split(";")[1])
