@@ -831,18 +831,63 @@ class MainApp(QtWidgets.QMainWindow):
                 co2_data = self.system.status["co2_sensor"]
                 logger.debug(f"Updating CO2 sensor data: {co2_data}")
 
+                # # Update CO2 level
+                # label = central.findChild(QtWidgets.QLabel, "coldroom_co2_value_label")
+                # if label and "CO2" in co2_data:
+                #     co2_value = co2_data["CO2"]
+                #     label.setText(f"{co2_value:.1f}")
+                #     logger.debug(f"Updated CO2 level: {co2_value}")
+                #     if co2_value > 800 and co2_value <= 1000:
+                #         label.setStyleSheet("color: pink;")
+                #     elif co2_value > 1000 and co2_value <= 2500:
+                #         label.setStyleSheet("color: orange;")
+                #     elif co2_value > 2500:
+                #         label.setStyleSheet("color: red;")
+
                 # Update CO2 level
                 label = central.findChild(QtWidgets.QLabel, "coldroom_co2_value_label")
                 if label and "CO2" in co2_data:
                     co2_value = co2_data["CO2"]
                     label.setText(f"{co2_value:.1f}")
                     logger.debug(f"Updated CO2 level: {co2_value}")
-                    if co2_value > 800 and co2_value <= 1000:
-                        label.setStyleSheet("color: yellow;")
-                    elif co2_value > 1000 and co2_value <= 2500:
-                        label.setStyleSheet("color: orange;")
+
+                    # Optional: common styling for visibility
+                    base_style = """
+                        QLabel {
+                            font-weight: bold;
+                            padding: 2px 6px;
+                            border-radius: 4px;
+                        }
+                    """
+
+                    if 800 < co2_value <= 1000:
+                        label.setStyleSheet(base_style + """
+                            QLabel {
+                                color: #ffb6c1;
+                                background-color: #4a1f2a;
+                            }
+                        """)
+                    elif 1000 < co2_value <= 2500:
+                        label.setStyleSheet(base_style + """
+                            QLabel {
+                                color: #ffa500;
+                                background-color: #3a2600;
+                            }
+                        """)
                     elif co2_value > 2500:
-                        label.setStyleSheet("color: red;")
+                        label.setStyleSheet(base_style + """
+                            QLabel {
+                                color: #ff4d4d;
+                                background-color: #3a0000;
+                            }
+                        """)
+                    else:
+                        label.setStyleSheet(base_style + """
+                            QLabel {
+                                color: black;
+                                background-color: transparent;
+                            }
+                        """)
 
             # check alarms
             if "alarm" in self.system.status:
