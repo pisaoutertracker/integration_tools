@@ -23,7 +23,7 @@ from coldroom.safety import (
 from caen.caenGUIall import caenGUIall
 from Inner_tracker_GUI.caenGUIall_v2 import caenGUI8LV
 from db.module_db import ModuleDB
-from db.utils import get_modules_on_ring, get_module_endpoints, get_module_speed, get_module_fuse_id, get_module
+from db.utils import *
 
 
 # Configure logging
@@ -190,28 +190,32 @@ class MainApp(QtWidgets.QMainWindow):
 
     def get_ring_id(self):
         self.number_of_modules = 0  # Add default at the start
-        ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
-        if os.path.exists(ring_history_file):
-            with open(ring_history_file, "r") as f:
-                lines = f.readlines()
-                if lines:
-                    self.ring_id = lines[-1].strip()
-                    self.modules_list_tab.ring_id_LE.setText(self.ring_id)
-                    logger.info(f"Loaded ring ID from history: {self.ring_id}")
-                    self.get_mounted_modules()
-                    if self.ring_id.startswith("L1_"):
-                        self.number_of_modules = 18
-                    elif self.ring_id.startswith("L2_"):
-                        self.number_of_modules = 26
-                    elif self.ring_id.startswith("L3_"):
-                        self.number_of_modules = 36
-                    self.modules_list_tab.populate_from_config(
-                        self.caen_tab, self.mounted_modules, self.number_of_modules, self.thermal_camera_tab
-                    )
-                else:
-                    self.ring_id = None
-        else:
-            self.ring_id = None
+        self.ring_id=get_ring_from_cable("I1") #hardcode the single harting cable I1
+        if self.ring_id == None:
+            ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
+            
+            if os.path.exists(ring_history_file):
+                with open(ring_history_file, "r") as f:
+                    lines = f.readlines()
+                    if lines:
+                        self.ring_id = lines[-1].strip()
+                    else:
+                        self.ring_id = None
+        
+        #TODO: move this to the right place so it works also when ring ID LineEdit is updated 
+        if self.ring_id != None:
+            self.modules_list_tab.ring_id_LE.setText(self.ring_id)
+            logger.info(f"Loaded ring ID from history: {self.ring_id}")
+            self.get_mounted_modules()
+            if self.ring_id.startswith("L1_"):
+                self.number_of_modules = 18
+            elif self.ring_id.startswith("L2_"):
+                self.number_of_modules = 26
+            elif self.ring_id.startswith("L3_"):
+                self.number_of_modules = 36
+            self.modules_list_tab.populate_from_config(
+                self.caen_tab, self.mounted_modules, self.number_of_modules, self.thermal_camera_tab
+            )
         return self.ring_id
 
     def setup_ring_id(self):
