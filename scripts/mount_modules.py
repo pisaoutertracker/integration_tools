@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# first source py4dbupload/bin/setup.sh to set up environment, then run the script with appropriate arguments
 # example usage: python3 mount_modules.py PS_16_10_IPG-00005 L1_47_A#1 --position-index 2
 import argparse
 from py4dbupload.modules.Utils import DBaccess, DBupload
