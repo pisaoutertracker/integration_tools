@@ -37,6 +37,29 @@ def get_modules_on_ring(ring_id, db_url="http://cmslabserver:5000"):
         return None
 
 
+
+def get_module_from_lpGBT_hwId(serial_number, db_url ="http://cmslabserver:5000"):
+    """Get the module from the lpGBT serial number using generic_query"""
+    url = f"{db_url}/generic_module_query"
+
+    try:
+        response = requests.post(url, json= {"children.lpGBT.CHILD_SERIAL_NUMBER": str(serial_number)})
+        if response.status_code == 200:
+            snapshot = response.json()            
+            for module in snapshot:
+                if str(serial_number) in module.get("children", {}).get("lpGBT", {}).get("CHILD_SERIAL_NUMBER", ""):
+                    return module["moduleName"]
+            
+        else:
+            print(f"Error: Received status code {response.status_code}")
+            return None
+    except requests.RequestException as e:
+        print(f"Error making request to {url}: {str(e)}")
+        return None
+        
+   
+
+
 def get_module(module_id, db_url="http://cmslabserver:5000"):
     """Get a specific module from the database snapshot."""
     url = f"{db_url}/modules/{module_id}"
