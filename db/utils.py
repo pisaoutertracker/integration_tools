@@ -17,6 +17,35 @@ def get_module_name_from_fc7(fc7, optical_group, db_url="http://cmslabserver:500
     return None
 
 
+def get_ring_from_cable(cable_id, db_url="http://cmslabserver:5000"):
+    """Navigate from cable to modules, then check the mounted_on attribute removing the ;position trailing part"""
+    url = f"{db_url}/snapshot"
+    modules=[]
+    response = requests.post(url, json={"cable": cable_id, "side": "detSide"})
+    
+    if response.status_code == 200:
+        snapshot = response.json()
+      #  print(snapshot)
+        for line in snapshot:
+            if snapshot[line]["connections"]:
+                last_conn = snapshot[line]["connections"][-1]
+                #{'cable': 'PS_40_IBA-10003', 'line': 1, 'det_port': [], 'crate_port': ['fiber']}
+                #{'cable': 'PS_40_IBA-10003', 'line': 2, 'det_port': [], 'crate_port': ['fiber']}   
+                if 'power' in last_conn["crate_port"] or 'fiber' in last_conn["crate_port"]:
+                    modules.append(last_conn["cable"])
+    
+    rings=[]
+    for m in modules:
+        m_info = get_module(m, db_url)
+        if m_info:
+            mounted_on = m_info.get("mounted_on", "")
+            if mounted_on == "" :
+                continue
+            if ";" in mounted_on:
+                mounted_on = mounted_on.split(";")[0]
+            rings.append(mounted_on)
+    return rings[0] if len(rings) else None
+
 def get_modules_on_ring(ring_id, db_url="http://cmslabserver:5000"):
     """Get the modules on a specific ring from the database snapshot."""
     url = f"{db_url}/generic_module_query"
