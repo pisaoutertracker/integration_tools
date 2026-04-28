@@ -4,6 +4,7 @@ import argparse
 from py4dbupload.modules.Utils import DBaccess, DBupload
 from lxml import etree
 import os
+import datetime
 
 PISA_LOCATION = "Pisa"
 
@@ -34,7 +35,7 @@ def check_components(db, module_label, ring_label):
 
     return True
 
-def build_connect_xml(ring_barcode, module_label, position_index):
+def build_connect_xml(ring_barcode, module_label, position_index, integration_status="Integrated"):
     root = etree.Element("ROOT")
     parts = etree.SubElement(root, "PARTS")
     
@@ -58,6 +59,10 @@ def build_connect_xml(ring_barcode, module_label, position_index):
     attr = etree.SubElement(attrs, "ATTRIBUTE")
     etree.SubElement(attr, "NAME").text = "Position Index"
     etree.SubElement(attr, "VALUE").text = f"{position_index}"
+
+    attr2 = etree.SubElement(attrs, "ATTRIBUTE")
+    etree.SubElement(attr2, "NAME").text = "Module Integration Status"
+    etree.SubElement(attr2, "VALUE").text = integration_status
     
     return root
 
@@ -96,6 +101,7 @@ def main():
     parser.add_argument('ring_barcode', help='Ring barcode')
     parser.add_argument('--disconnect', action='store_true', help='Disconnect instead of connect')
     parser.add_argument('--position-index', type=int, default=0, help='Position index for module')
+    parser.add_argument('--integration-status', type=str, default='Integrated', help='Module Integration Status')
     args = parser.parse_args()
 
     # Initialize DB access
@@ -111,12 +117,19 @@ def main():
 
         # Build appropriate XML
         if args.disconnect:
+            action_prefix = "disconnect"
             xml_root = build_disconnect_xml(args.module_label)
         else:
-            xml_root = build_connect_xml(args.ring_barcode, args.module_label, args.position_index)
+            action_prefix = "connect"
+            xml_root = build_connect_xml(args.ring_barcode, args.module_label, args.position_index, args.integration_status)
+
+        # Create output directory and unique filename
+        output_dir = 'xml_submissions'
+        os.makedirs(output_dir, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(output_dir, f'{action_prefix}_{args.ring_barcode}_{args.module_label}_{timestamp}.xml')
 
         # Write XML file
-        filename = 'mount_operation.xml'
         with open(filename, 'wb') as f:
             f.write(etree.tostring(xml_root, pretty_print=True, xml_declaration=True, encoding='ASCII', standalone='yes'))
 
