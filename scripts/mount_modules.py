@@ -36,7 +36,7 @@ def check_components(db, module_label, ring_label):
 
     return True
 
-def build_connect_xml(ring_barcode, module_label, position_index, integration_status="Integrated"):
+def build_connect_xml(ring_barcode, module_label, position_index, integration_status="Attached"):
     root = etree.Element("ROOT")
     parts = etree.SubElement(root, "PARTS")
     
@@ -102,7 +102,7 @@ def main():
     parser.add_argument('ring_barcode', help='Ring barcode')
     parser.add_argument('--disconnect', action='store_true', help='Disconnect instead of connect')
     parser.add_argument('--position-index', type=int, default=0, help='Position index for module')
-    parser.add_argument('--integration-status', type=str, default='Integrated', help='Module Integration Status')
+    parser.add_argument('--integration-status', type=str, default='Attached', help='Module Integration Status')
     args = parser.parse_args()
 
     # Initialize DB access
