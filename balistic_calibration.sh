@@ -38,7 +38,7 @@ echo "CAEN channel $LV_CHANNEL turned on."
 
 # Capture MQTT messages and parse JSON output
 echo "Capturing MQTT data..."
-mqtt_output=$(timeout 90 mosquitto_sub -h 192.168.0.45 -t '/ph2acf/#' -C 1)
+mqtt_output=$(timeout 90 mosquitto_sub -h 192.168.0.45 -t '/ph2acf/data' -C 1)
 
 # Parse and display JSON output
 #curl -X PUT   -H "Content-Type: application/json"   -d '{"temperature_offsets": {"C0": 10, "C1": 20}}'   http://cmslabserver:5000/modules/PS_40_05_IBA-00001
@@ -73,7 +73,7 @@ echo "$mqtt_output" | while IFS= read -r line; do
             field_value=$(echo "$field" | cut -d':' -f2)
             #echo "    $field_name: $field_value"
             #e.g. MPA_H7_C8_temp or SSA_H7_C1_temp
-            if [[ "$field_name" =~ (SSA|MPA)_H[0-9]+_C[0-9]+_temp ]]; then
+            if [[ "$field_name" =~ (SSA|MPA)_BE0_H[0-9]+_C[0-9]+_temp ]]; then
                 # Extract chip type (SSA or MPA)
                 chip_type=$(echo "$field_name" | grep -oE '^(SSA|MPA)')
                # printf "  Chip type: $chip_type\n"

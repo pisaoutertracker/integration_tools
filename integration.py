@@ -24,6 +24,7 @@ import json
 import matplotlib
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -35,6 +36,7 @@ import os.path
 import re
 from datetime import datetime
 from db.module_db import ModuleDB
+from db.utils import get_module_fuse_id
 # Add this class near the top of the file
 class LogEmitter(QObject):
     """Helper class to emit log messages from any thread"""
@@ -68,8 +70,19 @@ class MainApp(integration_gui.Ui_MainWindow):
     def __init__(self, window):
         # First call setupUi to create all UI elements from the .ui file
         self.setupUi(window)
+        
+        # Add Ph2ACF topic to API settings layout programmatically
+        # Need to do this before load_settings
+        self.ph2acfTopicLabel = QLabel("Ph2ACF Topic:")
+        self.ph2acfTopicLE = QLineEdit()
+        self.ph2acfTopicLE.setObjectName("ph2acfTopicLE")
+        self.formLayout_2.addRow(self.ph2acfTopicLabel, self.ph2acfTopicLE)
+        
         # Load settings before setting up connections
         self.load_settings()
+        
+        # Connect settings change
+        self.ph2acfTopicLE.textChanged.connect(self.save_settings)
         
         # Create ModuleDB instance
         self.module_db = ModuleDB()
@@ -139,6 +152,17 @@ class MainApp(integration_gui.Ui_MainWindow):
         
         # Enable sorting
         # self.treeWidget.setSortingEnabled(True)
+        
+        # Enable sorting
+        # self.treeWidget.setSortingEnabled(True)
+        
+        # Initialize lists for Ph2ACF temperatures
+        self.ph2acf_time = []
+        self.ssa_mean_values = []
+        self.ssa_max_values = []
+        self.mpa_mean_values = []
+        self.mpa_max_values = []
+        self.current_fuse_id = None
         
         # Setup module details tab
      #   self.setup_module_details_tab()
@@ -322,7 +346,7 @@ class MainApp(integration_gui.Ui_MainWindow):
         # Connect open in browser button
         self.openInBrowserPB.clicked.connect(self.open_results_in_browser)
 
-        self.current_module_data=  None
+        self.current_module_data = {}
         self.current_session = None
         self.current_session_operator = None
         self.current_session_comments = None
@@ -406,7 +430,15 @@ class MainApp(integration_gui.Ui_MainWindow):
         self.line_min, = self.ax2.plot(self.time, self.min_values, label='Min')
         self.line_max, = self.ax2.plot(self.time, self.max_values, label='Max')
         self.line_avg, = self.ax2.plot(self.time, self.avg_values, label='Avg')
-        self.ax2.legend()
+        
+        # SSA/MPA trend lines
+        self.line_ssa_mean, = self.ax2.plot([], [], label='SSA Mean', linestyle='-', marker='s', markersize=3)
+        self.line_ssa_max, = self.ax2.plot([], [], label='SSA Max', linestyle='-', marker='^', markersize=3)
+        self.line_mpa_mean, = self.ax2.plot([], [], label='MPA Mean', linestyle='-', marker='o', markersize=3)
+        self.line_mpa_max, = self.ax2.plot([], [], label='MPA Max', linestyle='-', marker='v', markersize=3)
+        
+        self.ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+        self.ax2.legend(fontsize='xx-small', loc='upper left', ncol=2)
 
         # Create canvas and add to layout
         self.canvas = FigureCanvas(self.fig)
@@ -445,6 +477,7 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.lightOnCommandLE.setText(settings.get('light_on_command', ''))
                 self.darkTestCommandLE.setText(settings.get('dark_test_command', ''))
                 self.airCommandLE.setText(settings.get('air_command', 'air.sh {airOn}'))
+                self.ph2acfTopicLE.setText(settings.get('ph2acf_topic', '/ph2acf/data'))
                 self.resultsUrlLE.setText(settings.get('results_url', 'file:Results/html/latest/index.html'))
                 
         except FileNotFoundError:
@@ -467,6 +500,7 @@ class MainApp(integration_gui.Ui_MainWindow):
             'light_on_command': self.lightOnCommandLE.text(),
             'dark_test_command': self.darkTestCommandLE.text(),
             'air_command': self.airCommandLE.text(),
+            'ph2acf_topic': self.ph2acfTopicLE.text(),
             'results_url': self.resultsUrlLE.text(),
         }
         
@@ -516,8 +550,14 @@ class MainApp(integration_gui.Ui_MainWindow):
             if rc == 0:
                 self.log_output("Connected to MQTT server")
                 mqtt_topic = self.mqttTopicLE.text()
-                self.log_output(f"Subscribing to topic: {mqtt_topic}")
-                client.subscribe([("/air/status", 0), (mqtt_topic, 0),("shellies/ventola/status/switch:0",0)])
+                ph2acf_topic = self.ph2acfTopicLE.text()
+                self.log_output(f"Subscribing to topics: {mqtt_topic}, {ph2acf_topic}")
+                client.subscribe([
+                    ("/air/status", 0), 
+                    (mqtt_topic, 0), 
+                    (ph2acf_topic, 0),
+                    ("shellies/ventola/status/switch:0", 0)
+                ])
             else:
                 self.log_output(f"MQTT Connection failed with code {rc}")
         except Exception as e:
@@ -549,7 +589,114 @@ class MainApp(integration_gui.Ui_MainWindow):
                 self.airLed.setStyleSheet("background-color: green;")
             else:
                 self.airLed.setStyleSheet("background-color: red;")
-        else:
+        elif msg.topic == self.ph2acfTopicLE.text():
+          try:
+            data = json.loads(msg.payload)
+            # Only process if fuseId matches (and is not None)
+            fuse_id_msg = data.get("LpGBT_OG0_fuseId")
+            if self.current_fuse_id is not None and fuse_id_msg is not None and int(fuse_id_msg) == int(self.current_fuse_id):
+                # We have matching data, extract temperatures
+                ssa_temps = []
+                mpa_temps = []
+                missing_any_offset = False
+                
+                offsets = {}
+                if self.current_module_data:
+                    if "temperature_offset" in self.current_module_data:
+                        offsets = self.current_module_data["temperature_offset"]
+                    else:
+                        # Look for alternative keys starting with 'temperature_offset'
+                        variants = sorted([k for k in self.current_module_data.keys() if k.startswith("temperature_offset")])
+                        if variants:
+                            offsets = self.current_module_data[variants[0]]
+                
+                if not isinstance(offsets, dict):
+                    offsets = {}
+                
+                for key, value in data.items():
+                    if key.endswith("_temp"):
+                        # Extract hybrid and chip from key like SSA_H0_C0_temp
+                        parts = key.split('_')
+                        if len(parts) >= 3:
+                            ctype = parts[0] # SSA or MPA (though MPA often encoded as SSA in some Ph2_ACF versions)
+                            hybrid = parts[1] # H0 or H1
+                            chip = parts[2]   # C0, C1, ...
+                            
+                            # Clean up indices
+                            h_idx = hybrid[1:] if hybrid.startswith('H') else hybrid
+                            c_idx = chip[1:] if chip.startswith('C') else chip
+                            
+                            # Construct offset key like SSA_H0_0
+                            # Note: The mapping provided in prompt says SSA_H0_0, MPA_H0_8 etc.
+                            # We need to determine if it's SSA or MPA based on the chip index or key name.
+                            # User said "SSA/MPA mean and max". 
+                            # Let's use the provided mapping logic: keys like SSA_H0_0
+                            offset_key = f"{ctype}_{hybrid}_{c_idx}"
+                            
+                            temp = float(value)
+                            if offset_key in offsets:
+                                temp += float(offsets[offset_key])
+                            else:
+                                missing_any_offset = True
+                            
+                            if ctype == "SSA":
+                                ssa_temps.append(temp)
+                            elif ctype == "MPA":
+                                mpa_temps.append(temp)
+                            else:
+                                # Fallback/Mixed
+                                ssa_temps.append(temp)
+                
+                now = datetime.now()
+                # Update trend
+                self.ph2acf_time.append(now)
+                
+                # Keep maximum 600 values for Ph2ACF data
+                if len(self.ph2acf_time) > 600:
+                    self.ph2acf_time.pop(0)
+                    self.ssa_mean_values.pop(0)
+                    self.ssa_max_values.pop(0)
+                    self.mpa_mean_values.pop(0)
+                    self.mpa_max_values.pop(0)
+
+                    # SSA Stats
+                    if ssa_temps:
+                        self.ssa_mean_values.append(np.mean(ssa_temps))
+                        self.ssa_max_values.append(np.max(ssa_temps))
+                    else:
+                        self.ssa_mean_values.append(np.nan)
+                        self.ssa_max_values.append(np.nan)
+                        
+                    # MPA Stats
+                    if mpa_temps:
+                        self.mpa_mean_values.append(np.mean(mpa_temps))
+                        self.mpa_max_values.append(np.max(mpa_temps))
+                    else:
+                        self.mpa_mean_values.append(np.nan)
+                        self.mpa_max_values.append(np.nan)
+                    
+                    # Update plot lines
+                    # Set line style based on offset presence
+                    ls = '--' if missing_any_offset else '-'
+                    
+                    self.line_ssa_mean.set_data(self.ph2acf_time, self.ssa_mean_values)
+                    self.line_ssa_mean.set_linestyle(ls)
+                    self.line_ssa_max.set_data(self.ph2acf_time, self.ssa_max_values)
+                    self.line_ssa_max.set_linestyle(ls)
+                    
+                    self.line_mpa_mean.set_data(self.ph2acf_time, self.mpa_mean_values)
+                    self.line_mpa_mean.set_linestyle(ls)
+                    self.line_mpa_max.set_data(self.ph2acf_time, self.mpa_max_values)
+                    self.line_mpa_max.set_linestyle(ls)
+                    
+                    self.ax2.relim()
+                    self.ax2.autoscale_view()
+                    self.canvas.draw()
+                    
+          except Exception as e:
+            self.log_output(f"Ph2ACF Message Error: {str(e)}")
+
+        elif msg.topic == self.mqttTopicLE.text():
           try:
             flo_arr = [
                 struct.unpack("f", msg.payload[i : i + 4])[0]
@@ -561,10 +708,8 @@ class MainApp(integration_gui.Ui_MainWindow):
             self.im.set_clim(18, 35)
             
             # Update trend plot
-            if len(self.time) == 0:
-                self.time.append(0)
-            else:
-                self.time.append(self.time[-1] + 1)
+            now = datetime.now()
+            self.time.append(now)
             
             self.min_values.append(min(flo_arr))
             self.max_values.append(max(flo_arr))
@@ -598,6 +743,9 @@ class MainApp(integration_gui.Ui_MainWindow):
             
           except Exception as e:
             self.log_output(f"MQTT Message Error: {str(e)}")
+        else:
+            # Handle other topics if any (already handled for air and fan)
+            pass
 
     def split_ring_and_position(self):
         ring_position = self.ringLE.text()
@@ -1876,6 +2024,18 @@ class MainApp(integration_gui.Ui_MainWindow):
                 module_data = response.json()
                 self.current_module_data=module_data
                 self.current_module_id = module_id
+                
+                # Fetch Fuse ID
+                self.current_fuse_id = get_module_fuse_id(module_data)
+                self.log_output(f"Module {module_id} loaded. Fuse ID: {self.current_fuse_id}")
+                
+                # Reset Ph2ACF plots for new module
+                self.ph2acf_time = []
+                self.ssa_mean_values = []
+                self.ssa_max_values = []
+                self.mpa_mean_values = []
+                self.mpa_max_values = []
+                
                 self.module_db.ui.moduleNameLabel.setText(module_id)
                 self.module_db.populate_details_tree(module_data)
             else:
