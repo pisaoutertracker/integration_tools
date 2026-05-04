@@ -612,10 +612,11 @@ class MainApp(integration_gui.Ui_MainWindow):
                 
                 if not isinstance(offsets, dict):
                     offsets = {}
-                
+                print(offsets)
                 for key, value in data.items():
                     if key.endswith("_temp"):
                         # Extract hybrid and chip from key like SSA_H0_C0_temp
+                        print(key,value)
                         parts = key.split('_')
                         if len(parts) >= 3:
                             ctype = parts[0] # SSA or MPA (though MPA often encoded as SSA in some Ph2_ACF versions)
@@ -659,40 +660,42 @@ class MainApp(integration_gui.Ui_MainWindow):
                     self.mpa_mean_values.pop(0)
                     self.mpa_max_values.pop(0)
 
-                    # SSA Stats
-                    if ssa_temps:
-                        self.ssa_mean_values.append(np.mean(ssa_temps))
-                        self.ssa_max_values.append(np.max(ssa_temps))
-                    else:
-                        self.ssa_mean_values.append(np.nan)
-                        self.ssa_max_values.append(np.nan)
-                        
-                    # MPA Stats
-                    if mpa_temps:
-                        self.mpa_mean_values.append(np.mean(mpa_temps))
-                        self.mpa_max_values.append(np.max(mpa_temps))
-                    else:
-                        self.mpa_mean_values.append(np.nan)
-                        self.mpa_max_values.append(np.nan)
+                # SSA Stats
+                if ssa_temps:
+                    self.ssa_mean_values.append(np.mean(ssa_temps))
+                    self.ssa_max_values.append(np.max(ssa_temps))
+                else:
+                    self.ssa_mean_values.append(np.nan)
+                    self.ssa_max_values.append(np.nan)
                     
-                    # Update plot lines
-                    # Set line style based on offset presence
-                    ls = '--' if missing_any_offset else '-'
-                    
-                    self.line_ssa_mean.set_data(self.ph2acf_time, self.ssa_mean_values)
-                    self.line_ssa_mean.set_linestyle(ls)
-                    self.line_ssa_max.set_data(self.ph2acf_time, self.ssa_max_values)
-                    self.line_ssa_max.set_linestyle(ls)
-                    
-                    self.line_mpa_mean.set_data(self.ph2acf_time, self.mpa_mean_values)
-                    self.line_mpa_mean.set_linestyle(ls)
-                    self.line_mpa_max.set_data(self.ph2acf_time, self.mpa_max_values)
-                    self.line_mpa_max.set_linestyle(ls)
-                    
-                    self.ax2.relim()
-                    self.ax2.autoscale_view()
-                    self.canvas.draw()
-                    
+                # MPA Stats
+                if mpa_temps:
+                    self.mpa_mean_values.append(np.mean(mpa_temps))
+                    self.mpa_max_values.append(np.max(mpa_temps))
+                else:
+                    self.mpa_mean_values.append(np.nan)
+                    self.mpa_max_values.append(np.nan)
+                
+                print(f"DEBUG: SSA Mean: {self.ssa_mean_values[-1] if ssa_temps else 'N/A'}")
+                
+                # Update plot lines
+                # Set line style based on offset presence
+                ls = '--' if missing_any_offset else '-'
+                
+                self.line_ssa_mean.set_data(self.ph2acf_time, self.ssa_mean_values)
+                self.line_ssa_mean.set_linestyle(ls)
+                self.line_ssa_max.set_data(self.ph2acf_time, self.ssa_max_values)
+                self.line_ssa_max.set_linestyle(ls)
+                
+                self.line_mpa_mean.set_data(self.ph2acf_time, self.mpa_mean_values)
+                self.line_mpa_mean.set_linestyle(ls)
+                self.line_mpa_max.set_data(self.ph2acf_time, self.mpa_max_values)
+                self.line_mpa_max.set_linestyle(ls)
+                
+                self.ax2.relim()
+                self.ax2.autoscale_view()
+                self.canvas.draw()
+                
           except Exception as e:
             self.log_output(f"Ph2ACF Message Error: {str(e)}")
 
