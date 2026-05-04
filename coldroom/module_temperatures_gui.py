@@ -1247,6 +1247,7 @@ class ModuleTemperaturesTAB(QtWidgets.QMainWindow):
 
     def publish_calibrated_data(self, fuse_id, temp_data):
         """Publish calibrated temperature data for a specific module"""
+        print(fuse_id,temp_data)
         try:
             if not hasattr(self, "mqtt_client"):
                 logger.warning("MQTT client not initialized, cannot publish calibrated data")
@@ -1421,12 +1422,14 @@ class ModuleTempMQTT:
             if "fuseId" in key:
                 fuseId = payload[key]
             if "_temp" in key and "_C" in key:
-                # e.g. SSA_H7_C6_temp or MPA_H0_C7_temp
+                # e.g. SSA_BE0_H7_C6_temp or MPA_BE0_H0_C7_temp
                 split = key.split("_")
                 component = split[0]
-                hybrid = split[1]
+                be = split[1]
+                hybrid = split[2]
+                be_id = int(be.split("BE")[1])
                 hybrid_id = int(hybrid.split("H")[1]) % 2  # H0 or H1
-                chip_id = int(split[2].split("C")[1])
+                chip_id = int(split[3].split("C")[1])
                 temperature = payload[key]
                 new_key = f"{component}_H{hybrid_id}_{chip_id}"
                 result[new_key] = temperature
@@ -1435,5 +1438,5 @@ class ModuleTempMQTT:
         if fuseId:
             self.status.update({fuseId: result})
             logger.debug(f"Updated temperature data for fuse_id {fuseId}")
-
+        print(result)
         return fuseId, result

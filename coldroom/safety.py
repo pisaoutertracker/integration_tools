@@ -184,3 +184,18 @@ def check_marta_safe(system_status):
     except Exception as e:
         logger.debug(f"Error in check_marta_safe: {str(e)}")
         return False, "Error checking MARTA status"
+
+
+# def check_lv_safe_on:
+
+# def check_marta_on_for_ot
+# def check_marta_on_for_it
+
+#def switch_all_lv_off
+
+
+# def soft_interlock_loop: ### describe only highlevel
+# if condition then : action
+# if ! check_lv_safe_on and something_on : switch_all_lv_off()
+
+#when performing an active safety action here we send a msg to the alarm topic "/alarm"
