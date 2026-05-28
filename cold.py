@@ -23,6 +23,7 @@ from coldroom.safety import (
 from caen.caenGUIall import caenGUIall
 from Inner_tracker_GUI.caenGUIall_v2 import caenGUI8LV
 from db.module_db import ModuleDB
+from power_supply.power_supply_ctrl import PowerSupplyController
 from db.utils import *
 
 
@@ -175,6 +176,10 @@ class MainApp(QtWidgets.QMainWindow):
         self.IT_caen_tab = caenGUI8LV()
         self.tab_widget.addTab(self.IT_caen_tab, "IT CAEN")
 
+        # Add Power Supply tab
+        self.power_supply_tab = PowerSupplyController()
+        self.tab_widget.addTab(self.power_supply_tab, "Power Supply")
+
         # Pre-fill settings with values from system
         self.load_settings_to_ui()
         self.get_ring_id()
@@ -190,7 +195,8 @@ class MainApp(QtWidgets.QMainWindow):
 
     def get_ring_id(self):
         self.number_of_modules = 0  # Add default at the start
-        self.ring_id=get_ring_from_cable("I1") #hardcode the single harting cable I1
+        # self.ring_id=get_ring_from_cable("I1") #hardcode the single harting cable I1
+        self.ring_id=get_ring_from_cable("I1", db_url=self.module_db.db_url) #hardcode the single harting cable I1
         if self.ring_id == None:
             ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
             
@@ -325,10 +331,10 @@ class MainApp(QtWidgets.QMainWindow):
             button.clicked.connect(self.toggle_coldroom_temp_control)
 
         button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_run_start")
-        if button:
+        if button and self.system._martacoldroom:
             button.clicked.connect(self.system._martacoldroom.run)
         button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_run_stop")
-        if button:
+        if button and self.system._martacoldroom:
             button.clicked.connect(self.system._martacoldroom.stop)
 
         configure_line_edit("coldroom_temp_LE", "-30°C to 30°C")
@@ -802,9 +808,12 @@ class MainApp(QtWidgets.QMainWindow):
                         if "CO2" in co2_data:
                             if co2_data["CO2"] > 800:
                                 is_safe = False
-                                door_msg += "CO2 levels safe: False"
+                                # door_msg += "CO2 levels safe: False"
+                                door_msg += "CO2 levels safe: NO"
+                                door_msg += f" (Current CO2: {co2_data['CO2']:.1f} ppm > 800 ppm)"
                             else:
-                                door_msg += "CO2 levels safe: True"
+                                # door_msg += "CO2 levels safe: True"
+                                door_msg += "CO2 levels safe: Yes"
                     safe_to_open_led.setStyleSheet("background-color: green;" if is_safe else "background-color: red;")
                     logger.debug(f"Updated safe to open LED: {'green' if is_safe else 'red'} (is_safe={is_safe})")
                     self.system._martacoldroom.publish_door_safety_status(is_safe)
@@ -1142,11 +1151,15 @@ class MainApp(QtWidgets.QMainWindow):
             if 0 <= value <= 50:  # Humidity range from UI validator
                 if self.system._martacoldroom:
                     self.system._martacoldroom.set_humidity(value)
-                msg = f"Set coldroom humidity to {value}%"
-                self.statusBar().showMessage(msg)
-                logger.info(msg)
+                    msg = f"Set coldroom humidity to {value}%"
+                    self.statusBar().showMessage(msg)
+                    logger.info(msg)
+                else:
+                    msg = "MARTA Cold Room client not initialized"
+                    self.statusBar().showMessage(msg)
+                    logger.error(msg)
             else:
-                msg = "MARTA Cold Room client not initialized"
+                msg = "Humidity must be between 0% and 50%"
                 self.statusBar().showMessage(msg)
                 logger.error(msg)
         except ValueError:

@@ -157,7 +157,9 @@ class MartaColdRoomMQTTClient:
         if self._system.has_valid_status():
             self._system.safety_flags["door_locked"] = not check_dew_point(self._system.status)
             self._system.safety_flags["sleep"] = check_door_status(self._system.status)
-            self._system.safety_flags["door_safe"] = check_door_safe_to_open(self._system.status)
+            self._system.safety_flags["door_safe"] = check_door_safe_to_open(
+                self._system.status, self._system.status.get("caen", {}), {"HV": []}
+            )
             logger.debug(f"Safety flags updated: {self._system.safety_flags}")
 
     def publish_cmd(self, command, target, payload):
@@ -169,7 +171,7 @@ class MartaColdRoomMQTTClient:
             target (str): Either 'marta' or 'coldroom' or 'cleanroom'
             payload: The command payload
         """
-        logger.debug("Publishing", command, target, payload)
+        logger.debug(f"Publishing {command} {target} {payload}")
         if target == "marta":  # Add MARTA topic
             topic = f"{self.TOPIC_BASE_MARTA}cmd/{command}"
         elif target == "cleanroom":  # Add cleanroom topic
