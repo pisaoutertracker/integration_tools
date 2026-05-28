@@ -26,7 +26,9 @@ def check_dew_point(system_status):
         # Get the three required temperature values
         marta_supply_temp = system_status.get("marta", {}).get("TT05_CO2")
         marta_return_temp = system_status.get("marta", {}).get("TT06_CO2")
-        coldroom_temp = system_status.get("coldroom", {}).get("ch_temperature", {}).get("value")
+        coldroom_temp = (
+            system_status.get("coldroom", {}).get("ch_temperature", {}).get("value")
+        )
         # coldroom = system_status.get("coldroom", {})
         # logger.debug(f"Coldroom: {coldroom.get('CmdDoorUnlock_Reff')}")
         # door_status = system_status.get("coldroom", {}).get("CmdDoorUnlock_Reff")
@@ -53,12 +55,19 @@ def check_dew_point(system_status):
 
         if "coldroom" not in system_status:
             logger.debug("Coldroom data not available")
-            return False  # Conservative approach - if we can't check, assume it's unsafe
+            return (
+                False  # Conservative approach - if we can't check, assume it's unsafe
+            )
 
         # Check if environment data exists
-        if "cleanroom" not in system_status or "dewpoint" not in system_status["cleanroom"]:
+        if (
+            "cleanroom" not in system_status
+            or "dewpoint" not in system_status["cleanroom"]
+        ):
             return False  # Conservative approach
-        reference_dew_point = system_status["cleanroom"]["dewpoint"]  # External dewpoint
+        reference_dew_point = system_status["cleanroom"][
+            "dewpoint"
+        ]  # External dewpoint
         logger.debug(f"Reference dew point: {reference_dew_point}")
         delta = 1  # Allowable delta between dew point and temperature
         return min_temperature > reference_dew_point + delta
@@ -69,7 +78,10 @@ def check_dew_point(system_status):
 
 def check_door_status(system_status):
     try:
-        if "coldroom" not in system_status or "door_status" not in system_status["coldroom"]:
+        if (
+            "coldroom" not in system_status
+            or "door_status" not in system_status["coldroom"]
+        ):
             return False  # Conservative approach
         return system_status["coldroom"]["CmdDoorUnlock_Reff"] == 1  # Door is open
     except Exception as e:
@@ -99,7 +111,10 @@ def check_any_hv_on(caen_ch_status, used_channels):
         return hv_on
     except Exception as e:
         logger.debug(f"Error in check_any_hv_on: {str(e)}")
-        return True, "Error checking high voltage status"  # Conservative approach - if we can't check, assume it's unsafe
+        return (
+            True,
+            "Error checking high voltage status",
+        )  # Conservative approach - if we can't check, assume it's unsafe
 
 
 def check_cleanroom_expired(elapsed_time, threshold=600):
@@ -115,10 +130,14 @@ def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
     try:
         # Check if we have all necessary data
         if "coldroom" not in system_status:
-            return False  # Conservative approach - if we can't check, assume it's unsafe
+            return (
+                False  # Conservative approach - if we can't check, assume it's unsafe
+            )
 
         # 1. Check if dew point conditions are safe
-        clean_room_expired = check_cleanroom_expired(system_status["cleanroom"]["elapsed_time"])
+        clean_room_expired = check_cleanroom_expired(
+            system_status["cleanroom"]["elapsed_time"]
+        )
         if clean_room_expired:
             dew_point_safe = False
             log_msg += f"!!! Warning: Cleanroom data expired, not able to check dew point !!!\n"
@@ -169,7 +188,9 @@ def check_light_safe_to_turn_on(system_status, caen_ch_status, used_channels):
     try:
         # Check if we have all necessary data
         if "coldroom" not in system_status:
-            return False  # Conservative approach - if we can't check, assume it's unsafe
+            return (
+                False  # Conservative approach - if we can't check, assume it's unsafe
+            )
 
         # Check if high voltage is off
         hv_on = check_any_hv_on(caen_ch_status, used_channels)
@@ -200,14 +221,15 @@ def check_marta_safe(system_status):
 # def check_marta_on_for_ot
 # def check_marta_on_for_it
 
-#def switch_all_lv_off
+# def switch_all_lv_off
 
 
 # def soft_interlock_loop: ### describe only highlevel
 # if condition then : action
 # if ! check_lv_safe_on and something_on : switch_all_lv_off()
 
-#when performing an active safety action here we send a msg to the alarm topic "/alarm"
+# when performing an active safety action here we send a msg to the alarm topic "/alarm"
+
 
 def Is_any_lv_on(caen_ch_status, used_channels):
     """
@@ -227,6 +249,7 @@ def Is_any_lv_on(caen_ch_status, used_channels):
         logger.debug(f"Error in Is_any_lv_on: {str(e)}")
         return True  # Conservative - assume LV is on if we can't check
 
+
 def Is_it_safe_to_on_lv(system_status, caen_ch_status, used_channels):
     """
     Check if it's safe to turn on LV channels based on multiple safety conditions.
@@ -236,7 +259,9 @@ def Is_it_safe_to_on_lv(system_status, caen_ch_status, used_channels):
     try:
         # Check if we have all necessary data
         if "coldroom" not in system_status:
-            return False  # Conservative approach - if we can't check, assume it's unsafe
+            return (
+                False  # Conservative approach - if we can't check, assume it's unsafe
+            )
 
         # Check if MARTA is running
         marta_safe, marta_msg = check_marta_safe(system_status)
@@ -277,17 +302,23 @@ def check_marta_on_for_OT(system_status):
     try:
         if "marta" not in system_status or "serviceroom" not in system_status:
             return False
-        
-        logger.info(f"Checking MARTA OT status: {system_status['marta'].get('fsm_state', 'N/A')}, OT valve: {system_status['serviceroom'].get('outer_valve', 'N/A')}")
+
+        logger.info(
+            f"Checking MARTA OT status: {system_status['marta'].get('fsm_state', 'N/A')}, OT valve: {system_status['serviceroom'].get('outer_valve', 'N/A')}"
+        )
         fsm_state = system_status["marta"].get("fsm_state", "")
         OT_valve = system_status["serviceroom"].get("outer_valve", 0)
-        
+
         if fsm_state not in ("DISCONNECTED", "NONE", ""):
             if OT_valve == 1:  # Outer valve is open, so OT is likely running
-                logger.info("MARTA FSM state is good and OT valve is open, treating as running")
+                logger.info(
+                    "MARTA FSM state is good and OT valve is open, treating as running"
+                )
                 return True
             else:
-                logger.debug("MARTA FSM state is good but OT valve is closed, treating as not running")
+                logger.debug(
+                    "MARTA FSM state is good but OT valve is closed, treating as not running"
+                )
                 return False
         else:
             return False
@@ -304,15 +335,21 @@ def check_marta_on_for_IT(system_status):
     try:
         if "marta" not in system_status or "serviceroom" not in system_status:
             return False
-        logger.info(f"Checking MARTA IT status: {system_status['marta'].get('fsm_state', 'N/A')}, IT valve: {system_status['serviceroom'].get('inner_valve', 'N/A')}")
+        logger.info(
+            f"Checking MARTA IT status: {system_status['marta'].get('fsm_state', 'N/A')}, IT valve: {system_status['serviceroom'].get('inner_valve', 'N/A')}"
+        )
         fsm_state = system_status["marta"].get("fsm_state", "")
         IT_valve = system_status["serviceroom"].get("inner_valve", 0)
         if fsm_state not in ("DISCONNECTED", "NONE", ""):
             if IT_valve == 1:  # Inner valve is open, so IT is likely running
-                logger.info("MARTA FSM state is good and IT valve is open, treating as running")
+                logger.info(
+                    "MARTA FSM state is good and IT valve is open, treating as running"
+                )
                 return True
             else:
-                logger.debug("MARTA FSM state is good but IT valve is closed, treating as not running")
+                logger.debug(
+                    "MARTA FSM state is good but IT valve is closed, treating as not running"
+                )
                 return False
         else:
             return False
@@ -339,7 +376,9 @@ def switch_all_lv_off(caen, used_channels):
         return False
 
 
-def soft_interlock_loop(system_status, caen_ch_status, used_channels, caen, publish_alarm=None):
+def soft_interlock_loop(
+    system_status, caen_ch_status, used_channels, caen, publish_alarm=None
+):
     """
     Soft interlock loop - monitors safety conditions and takes protective action.
 
@@ -364,16 +403,17 @@ def soft_interlock_loop(system_status, caen_ch_status, used_channels, caen, publ
     """
     try:
         lv_on = Is_any_lv_on(caen_ch_status, used_channels)
-        lv_safe_to_on = Is_it_safe_to_on_lv(system_status, caen_ch_status, used_channels)
+        lv_safe_to_on = Is_it_safe_to_on_lv(
+            system_status, caen_ch_status, used_channels
+        )
         marta_ot = check_marta_on_for_OT(system_status)
         marta_it = check_marta_on_for_IT(system_status)
-        marta_on = marta_ot or marta_it
-        
+
         if lv_on:
             lv_status = "ON"
         else:
             lv_status = "OFF"
-        
+
         if marta_ot:
             marta_ot_status = "RUNNING"
         else:
@@ -383,20 +423,22 @@ def soft_interlock_loop(system_status, caen_ch_status, used_channels, caen, publ
             marta_it_status = "RUNNING"
         else:
             marta_it_status = "NOT RUNNING"
-        
+
         log_msg = f"\nSoft interlock: LV_on={lv_status}, MARTA_OT={marta_ot_status}, MARTA_IT={marta_it_status}\n"
         logger.info(log_msg)
 
         if lv_safe_to_on == False:
-            log_msg += "\n!!! Warning: Conditions are not safe to turn on LV channels !!!\n"
+            log_msg += (
+                "\n!!! Warning: Conditions are not safe to turn on LV channels !!!\n"
+            )
             log_msg += f"\nLV safe to on: NO\n"
             # switch_all_lv_off(caen, used_channels)
         else:
             log_msg += f"\nLV safe to on: YES\n"
 
-            if lv_on and not marta_on:
+            if lv_on and not marta_ot:
                 alarm_msg = (
-                    "SAFETY INTERLOCK: LV channels are on but MARTA is not running. "
+                    "SAFETY INTERLOCK: LV channels are on but MARTA OT is not running. "
                     "Turning off all LV channels to prevent module damage."
                 )
                 logger.warning(alarm_msg)
