@@ -1,4 +1,5 @@
 import os
+from tkinter import NO, YES, YES
 import yaml
 import logging
 
@@ -208,7 +209,7 @@ def check_marta_safe(system_status):
 
 #when performing an active safety action here we send a msg to the alarm topic "/alarm"
 
-def check_lv_safe_on(caen_ch_status, used_channels):
+def Is_any_lv_on(caen_ch_status, used_channels):
     """
     Check if any LV channel is on.
     Returns True if any LV channel is on, False if all are off.
@@ -219,40 +220,104 @@ def check_lv_safe_on(caen_ch_status, used_channels):
                 continue
             ch_str = f"caen_{channel}_IsOn"
             if bool(caen_ch_status.get(ch_str, False)):
+                logger.info(f"LV channel {channel} is ON")
                 return True
         return False
     except Exception as e:
-        logger.debug(f"Error in check_lv_safe_on: {str(e)}")
+        logger.debug(f"Error in Is_any_lv_on: {str(e)}")
         return True  # Conservative - assume LV is on if we can't check
 
+def Is_it_safe_to_on_lv(system_status, caen_ch_status, used_channels):
+    """
+    Check if it's safe to turn on LV channels based on multiple safety conditions.
+    Returns True if it's safe to turn on LV channels, False otherwise.
+    """
+    log_msg = ""
+    try:
+        # Check if we have all necessary data
+        if "coldroom" not in system_status:
+            return False  # Conservative approach - if we can't check, assume it's unsafe
 
-def check_marta_on_for_ot(system_status):
+        # Check if MARTA is running
+        marta_safe, marta_msg = check_marta_safe(system_status)
+        log_msg += f"MARTA safe: {marta_safe} ({marta_msg})\n"
+
+        # It's safe to turn on LV channels if MARTA is safe
+        is_safe = marta_safe
+        return is_safe, log_msg
+
+    except Exception as e:
+        logger.debug(f"Error in Is_it_safe_to_on_lv: {str(e)}")
+        return False, "Error checking LV safety"
+
+
+# def check_lv_safe_on(caen_ch_status, used_channels):
+#     """
+#     Check if any LV channel is on.
+#     Returns True if any LV channel is on, False if all are off.
+#     """
+#     try:
+#         for channel in used_channels["LV"]:
+#             if channel is None:
+#                 continue
+#             ch_str = f"caen_{channel}_IsOn"
+#             if bool(caen_ch_status.get(ch_str, False)):
+#                 return True
+#         return False
+#     except Exception as e:
+#         logger.debug(f"Error in check_lv_safe_on: {str(e)}")
+#         return True  # Conservative - assume LV is on if we can't check
+
+
+def check_marta_on_for_OT(system_status):
     """
     Check if MARTA is running for OT (Outer Tracker).
     Returns True if MARTA is connected and operational.
     """
     try:
-        if "marta" not in system_status:
+        if "marta" not in system_status or "serviceroom" not in system_status:
             return False
+        
+        logger.info(f"Checking MARTA OT status: {system_status['marta'].get('fsm_state', 'N/A')}, OT valve: {system_status['serviceroom'].get('outer_valve', 'N/A')}")
         fsm_state = system_status["marta"].get("fsm_state", "")
-        return fsm_state not in ("DISCONNECTED", "NONE", "")
+        OT_valve = system_status["serviceroom"].get("outer_valve", 0)
+        
+        if fsm_state not in ("DISCONNECTED", "NONE", ""):
+            if OT_valve == 1:  # Outer valve is open, so OT is likely running
+                logger.info("MARTA FSM state is good and OT valve is open, treating as running")
+                return True
+            else:
+                logger.debug("MARTA FSM state is good but OT valve is closed, treating as not running")
+                return False
+        else:
+            return False
     except Exception as e:
-        logger.debug(f"Error in check_marta_on_for_ot: {str(e)}")
+        logger.debug(f"Error in check_marta_on_for_OT: {str(e)}")
         return False
 
 
-def check_marta_on_for_it(system_status):
+def check_marta_on_for_IT(system_status):
     """
     Check if MARTA is running for IT (Inner Tracker).
     Returns True if MARTA is connected and operational.
     """
     try:
-        if "marta" not in system_status:
+        if "marta" not in system_status or "serviceroom" not in system_status:
             return False
+        logger.info(f"Checking MARTA IT status: {system_status['marta'].get('fsm_state', 'N/A')}, IT valve: {system_status['serviceroom'].get('inner_valve', 'N/A')}")
         fsm_state = system_status["marta"].get("fsm_state", "")
-        return fsm_state not in ("DISCONNECTED", "NONE", "")
+        IT_valve = system_status["serviceroom"].get("inner_valve", 0)
+        if fsm_state not in ("DISCONNECTED", "NONE", ""):
+            if IT_valve == 1:  # Inner valve is open, so IT is likely running
+                logger.info("MARTA FSM state is good and IT valve is open, treating as running")
+                return True
+            else:
+                logger.debug("MARTA FSM state is good but IT valve is closed, treating as not running")
+                return False
+        else:
+            return False
     except Exception as e:
-        logger.debug(f"Error in check_marta_on_for_it: {str(e)}")
+        logger.debug(f"Error in check_marta_on_for_IT: {str(e)}")
         return False
 
 
@@ -263,6 +328,7 @@ def switch_all_lv_off(caen, used_channels):
     """
     try:
         for channel in used_channels["LV"]:
+            logger.info(f"Attempting to turn off LV channel {channel}")
             if channel is None:
                 continue
             logger.warning(f"Safety interlock: turning off LV channel {channel}")
@@ -297,23 +363,50 @@ def soft_interlock_loop(system_status, caen_ch_status, used_channels, caen, publ
         tuple: (is_safe: bool, message: str)
     """
     try:
-        lv_on = check_lv_safe_on(caen_ch_status, used_channels)
-        marta_ot = check_marta_on_for_ot(system_status)
-        marta_it = check_marta_on_for_it(system_status)
+        lv_on = Is_any_lv_on(caen_ch_status, used_channels)
+        lv_safe_to_on = Is_it_safe_to_on_lv(system_status, caen_ch_status, used_channels)
+        marta_ot = check_marta_on_for_OT(system_status)
+        marta_it = check_marta_on_for_IT(system_status)
         marta_on = marta_ot or marta_it
+        
+        if lv_on:
+            lv_status = "ON"
+        else:
+            lv_status = "OFF"
+        
+        if marta_ot:
+            marta_ot_status = "RUNNING"
+        else:
+            marta_ot_status = "NOT RUNNING"
 
-        log_msg = f"Soft interlock: LV_on={lv_on}, MARTA_OT={marta_ot}, MARTA_IT={marta_it}"
+        if marta_it:
+            marta_it_status = "RUNNING"
+        else:
+            marta_it_status = "NOT RUNNING"
+        
+        log_msg = f"\nSoft interlock: LV_on={lv_status}, MARTA_OT={marta_ot_status}, MARTA_IT={marta_it_status}\n"
+        logger.info(log_msg)
 
-        if lv_on and not marta_on:
-            alarm_msg = (
-                "SAFETY INTERLOCK: LV channels are on but MARTA is not running. "
-                "Turning off all LV channels to prevent module damage."
-            )
-            logger.warning(alarm_msg)
-            switch_all_lv_off(caen, used_channels)
-            if publish_alarm:
-                publish_alarm(alarm_msg)
-            return False, alarm_msg
+        if lv_safe_to_on == False:
+            log_msg += "\n!!! Warning: Conditions are not safe to turn on LV channels !!!\n"
+            log_msg += f"\nLV safe to on: NO\n"
+            # switch_all_lv_off(caen, used_channels)
+        else:
+            log_msg += f"\nLV safe to on: YES\n"
+
+            if lv_on and not marta_on:
+                alarm_msg = (
+                    "SAFETY INTERLOCK: LV channels are on but MARTA is not running. "
+                    "Turning off all LV channels to prevent module damage."
+                )
+                logger.warning(alarm_msg)
+                # switch_all_lv_off(caen, used_channels)
+                if publish_alarm:
+                    publish_alarm(alarm_msg)
+                return False, alarm_msg
+            else:
+                log_msg += "\nAll safety conditions met.\n"
+                logger.info(log_msg)
 
         return True, log_msg
 

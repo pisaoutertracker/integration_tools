@@ -19,6 +19,7 @@ from coldroom.safety import (
     check_door_status,
     check_light_safe_to_turn_on,
     check_marta_safe,
+    soft_interlock_loop,
 )
 from caen.caenGUIall import caenGUIall
 from Inner_tracker_GUI.caenGUIall_v2 import caenGUI8LV
@@ -50,6 +51,11 @@ class MainApp(QtWidgets.QMainWindow):
         self.update_timer.timeout.connect(self.update_ui)
         self.update_timer.start(1000)  # Update every second
 
+        # Setup soft interlock timer (5-second interval, independent of UI updates)
+        self.soft_interlock_timer = QTimer()
+        self.soft_interlock_timer.timeout.connect(self.soft_interlock_check)
+        self.soft_interlock_timer.start(5000)
+
         # Connect to MQTT broker at startup
         self.connect_mqtt()
 
@@ -62,6 +68,11 @@ class MainApp(QtWidgets.QMainWindow):
             if hasattr(self, "update_timer"):
                 self.update_timer.stop()
                 logger.debug("Stopped update timer")
+
+            # Stop the soft interlock timer
+            if hasattr(self, "soft_interlock_timer"):
+                self.soft_interlock_timer.stop()
+                logger.debug("Stopped soft interlock timer")
 
             # Cleanup Thermal Camera tab if it exists
             if hasattr(self, "thermal_camera_tab"):
@@ -371,6 +382,14 @@ class MainApp(QtWidgets.QMainWindow):
         label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "coldroom_door_state_label")
         if label:
             logger.debug("Connected door state label")
+        # Soft interlock LED
+        soft_interlock_led = self.marta_coldroom_tab.findChild(QtWidgets.QFrame, "soft_interlock_LED")
+        if soft_interlock_led:
+            logger.debug("Connected soft interlock LED")
+        # Soft interlock message label
+        soft_interlock_msg = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "soft_interlock_msg")
+        if soft_interlock_msg:
+            logger.debug("Connected soft interlock message label")
 
         # Temperature setpoint controls
         button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_temp_set_PB")
@@ -556,6 +575,29 @@ class MainApp(QtWidgets.QMainWindow):
             error_msg = f"Failed to connect to MQTT broker: {str(e)}"
             self.statusBar().showMessage(error_msg)
             logger.error(error_msg)
+
+    def soft_interlock_check(self):
+        logger.info("Called soft Interlock")
+        used_caen_channels = self.modules_list_tab.get_used_channels()
+        logger.info(f"Used CAEN channels for safety checks: {used_caen_channels}")
+        alarm_publish = (lambda msg: self.system._martacoldroom._client.publish("/alarm", msg)) if self.system._martacoldroom else None
+        logger.info(f"Alarm publish function: {alarm_publish}")
+        is_safe, msg = soft_interlock_loop(self.system.status, self.caen_tab.last_response, used_caen_channels, self.caen_tab, publish_alarm=alarm_publish)
+        logger.info(f"Soft interlock result: is_safe={is_safe}, msg={msg}")
+
+        soft_interlock_led = self.marta_coldroom_tab.findChild(QtWidgets.QFrame, "soft_interlock_LED")
+        if soft_interlock_led:
+            status_color = "green" if is_safe else "red"
+            soft_interlock_led.setStyleSheet("background-color: white;")
+            QTimer.singleShot(500, lambda led=soft_interlock_led, color=status_color: led.setStyleSheet(f"background-color: {color};"))
+            logger.info(f"Updated soft interlock LED: {status_color} with pulse")
+
+        soft_interlock_msg_label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "soft_interlock_msg")
+        if soft_interlock_msg_label:
+            soft_interlock_msg_label.setText(msg)
+            logger.info(f"Updated soft interlock message: {msg}")
+
+        logger.info("Completed soft interlock loop")
 
     def update_ui(self):
         """Update UI with current system status"""
@@ -915,6 +957,15 @@ class MainApp(QtWidgets.QMainWindow):
             # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
             self.modules_list_tab.marta_safe, self.modules_list_tab.marta_log_msg = check_marta_safe(self.system.status)
+
+            # logger.info("Called soft Interlock")
+            # used_caen_channels = self.modules_list_tab.get_used_channels()
+            # logger.info(f"Used CAEN channels for safety checks: {used_caen_channels}")
+            # alarm_publish = (lambda msg: self.system._martacoldroom._client.publish("/alarm", msg)) if self.system._martacoldroom else None
+            # logger.info(f"Alarm publish function: {alarm_publish}")
+            # soft_interlock_loop(self.system.status, self.caen_tab.last_response, used_caen_channels, self.caen_tab, publish_alarm=alarm_publish)
+            # logger.info("Completed soft interlock loop")
+
             # Update MARTA CO2 Plant values
             if "marta" in self.system.status:
                 marta = self.system.status["marta"]
