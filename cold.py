@@ -19,12 +19,13 @@ from coldroom.safety import (
     check_door_status,
     check_light_safe_to_turn_on,
     check_marta_safe,
+    soft_interlock_loop,
 )
 from caen.caenGUIall import caenGUIall
 from Inner_tracker_GUI.caenGUIall_v2 import caenGUI8LV
 from db.module_db import ModuleDB
+from power_supply.power_supply_ctrl import PowerSupplyController
 from db.utils import *
-
 
 # Configure logging
 logger = logging.getLogger("integration")
@@ -49,6 +50,11 @@ class MainApp(QtWidgets.QMainWindow):
         self.update_timer.timeout.connect(self.update_ui)
         self.update_timer.start(1000)  # Update every second
 
+        # Setup soft interlock timer (5-second interval, independent of UI updates)
+        self.soft_interlock_timer = QTimer()
+        self.soft_interlock_timer.timeout.connect(self.soft_interlock_check)
+        self.soft_interlock_timer.start(5000)
+
         # Connect to MQTT broker at startup
         self.connect_mqtt()
 
@@ -61,6 +67,11 @@ class MainApp(QtWidgets.QMainWindow):
             if hasattr(self, "update_timer"):
                 self.update_timer.stop()
                 logger.debug("Stopped update timer")
+
+            # Stop the soft interlock timer
+            if hasattr(self, "soft_interlock_timer"):
+                self.soft_interlock_timer.stop()
+                logger.debug("Stopped soft interlock timer")
 
             # Cleanup Thermal Camera tab if it exists
             if hasattr(self, "thermal_camera_tab"):
@@ -125,7 +136,9 @@ class MainApp(QtWidgets.QMainWindow):
         # Load the MARTA Cold Room tab from UI file
         # Create a temporary QMainWindow to load the UI
         temp_window = QtWidgets.QMainWindow()
-        marta_ui_file = os.path.join(os.path.dirname(__file__), "coldroom", "marta_coldroom.ui")
+        marta_ui_file = os.path.join(
+            os.path.dirname(__file__), "coldroom", "marta_coldroom.ui"
+        )
         uic.loadUi(marta_ui_file, temp_window)
 
         # Create a QWidget for our tab and get the central widget from temp_window
@@ -160,20 +173,28 @@ class MainApp(QtWidgets.QMainWindow):
         self.tab_widget.addTab(self.module_db.ui.tab_2, "Module Inventory")
         self.tab_widget.addTab(self.module_db.ui.moduleDetailsTab, "Module Details")
         self.module_db.ui.viewDetailsPB.clicked.connect(
-            lambda: self.tab_widget.setCurrentIndex(self.tab_widget.indexOf(self.module_db.ui.moduleDetailsTab))
+            lambda: self.tab_widget.setCurrentIndex(
+                self.tab_widget.indexOf(self.module_db.ui.moduleDetailsTab)
+            )
         )
         self.module_db.ui.selectModulePB.setEnabled(False)
         self.modules_list_tab.db_url = self.module_db.db_url
 
         # Load settings tab from UI file
         self.settings_tab = QtWidgets.QWidget()
-        settings_ui_file = os.path.join(os.path.dirname(__file__), "coldroom", "settings_coldroom.ui")
+        settings_ui_file = os.path.join(
+            os.path.dirname(__file__), "coldroom", "settings_coldroom.ui"
+        )
         uic.loadUi(settings_ui_file, self.settings_tab)
         self.tab_widget.addTab(self.settings_tab, "Settings")
 
         # Add IT_CAEN tab
         self.IT_caen_tab = caenGUI8LV()
         self.tab_widget.addTab(self.IT_caen_tab, "IT CAEN")
+
+        # Add Power Supply tab
+        self.power_supply_tab = PowerSupplyController()
+        self.tab_widget.addTab(self.power_supply_tab, "Power Supply")
 
         # Pre-fill settings with values from system
         self.load_settings_to_ui()
@@ -190,10 +211,15 @@ class MainApp(QtWidgets.QMainWindow):
 
     def get_ring_id(self):
         self.number_of_modules = 0  # Add default at the start
-        self.ring_id=get_ring_from_cable("I1") #hardcode the single harting cable I1
+        # self.ring_id=get_ring_from_cable("I1") #hardcode the single harting cable I1
+        self.ring_id = get_ring_from_cable(
+            "I1", db_url=self.module_db.db_url
+        )  # hardcode the single harting cable I1
         if self.ring_id == None:
-            ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
-            
+            ring_history_file = os.path.join(
+                os.path.dirname(__file__), "ring_history.txt"
+            )
+
             if os.path.exists(ring_history_file):
                 with open(ring_history_file, "r") as f:
                     lines = f.readlines()
@@ -201,8 +227,8 @@ class MainApp(QtWidgets.QMainWindow):
                         self.ring_id = lines[-1].strip()
                     else:
                         self.ring_id = None
-        
-        #TODO: move this to the right place so it works also when ring ID LineEdit is updated 
+
+        # TODO: move this to the right place so it works also when ring ID LineEdit is updated
         if self.ring_id != None:
             self.modules_list_tab.ring_id_LE.setText(self.ring_id)
             logger.info(f"Loaded ring ID from history: {self.ring_id}")
@@ -214,7 +240,10 @@ class MainApp(QtWidgets.QMainWindow):
             elif self.ring_id.startswith("L3_"):
                 self.number_of_modules = 36
             self.modules_list_tab.populate_from_config(
-                self.caen_tab, self.mounted_modules, self.number_of_modules, self.thermal_camera_tab
+                self.caen_tab,
+                self.mounted_modules,
+                self.number_of_modules,
+                self.thermal_camera_tab,
             )
         return self.ring_id
 
@@ -232,9 +261,13 @@ class MainApp(QtWidgets.QMainWindow):
         elif self.ring_id.startswith("L3_"):
             self.number_of_modules = 36
         else:
-            self.message_box.setText("Invalid ring ID format. Must start with L1_, L2_, or L3_.")
+            self.message_box.setText(
+                "Invalid ring ID format. Must start with L1_, L2_, or L3_."
+            )
             self.message_box.exec_()
-        self.modules_list_tab.populate_from_config(self.caen_tab, self.mounted_modules, self.number_of_modules)
+        self.modules_list_tab.populate_from_config(
+            self.caen_tab, self.mounted_modules, self.number_of_modules
+        )
 
     def save_ring_id(self):
         ring_history_file = os.path.join(os.path.dirname(__file__), "ring_history.txt")
@@ -243,20 +276,28 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info(f"Ring ID {self.ring_id} saved successfully.")
 
     def get_mounted_modules(self):
-        self.mounted_modules = get_modules_on_ring(self.ring_id, db_url=self.module_db.db_url)
+        self.mounted_modules = get_modules_on_ring(
+            self.ring_id, db_url=self.module_db.db_url
+        )
         for module_name in self.mounted_modules:
-            self.mounted_modules[module_name].update(get_module_endpoints(module_name, db_url=self.module_db.db_url))
+            self.mounted_modules[module_name].update(
+                get_module_endpoints(module_name, db_url=self.module_db.db_url)
+            )
             self.mounted_modules[module_name].update(
                 {"speed": get_module_speed(module_name, db_url=self.module_db.db_url)}
             )
             self.mounted_modules[module_name].update(
-                {"fuseId": get_module_fuse_id(module_name, db_url=self.module_db.db_url)}
+                {
+                    "fuseId": get_module_fuse_id(
+                        module_name, db_url=self.module_db.db_url
+                    )
+                }
             )
             self.mounted_modules[module_name].update(
                 {
-                    "temperature_offsets": get_module(module_name, db_url=self.module_db.db_url).get(
-                        "temperature_offsets", {}
-                    )
+                    "temperature_offsets": get_module(
+                        module_name, db_url=self.module_db.db_url
+                    ).get("temperature_offsets", {})
                 }
             )
         logger.debug(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
@@ -266,11 +307,21 @@ class MainApp(QtWidgets.QMainWindow):
         # Fill settings UI with current values
         self.settings_tab.brokerLineEdit.setText(self.system.settings["mqtt"]["broker"])
         self.settings_tab.portSpinBox.setValue(self.system.settings["mqtt"]["port"])
-        self.settings_tab.martaTopicLineEdit.setText(self.system.settings["MARTA"]["mqtt_topic"])
-        self.settings_tab.coldroomTopicLineEdit.setText(self.system.settings["Coldroom"]["mqtt_topic"])
-        self.settings_tab.co2SensorTopicLineEdit.setText(self.system.settings["Coldroom"]["co2_sensor_topic"])
-        self.settings_tab.thermalCameraTopicLineEdit.setText(self.system.settings["ThermalCamera"]["mqtt_topic"])
-        self.settings_tab.cleanroomTopicLineEdit.setText(self.system.settings["Cleanroom"]["mqtt_topic"])
+        self.settings_tab.martaTopicLineEdit.setText(
+            self.system.settings["MARTA"]["mqtt_topic"]
+        )
+        self.settings_tab.coldroomTopicLineEdit.setText(
+            self.system.settings["Coldroom"]["mqtt_topic"]
+        )
+        self.settings_tab.co2SensorTopicLineEdit.setText(
+            self.system.settings["Coldroom"]["co2_sensor_topic"]
+        )
+        self.settings_tab.thermalCameraTopicLineEdit.setText(
+            self.system.settings["ThermalCamera"]["mqtt_topic"]
+        )
+        self.settings_tab.cleanroomTopicLineEdit.setText(
+            self.system.settings["Cleanroom"]["mqtt_topic"]
+        )
 
     def connect_signals(self):
         # Module list
@@ -287,66 +338,88 @@ class MainApp(QtWidgets.QMainWindow):
                 le.setStyleSheet("QLineEdit { color: grey; }")
 
                 # Connect signals
-                le.textChanged.connect(lambda: le.setStyleSheet("QLineEdit { color: black; }"))
-                le.editingFinished.connect(lambda: le.setPlaceholderText(placeholder) if le.text() == "" else None)
+                le.textChanged.connect(
+                    lambda: le.setStyleSheet("QLineEdit { color: black; }")
+                )
+                le.editingFinished.connect(
+                    lambda: (
+                        le.setPlaceholderText(placeholder) if le.text() == "" else None
+                    )
+                )
 
         # Light controls
-        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_light_on_PB").clicked.connect(
-            self.coldroom_light_on
-        )
-        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_light_off_PB").clicked.connect(
-            self.coldroom_light_off
-        )
+        self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_light_on_PB"
+        ).clicked.connect(self.coldroom_light_on)
+        self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_light_off_PB"
+        ).clicked.connect(self.coldroom_light_off)
 
         # Dry air controls
-        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_air_on_PB").clicked.connect(
-            self.coldroom_dry_air_on
-        )
-        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_air_off_PB").clicked.connect(
-            self.coldroom_dry_air_off
-        )
+        self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_dry_air_on_PB"
+        ).clicked.connect(self.coldroom_dry_air_on)
+        self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_dry_air_off_PB"
+        ).clicked.connect(self.coldroom_dry_air_off)
 
         # Dry air bypass controls
-        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_air_bypass_on_PB").clicked.connect(
-            self.coldroom_dry_air_bypass_on
-        )
-        self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_dry_air_bypass_off_PB").clicked.connect(
-            self.coldroom_dry_air_bypass_off
-        )
+        self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_dry_air_bypass_on_PB"
+        ).clicked.connect(self.coldroom_dry_air_bypass_on)
+        self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_dry_air_bypass_off_PB"
+        ).clicked.connect(self.coldroom_dry_air_bypass_off)
 
         # Door controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_door_toggle_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_door_toggle_PB"
+        )
         if button:
             button.clicked.connect(self.toggle_coldroom_door)
 
         # Temperature controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_temp_ctrl_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_temp_ctrl_PB"
+        )
         if button:
             button.clicked.connect(self.toggle_coldroom_temp_control)
 
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_run_start")
-        if button:
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_run_start"
+        )
+        if button and self.system._martacoldroom:
             button.clicked.connect(self.system._martacoldroom.run)
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_run_stop")
-        if button:
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_run_stop"
+        )
+        if button and self.system._martacoldroom:
             button.clicked.connect(self.system._martacoldroom.stop)
 
         configure_line_edit("coldroom_temp_LE", "-30°C to 30°C")
         configure_line_edit("coldroom_humidity_LE", "0% to 50%")
         # Temperature setpoint label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "coldroom_temp_set_point_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "coldroom_temp_set_point_label"
+        )
         if label:
             logger.debug("Connected temperature set point label")
         # Humidity setpoint label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "coldroom_humidity_set_point_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "coldroom_humidity_set_point_label"
+        )
         if label:
             logger.debug("Connected humidity set point label")
         # Temperature control LED
-        ctrl_temp_led = self.marta_coldroom_tab.findChild(QtWidgets.QFrame, "ctrl_temp_LED")
+        ctrl_temp_led = self.marta_coldroom_tab.findChild(
+            QtWidgets.QFrame, "ctrl_temp_LED"
+        )
         if ctrl_temp_led:
             logger.debug("Connected temperature control LED")
         # Humidity control LED
-        ctrl_humidity_led = self.marta_coldroom_tab.findChild(QtWidgets.QFrame, "ctrl_humidity_LED")
+        ctrl_humidity_led = self.marta_coldroom_tab.findChild(
+            QtWidgets.QFrame, "ctrl_humidity_LED"
+        )
         if ctrl_humidity_led:
             logger.debug("Connected humidity control LED")
         # Light control LED
@@ -358,136 +431,206 @@ class MainApp(QtWidgets.QMainWindow):
         if dry_air_led:
             logger.debug("Connected dry air control LED")
         # Safe to open LED
-        safe_to_open_led = self.marta_coldroom_tab.findChild(QtWidgets.QFrame, "safe_to_open_LED")
+        safe_to_open_led = self.marta_coldroom_tab.findChild(
+            QtWidgets.QFrame, "safe_to_open_LED"
+        )
         if safe_to_open_led:
             logger.debug("Connected safe to open LED")
         # Door state label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "coldroom_door_state_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "coldroom_door_state_label"
+        )
         if label:
             logger.debug("Connected door state label")
+        # Soft interlock LED
+        soft_interlock_led = self.marta_coldroom_tab.findChild(
+            QtWidgets.QFrame, "soft_interlock_LED"
+        )
+        if soft_interlock_led:
+            logger.debug("Connected soft interlock LED")
+        # Soft interlock message label
+        soft_interlock_msg = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "soft_interlock_msg"
+        )
+        if soft_interlock_msg:
+            logger.debug("Connected soft interlock message label")
 
         # Temperature setpoint controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_temp_set_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_temp_set_PB"
+        )
         if button:
             button.clicked.connect(self.set_coldroom_temperature)
 
         # Humidity controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_humidity_ctrl_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_humidity_ctrl_PB"
+        )
         if button:
             button.clicked.connect(self.toggle_coldroom_humidity_control)
 
         # Humidity setpoint controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_humidity_set_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_humidity_set_PB"
+        )
         if button:
             button.clicked.connect(self.set_coldroom_humidity)
 
         # Run controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_run_toggle_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_run_toggle_PB"
+        )
         if button:
             button.clicked.connect(self.toggle_coldroom_run)
 
         # Reset alarms
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "coldroom_reset_alarms_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "coldroom_reset_alarms_PB"
+        )
         if button:
             button.clicked.connect(self.reset_coldroom_alarms)
 
         # MARTA CO2 Plant controls
         # Temperature controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_temp_set_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_temp_set_PB"
+        )
         if button:
             button.clicked.connect(self.set_marta_temperature)
-        configure_line_edit("marta_temp_LE", "-30°C to 18°C")  # Placeholder for temperature input
+        configure_line_edit(
+            "marta_temp_LE", "-30°C to 18°C"
+        )  # Placeholder for temperature input
 
         # Speed controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_speed_set_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_speed_set_PB"
+        )
         if button:
             button.clicked.connect(self.set_marta_speed)
-        configure_line_edit("marta_speed_LE", "5000 to 6000 RPM")  # Placeholder for speed input
+        configure_line_edit(
+            "marta_speed_LE", "5000 to 6000 RPM"
+        )  # Placeholder for speed input
 
         # Flow controls
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_flow_set_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_flow_set_PB"
+        )
         if button:
             button.clicked.connect(self.set_marta_flow)
-        configure_line_edit("marta_flow_LE", "0 to 5 L/min")  # Placeholder for flow input
+        configure_line_edit(
+            "marta_flow_LE", "0 to 5 L/min"
+        )  # Placeholder for flow input
 
         # Supply temperature label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "marta_temp_supply_value_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "marta_temp_supply_value_label"
+        )
         if label:
             logger.debug("Connected supply temperature label")
 
         # Return temperature label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "marta_temp_return_value_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "marta_temp_return_value_label"
+        )
         if label:
             logger.debug("Connected return temperature label")
 
         # Supply pressure label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "marta_pressure_supply_value_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "marta_pressure_supply_value_label"
+        )
         if label:
             logger.debug("Connected supply pressure label")
 
         # Return pressure label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "marta_pressure_return_value_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "marta_pressure_return_value_label"
+        )
         if label:
             logger.debug("Connected return pressure label")
 
         # Speed label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "marta_speed_value_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "marta_speed_value_label"
+        )
         if label:
             logger.debug("Connected speed label")
 
         # Temperature Set Point Label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "marta_temp_set_point_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "marta_temp_set_point_label"
+        )
         if label:
             logger.debug("Connected temperature set point label")
 
         # Speed Set Point Label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "marta_speed_set_point_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "marta_speed_set_point_label"
+        )
         if label:
             logger.debug("Connected speed set point label")
 
         # Flow Set Point Label
-        label = self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "marta_flow_set_point_label")
+        label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "marta_flow_set_point_label"
+        )
         if label:
             logger.debug("Connected flow set point label")
 
         # Other MARTA controls
         # Start chiller button
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_chiller_start_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_chiller_start_PB"
+        )
         if button:
             button.clicked.connect(self.start_marta_chiller)
 
         # Start CO2 button
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_co2_start_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_co2_start_PB"
+        )
         if button:
             button.clicked.connect(self.start_marta_co2)
 
         # Stop CO2 button
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_co2_stop_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_co2_stop_PB"
+        )
         if button:
             button.clicked.connect(self.stop_marta_co2)
 
         # Stop chiller button
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_chiller_stop_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_chiller_stop_PB"
+        )
         if button:
             button.clicked.connect(self.stop_marta_chiller)
 
         # Clear alarms button
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_alarms_clear_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_alarms_clear_PB"
+        )
         if button:
             button.clicked.connect(self.clear_marta_alarms)
 
         # Reconnect button
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_reconnect_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_reconnect_PB"
+        )
         if button:
             button.clicked.connect(self.reconnect_marta)
 
         # Refresh button
-        button = self.marta_coldroom_tab.findChild(QtWidgets.QPushButton, "marta_refresh_PB")
+        button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "marta_refresh_PB"
+        )
         if button:
             button.clicked.connect(self.refresh_marta)
 
         # Flow active checkbox
-        checkbox = self.marta_coldroom_tab.findChild(QtWidgets.QCheckBox, "marta_flow_active_CB")
+        checkbox = self.marta_coldroom_tab.findChild(
+            QtWidgets.QCheckBox, "marta_flow_active_CB"
+        )
         if checkbox:
             checkbox.clicked.connect(self.toggle_marta_flow_active)
 
@@ -501,28 +644,40 @@ class MainApp(QtWidgets.QMainWindow):
             logger.debug(f"Found checkbox: {checkbox.objectName()}")
 
         # Update validators to match placeholder ranges
-        temp_lineedit_coldroom = self.marta_coldroom_tab.findChild(QtWidgets.QLineEdit, "coldroom_temp_LE")
+        temp_lineedit_coldroom = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLineEdit, "coldroom_temp_LE"
+        )
         if temp_lineedit_coldroom:
-            temp_lineedit_coldroom.setValidator(QtGui.QDoubleValidator(-30, 30, 2))  # Matches placeholder
+            temp_lineedit_coldroom.setValidator(
+                QtGui.QDoubleValidator(-30, 30, 2)
+            )  # Matches placeholder
 
-        humid_lineedit_coldroom = self.marta_coldroom_tab.findChild(QtWidgets.QLineEdit, "coldroom_humidity_LE")
+        humid_lineedit_coldroom = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLineEdit, "coldroom_humidity_LE"
+        )
         if humid_lineedit_coldroom:
             humid_lineedit_coldroom.setValidator(QtGui.QDoubleValidator(0, 50, 2))
 
         # Add input validation for numeric fields
-        temp_lineedit = self.marta_coldroom_tab.findChild(QtWidgets.QLineEdit, "marta_temp_LE")
+        temp_lineedit = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLineEdit, "marta_temp_LE"
+        )
         if temp_lineedit:
             validator = QtGui.QDoubleValidator(-30, 18, 2)  # min, max, decimals
             temp_lineedit.setValidator(validator)
 
         # Add input validation for numeric fields
-        speed_lineedit = self.marta_coldroom_tab.findChild(QtWidgets.QLineEdit, "marta_speed_LE")
+        speed_lineedit = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLineEdit, "marta_speed_LE"
+        )
         if speed_lineedit:
             validator = QtGui.QDoubleValidator(5000, 6000, 0)  # min, max, decimals
             speed_lineedit.setValidator(validator)
 
         # Add input validation for numeric fields
-        flow_lineedit = self.marta_coldroom_tab.findChild(QtWidgets.QLineEdit, "marta_flow_LE")
+        flow_lineedit = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLineEdit, "marta_flow_LE"
+        )
         if flow_lineedit:
             validator = QtGui.QDoubleValidator(0, 5, 2)  # min, max, decimals
             flow_lineedit.setValidator(validator)
@@ -551,6 +706,48 @@ class MainApp(QtWidgets.QMainWindow):
             self.statusBar().showMessage(error_msg)
             logger.error(error_msg)
 
+    def soft_interlock_check(self):
+        logger.info("Called soft Interlock")
+        used_caen_channels = self.modules_list_tab.get_used_channels()
+        logger.info(f"Used CAEN channels for safety checks: {used_caen_channels}")
+        alarm_publish = (
+            (lambda msg: self.system._martacoldroom._client.publish("/alarm", msg))
+            if self.system._martacoldroom
+            else None
+        )
+        logger.info(f"Alarm publish function: {alarm_publish}")
+        is_safe, msg = soft_interlock_loop(
+            self.system.status,
+            self.caen_tab.last_response,
+            used_caen_channels,
+            self.caen_tab,
+            publish_alarm=alarm_publish,
+        )
+        logger.info(f"Soft interlock result: is_safe={is_safe}, msg={msg}")
+
+        soft_interlock_led = self.marta_coldroom_tab.findChild(
+            QtWidgets.QFrame, "soft_interlock_LED"
+        )
+        if soft_interlock_led:
+            status_color = "green" if is_safe else "red"
+            soft_interlock_led.setStyleSheet("background-color: white;")
+            QTimer.singleShot(
+                500,
+                lambda led=soft_interlock_led, color=status_color: led.setStyleSheet(
+                    f"background-color: {color};"
+                ),
+            )
+            logger.info(f"Updated soft interlock LED: {status_color} with pulse")
+
+        soft_interlock_msg_label = self.marta_coldroom_tab.findChild(
+            QtWidgets.QLabel, "soft_interlock_msg"
+        )
+        if soft_interlock_msg_label:
+            soft_interlock_msg_label.setText(msg)
+            logger.info(f"Updated soft interlock message: {msg}")
+
+        logger.info("Completed soft interlock loop")
+
     def update_ui(self):
         """Update UI with current system status"""
         try:
@@ -573,43 +770,79 @@ class MainApp(QtWidgets.QMainWindow):
                 logger.debug(f"Updating Cleanroom UI with status: {cleanroom}")
 
                 # Temperature
-                label = central.findChild(QtWidgets.QLabel, "cleanroom_temp_value_label")
-                if label and "temperature" in cleanroom and cleanroom["temperature"] is not None:
+                label = central.findChild(
+                    QtWidgets.QLabel, "cleanroom_temp_value_label"
+                )
+                if (
+                    label
+                    and "temperature" in cleanroom
+                    and cleanroom["temperature"] is not None
+                ):
                     temp_value = cleanroom["temperature"]
                     label.setText(f"{temp_value:.1f}")
                     logger.debug(f"Updated Cleanroom temperature: {temp_value}")
 
                 # Humidity
-                label = central.findChild(QtWidgets.QLabel, "cleanroom_humidity_value_label")
-                if label and "humidity" in cleanroom and cleanroom["humidity"] is not None:
+                label = central.findChild(
+                    QtWidgets.QLabel, "cleanroom_humidity_value_label"
+                )
+                if (
+                    label
+                    and "humidity" in cleanroom
+                    and cleanroom["humidity"] is not None
+                ):
                     humid_value = cleanroom["humidity"]
                     label.setText(f"{humid_value:.1f}")
                     logger.debug(f"Updated Cleanroom humidity: {humid_value}")
 
                 # Dewpoint
-                label = central.findChild(QtWidgets.QLabel, "cleanroom_dewpoint_value_label")
-                if label and "dewpoint" in cleanroom and cleanroom["dewpoint"] is not None:
+                label = central.findChild(
+                    QtWidgets.QLabel, "cleanroom_dewpoint_value_label"
+                )
+                if (
+                    label
+                    and "dewpoint" in cleanroom
+                    and cleanroom["dewpoint"] is not None
+                ):
                     dewpoint = cleanroom["dewpoint"]
                     label.setText(f"{dewpoint:.1f}")
                     logger.debug(f"Updated Cleanroom dewpoint: {dewpoint}")
 
                 # Pressure
-                label = central.findChild(QtWidgets.QLabel, "cleanroom_pressure_value_label")
-                if label and "pressure" in cleanroom and cleanroom["pressure"] is not None:
+                label = central.findChild(
+                    QtWidgets.QLabel, "cleanroom_pressure_value_label"
+                )
+                if (
+                    label
+                    and "pressure" in cleanroom
+                    and cleanroom["pressure"] is not None
+                ):
                     pressure = cleanroom["pressure"]
                     label.setText(f"{pressure:.1f}")
                     logger.debug(f"Updated Cleanroom pressure: {pressure}")
 
-                label = central.findChild(QtWidgets.QLabel, "cleanroom_last_update_value_label")
-                if label and "last_update" in cleanroom and cleanroom["last_update"] is not None:
+                label = central.findChild(
+                    QtWidgets.QLabel, "cleanroom_last_update_value_label"
+                )
+                if (
+                    label
+                    and "last_update" in cleanroom
+                    and cleanroom["last_update"] is not None
+                ):
                     last_update = cleanroom["last_update"]
                     label.setText(f"{last_update}")
                     logger.debug(f"Updated Cleanroom last update: {last_update}")
 
-                label = central.findChild(QtWidgets.QLabel, "cleanroom_last_update_value_label_2")
+                label = central.findChild(
+                    QtWidgets.QLabel, "cleanroom_last_update_value_label_2"
+                )
                 if label:
-                    delta_t_update = self.system._martacoldroom._cleanroom_last_update_elapsed_time
-                    delta_t_update = time.strftime("%H:%M:%S", time.gmtime(delta_t_update))
+                    delta_t_update = (
+                        self.system._martacoldroom._cleanroom_last_update_elapsed_time
+                    )
+                    delta_t_update = time.strftime(
+                        "%H:%M:%S", time.gmtime(delta_t_update)
+                    )
                     label.setText(delta_t_update)
                     logger.debug(f"Updated Cleanroom delta t update: {delta_t_update}")
 
@@ -621,15 +854,21 @@ class MainApp(QtWidgets.QMainWindow):
                 coldroom = self.system.status["coldroom"]
                 logger.debug(f"Updating Coldroom UI with status: {coldroom}")
 
-                temp_control_active = coldroom.get("ch_temperature", {}).get("status", False)
-                hum_control_active = coldroom.get("ch_humidity", {}).get("status", False)
+                temp_control_active = coldroom.get("ch_temperature", {}).get(
+                    "status", False
+                )
+                hum_control_active = coldroom.get("ch_humidity", {}).get(
+                    "status", False
+                )
 
                 # =========================================================================================== COLDROOM TEMPERATURE PROCESS ===========================================================================================
 
                 # Temperature Current Value
                 if "ch_temperature" in coldroom:
                     # Current temperature
-                    label = central.findChild(QtWidgets.QLabel, "coldroom_temp_value_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "coldroom_temp_value_label"
+                    )
                     if label:
                         temp_value = coldroom["ch_temperature"].get("value", "?")
                         label.setText(f"{temp_value:.1f}")
@@ -639,7 +878,9 @@ class MainApp(QtWidgets.QMainWindow):
                 if "ch_temperature" in coldroom:
                     if "status" in coldroom["ch_temperature"]:
                         # Update Temperature control LED
-                        ctrl_temp_led = central.findChild(QtWidgets.QFrame, "ctrl_temp_LED")
+                        ctrl_temp_led = central.findChild(
+                            QtWidgets.QFrame, "ctrl_temp_LED"
+                        )
                         if ctrl_temp_led:
                             ctrl_temp_led.setStyleSheet(
                                 "background-color: green;"
@@ -671,7 +912,9 @@ class MainApp(QtWidgets.QMainWindow):
                 # Temperature setpoint label
                 if "ch_temperature" in coldroom:
                     if "setpoint" in coldroom["ch_temperature"]:
-                        label = central.findChild(QtWidgets.QLabel, "coldroom_temp_set_point_label")
+                        label = central.findChild(
+                            QtWidgets.QLabel, "coldroom_temp_set_point_label"
+                        )
                         if label:
                             temp_setpoint = coldroom["ch_temperature"]["setpoint"]
                         label.setText(f"{temp_setpoint:.1f}")
@@ -682,7 +925,9 @@ class MainApp(QtWidgets.QMainWindow):
                 # Humidity Current Value
                 if "ch_humidity" in coldroom:
                     # Current humidity
-                    label = central.findChild(QtWidgets.QLabel, "coldroom_humidity_value_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "coldroom_humidity_value_label"
+                    )
                     if label:
                         humid_value = coldroom["ch_humidity"].get("value", "?")
                         label.setText(f"{humid_value:.1f}")
@@ -692,7 +937,9 @@ class MainApp(QtWidgets.QMainWindow):
                 if "ch_humidity" in coldroom:
                     if "status" in coldroom["ch_humidity"]:
                         # Update Humidity control LED
-                        ctrl_humidity_led = central.findChild(QtWidgets.QFrame, "ctrl_humidity_LED")
+                        ctrl_humidity_led = central.findChild(
+                            QtWidgets.QFrame, "ctrl_humidity_LED"
+                        )
                         if ctrl_humidity_led:
                             ctrl_humidity_led.setStyleSheet(
                                 "background-color: green;"
@@ -704,7 +951,9 @@ class MainApp(QtWidgets.QMainWindow):
                             )
 
                 # Humidity setpoint lineedit
-                lineedit = central.findChild(QtWidgets.QLineEdit, "coldroom_humidity_LE")
+                lineedit = central.findChild(
+                    QtWidgets.QLineEdit, "coldroom_humidity_LE"
+                )
                 if lineedit:
                     user_has_entered_value = bool(lineedit.text().strip())
                     # Case 1: User is actively typing - preserve their input
@@ -724,7 +973,9 @@ class MainApp(QtWidgets.QMainWindow):
                 # Humidity setpoint label
                 if "ch_humidity" in coldroom:
                     if "setpoint" in coldroom["ch_humidity"]:
-                        label = central.findChild(QtWidgets.QLabel, "coldroom_humidity_set_point_label")
+                        label = central.findChild(
+                            QtWidgets.QLabel, "coldroom_humidity_set_point_label"
+                        )
                         if label:
                             humid_setpoint = coldroom["ch_humidity"]["setpoint"]
                             label.setText(f"{humid_setpoint:.1f}")
@@ -732,7 +983,9 @@ class MainApp(QtWidgets.QMainWindow):
 
                 # =========================================================================================== COLDROOM DEWPOINT PROCESS ===========================================================================================
                 # Dewpoint (from coldroom data)
-                label = central.findChild(QtWidgets.QLabel, "coldroom_dewpoint_value_label")
+                label = central.findChild(
+                    QtWidgets.QLabel, "coldroom_dewpoint_value_label"
+                )
                 if label and "dew_point_c" in coldroom:
                     dewpoint = coldroom["dew_point_c"]
                     label.setText(f"{dewpoint:.1f}")
@@ -745,32 +998,50 @@ class MainApp(QtWidgets.QMainWindow):
                     light_led = central.findChild(QtWidgets.QFrame, "light_LED")
                     if light_led:
                         light_led.setStyleSheet(
-                            "background-color: yellow;" if coldroom["light"] else "background-color: black;"
+                            "background-color: yellow;"
+                            if coldroom["light"]
+                            else "background-color: black;"
                         )  # LED is yellow when ON
-                        logger.debug(f"Updated light LED: {'yellow' if coldroom['light'] else 'black'}")
+                        logger.debug(
+                            f"Updated light LED: {'yellow' if coldroom['light'] else 'black'}"
+                        )
                         if bool(coldroom["light"]) is False:
                             logger.debug("Light off, check if it is safe")
-                            used_caen_channels = self.modules_list_tab.get_used_channels()
-                            is_safe = check_light_safe_to_turn_on(
-                                self.system.status, self.caen_tab.last_response, used_caen_channels
+                            used_caen_channels = (
+                                self.modules_list_tab.get_used_channels()
                             )
-                            button = central.findChild(QtWidgets.QPushButton, "coldroom_light_on_PB")
+                            is_safe = check_light_safe_to_turn_on(
+                                self.system.status,
+                                self.caen_tab.last_response,
+                                used_caen_channels,
+                            )
+                            button = central.findChild(
+                                QtWidgets.QPushButton, "coldroom_light_on_PB"
+                            )
                             if not is_safe:
                                 logger.debug("not safe")
                                 if button:
                                     button.setEnabled(False)
-                                    logger.debug("Disabled light button due to safety check")
+                                    logger.debug(
+                                        "Disabled light button due to safety check"
+                                    )
                             else:
                                 if button:
                                     button.setEnabled(True)
-                                    logger.debug("Enabled light button after safety check")
+                                    logger.debug(
+                                        "Enabled light button after safety check"
+                                    )
                 # Dry air bypass
-                dryair_bypass_led = central.findChild(QtWidgets.QFrame, "dryair_bypass_LED")
+                dryair_bypass_led = central.findChild(
+                    QtWidgets.QFrame, "dryair_bypass_LED"
+                )
                 coldroom_air = self.system.status.get("coldroomair", {})
                 if dryair_bypass_led:
                     if "air_bypass_status" in coldroom_air:
                         dryair_bypass_led.setStyleSheet(
-                            "background-color: green;" if coldroom_air["air_bypass_status"] else "background-color: red;"
+                            "background-color: green;"
+                            if coldroom_air["air_bypass_status"]
+                            else "background-color: red;"
                         )
                         logger.debug(
                             f"Updated dry air bypass LED: {'green' if coldroom_air['air_bypass_status'] else 'red'}"
@@ -783,18 +1054,24 @@ class MainApp(QtWidgets.QMainWindow):
                 # Door status and LED
                 if "CmdDoorUnlock_Reff" in coldroom:
                     door_status = "OPEN" if coldroom["CmdDoorUnlock_Reff"] else "CLOSED"
-                    label = central.findChild(QtWidgets.QLabel, "coldroom_door_state_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "coldroom_door_state_label"
+                    )
                     if label:
                         label.setText(door_status)
                         logger.debug(f"Updated door status: {door_status}")
 
                 # =========================================================================================== COLDROOM RUN PROCESS ===========================================================================================
                 # Update safe to open LED based on door safety check
-                safe_to_open_led = central.findChild(QtWidgets.QFrame, "safe_to_open_LED")
+                safe_to_open_led = central.findChild(
+                    QtWidgets.QFrame, "safe_to_open_LED"
+                )
                 if safe_to_open_led:
                     used_caen_channels = self.modules_list_tab.get_used_channels()
                     is_safe, door_msg = check_door_safe_to_open(
-                        self.system.status, self.caen_tab.last_response, used_caen_channels
+                        self.system.status,
+                        self.caen_tab.last_response,
+                        used_caen_channels,
                     )
                     # Check co2 values
                     if "co2_sensor" in self.system.status:
@@ -802,18 +1079,31 @@ class MainApp(QtWidgets.QMainWindow):
                         if "CO2" in co2_data:
                             if co2_data["CO2"] > 800:
                                 is_safe = False
-                                door_msg += "CO2 levels safe: False"
+                                # door_msg += "CO2 levels safe: False"
+                                door_msg += "CO2 levels safe: NO"
+                                door_msg += f" (Current CO2: {co2_data['CO2']:.1f} ppm > 800 ppm)"
                             else:
-                                door_msg += "CO2 levels safe: True"
-                    safe_to_open_led.setStyleSheet("background-color: green;" if is_safe else "background-color: red;")
-                    logger.debug(f"Updated safe to open LED: {'green' if is_safe else 'red'} (is_safe={is_safe})")
+                                # door_msg += "CO2 levels safe: True"
+                                door_msg += "CO2 levels safe: Yes"
+                    safe_to_open_led.setStyleSheet(
+                        "background-color: green;"
+                        if is_safe
+                        else "background-color: red;"
+                    )
+                    logger.debug(
+                        f"Updated safe to open LED: {'green' if is_safe else 'red'} (is_safe={is_safe})"
+                    )
                     self.system._martacoldroom.publish_door_safety_status(is_safe)
-                    self.marta_coldroom_tab.findChild(QtWidgets.QLabel, "door_safety_msg").setText(door_msg)
+                    self.marta_coldroom_tab.findChild(
+                        QtWidgets.QLabel, "door_safety_msg"
+                    ).setText(door_msg)
 
                 # =========================================================================================== COLDROOM RUN PROCESS ===========================================================================================
                 # Run status
                 if "running" in coldroom:
-                    label = central.findChild(QtWidgets.QLabel, "coldroom_run_state_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "coldroom_run_state_label"
+                    )
                     if label:
                         run_text = "Running" if coldroom["running"] else "Stopped"
                         label.setText(run_text)
@@ -826,9 +1116,13 @@ class MainApp(QtWidgets.QMainWindow):
                     dry_air_led = central.findChild(QtWidgets.QFrame, "dryair_LED")
                     if dry_air_led:
                         dry_air_led.setStyleSheet(
-                            "background-color: green;" if coldroom["dry_air_status"] else "background-color: red;"
+                            "background-color: green;"
+                            if coldroom["dry_air_status"]
+                            else "background-color: red;"
                         )
-                        logger.debug(f"Updated dry air LED: {'green' if coldroom['dry_air_status'] else 'red'}")
+                        logger.debug(
+                            f"Updated dry air LED: {'green' if coldroom['dry_air_status'] else 'red'}"
+                        )
 
             # Update CO2 sensor data
             if "co2_sensor" in self.system.status:
@@ -905,7 +1199,18 @@ class MainApp(QtWidgets.QMainWindow):
             # =========================================================================================== MARTA    ===========================================================================================
             # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-            self.modules_list_tab.marta_safe, self.modules_list_tab.marta_log_msg = check_marta_safe(self.system.status)
+            self.modules_list_tab.marta_safe, self.modules_list_tab.marta_log_msg = (
+                check_marta_safe(self.system.status)
+            )
+
+            # logger.info("Called soft Interlock")
+            # used_caen_channels = self.modules_list_tab.get_used_channels()
+            # logger.info(f"Used CAEN channels for safety checks: {used_caen_channels}")
+            # alarm_publish = (lambda msg: self.system._martacoldroom._client.publish("/alarm", msg)) if self.system._martacoldroom else None
+            # logger.info(f"Alarm publish function: {alarm_publish}")
+            # soft_interlock_loop(self.system.status, self.caen_tab.last_response, used_caen_channels, self.caen_tab, publish_alarm=alarm_publish)
+            # logger.info("Completed soft interlock loop")
+
             # Update MARTA CO2 Plant values
             if "marta" in self.system.status:
                 marta = self.system.status["marta"]
@@ -914,38 +1219,50 @@ class MainApp(QtWidgets.QMainWindow):
                 # =========================================================================================== MARTA FSM STATE PROCESS ===========================================================================================
                 # Update FSM state
                 if "fsm_state" in marta:
-                    state_label = central.findChild(QtWidgets.QLabel, "marta_state_label")
+                    state_label = central.findChild(
+                        QtWidgets.QLabel, "marta_state_label"
+                    )
                     if state_label:
                         state_label.setText(marta["fsm_state"])
                         logger.debug(f"Updated MARTA state: {marta['fsm_state']}")
                     # Update state-specific UI elements
                     if marta["fsm_state"] == "ALARM":
                         # Highlight alarm state
-                        alarm_frame = central.findChild(QtWidgets.QFrame, "marta_alarm_frame")
+                        alarm_frame = central.findChild(
+                            QtWidgets.QFrame, "marta_alarm_frame"
+                        )
                         if alarm_frame:
                             alarm_frame.setStyleSheet("background-color: red;")
 
                         # Show alarm message
-                        alarm_msg = central.findChild(QtWidgets.QLabel, "marta_alarm_msg_label")
+                        alarm_msg = central.findChild(
+                            QtWidgets.QLabel, "marta_alarm_msg_label"
+                        )
                         if alarm_msg and "alarm_message" in marta:
                             alarm_msg.setText(marta["alarm_message"])
                     else:
                         # Clear alarm highlighting
-                        alarm_frame = central.findChild(QtWidgets.QFrame, "marta_alarm_frame")
+                        alarm_frame = central.findChild(
+                            QtWidgets.QFrame, "marta_alarm_frame"
+                        )
                         if alarm_frame:
                             alarm_frame.setStyleSheet("")
 
                 # =========================================================================================== MARTA TEMPERATURE PROCESS ===========================================================================================
                 # Temperature from TT05_CO2 (Supply)
                 if "TT05_CO2" in marta:
-                    label = central.findChild(QtWidgets.QLabel, "marta_temp_supply_value_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "marta_temp_supply_value_label"
+                    )
                     if label:
                         temp_value = marta["TT05_CO2"]
                         label.setText(f"{temp_value:.1f}")
                         logger.debug(f"Updated MARTA supply temperature: {temp_value}")
                         # Temperature from TT06_CO2 (Return)
                 if "TT06_CO2" in marta:
-                    label = central.findChild(QtWidgets.QLabel, "marta_temp_return_value_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "marta_temp_return_value_label"
+                    )
                     if label:
                         temp_value = marta["TT06_CO2"]
                         label.setText(f"{temp_value:.1f}")
@@ -963,7 +1280,9 @@ class MainApp(QtWidgets.QMainWindow):
                         marta_temp_lE_active_flag = True
                         temp_setpoint = lineedit.text()
                         lineedit.setText(str(temp_setpoint))
-                        logger.debug(f"Updated MARTA temperature setpoint: {temp_setpoint}")
+                        logger.debug(
+                            f"Updated MARTA temperature setpoint: {temp_setpoint}"
+                        )
                     else:
                         marta_temp_lE_active_flag = False
                         lineedit.clear()
@@ -971,16 +1290,22 @@ class MainApp(QtWidgets.QMainWindow):
 
                 # Temperature setpoint label
                 if "temperature_setpoint" in marta:
-                    label = central.findChild(QtWidgets.QLabel, "marta_temp_set_point_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "marta_temp_set_point_label"
+                    )
                     if label:
                         temp_setpoint = marta["temperature_setpoint"]
                         label.setText(f"{temp_setpoint:.1f}")
-                        logger.debug(f"Updated MARTA temperature setpoint: {temp_setpoint}")
+                        logger.debug(
+                            f"Updated MARTA temperature setpoint: {temp_setpoint}"
+                        )
 
                 # =========================================================================================== MARTA PRESSURE PROCESS ===========================================================================================
                 # Pressure from PT05_CO2 (Supply)
                 if "PT05_CO2" in marta:
-                    label = central.findChild(QtWidgets.QLabel, "marta_pressure_supply_value_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "marta_pressure_supply_value_label"
+                    )
                     if label:
                         pressure_value = marta["PT05_CO2"]
                         label.setText(f"{pressure_value:.3f}")
@@ -988,7 +1313,9 @@ class MainApp(QtWidgets.QMainWindow):
 
                 # Pressure from PT06_CO2 (Return)
                 if "PT06_CO2" in marta:
-                    label = central.findChild(QtWidgets.QLabel, "marta_pressure_return_value_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "marta_pressure_return_value_label"
+                    )
                     if label:
                         pressure_value = marta["PT06_CO2"]
                         label.setText(f"{pressure_value:.3f}")
@@ -997,7 +1324,9 @@ class MainApp(QtWidgets.QMainWindow):
                 # =========================================================================================== MARTA SPEED PROCESS ===========================================================================================
                 # Speed
                 if "LP_speed" in marta:
-                    label = central.findChild(QtWidgets.QLabel, "marta_speed_value_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "marta_speed_value_label"
+                    )
                     if label:
                         speed_value = marta["LP_speed"]
                         label.setText(f"{speed_value:.1f}")
@@ -1024,7 +1353,9 @@ class MainApp(QtWidgets.QMainWindow):
 
                 # Speed setpoint label
                 if "speed_setpoint" in marta:
-                    label = central.findChild(QtWidgets.QLabel, "marta_speed_set_point_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "marta_speed_set_point_label"
+                    )
                     if label:
                         speed_setpoint = marta["speed_setpoint"]
                         label.setText(f"{speed_setpoint:.1f}")
@@ -1035,12 +1366,18 @@ class MainApp(QtWidgets.QMainWindow):
                 # Flow control LED
                 if "set_flow_active" in marta:
                     # Update Flow control LED
-                    ctrl_flow_led = central.findChild(QtWidgets.QFrame, "marta_flow_flag_LED")
+                    ctrl_flow_led = central.findChild(
+                        QtWidgets.QFrame, "marta_flow_flag_LED"
+                    )
                     if ctrl_flow_led:
                         ctrl_flow_led.setStyleSheet(
-                            "background-color: green;" if marta["set_flow_active"] else "background-color: black;"
+                            "background-color: green;"
+                            if marta["set_flow_active"]
+                            else "background-color: black;"
                         )  # LED is green when ON
-                        logger.debug(f"Updated flow control LED: {'green' if marta['set_flow_active'] else 'black'}")
+                        logger.debug(
+                            f"Updated flow control LED: {'green' if marta['set_flow_active'] else 'black'}"
+                        )
 
                 # Flow setpoint lineedit
                 if "set_flow_setpoint" in marta:
@@ -1061,7 +1398,9 @@ class MainApp(QtWidgets.QMainWindow):
 
                 # Flow setpoint (affects speed)
                 if "flow_setpoint" in marta:
-                    label = central.findChild(QtWidgets.QLabel, "marta_flow_set_point_label")
+                    label = central.findChild(
+                        QtWidgets.QLabel, "marta_flow_set_point_label"
+                    )
                     if label:
                         flow_setpoint = marta["flow_setpoint"]
                         label.setText(f"{flow_setpoint:.1f}")
@@ -1083,7 +1422,9 @@ class MainApp(QtWidgets.QMainWindow):
         central = self.marta_coldroom_tab
         # Check if temperature control is enabled
         coldroom = self.system.status.get("coldroom", {})
-        if "ch_temperature" not in coldroom or not coldroom.get("ch_temperature", {}).get("status", False):
+        if "ch_temperature" not in coldroom or not coldroom.get(
+            "ch_temperature", {}
+        ).get("status", False):
             msg = "Temperature control is not enabled. Please enable temperature control first."
             self.statusBar().showMessage(msg)
             logger.warning(msg)
@@ -1123,8 +1464,12 @@ class MainApp(QtWidgets.QMainWindow):
         central = self.marta_coldroom_tab
         # Check if humidity control is enabled
         coldroom = self.system.status.get("coldroom", {})
-        if "ch_humidity" not in coldroom or not coldroom.get("ch_humidity", {}).get("status", False):
-            msg = "Humidity control is not enabled. Please enable humidity control first."
+        if "ch_humidity" not in coldroom or not coldroom.get("ch_humidity", {}).get(
+            "status", False
+        ):
+            msg = (
+                "Humidity control is not enabled. Please enable humidity control first."
+            )
             self.statusBar().showMessage(msg)
             logger.warning(msg)
             return
@@ -1142,11 +1487,15 @@ class MainApp(QtWidgets.QMainWindow):
             if 0 <= value <= 50:  # Humidity range from UI validator
                 if self.system._martacoldroom:
                     self.system._martacoldroom.set_humidity(value)
-                msg = f"Set coldroom humidity to {value}%"
-                self.statusBar().showMessage(msg)
-                logger.info(msg)
+                    msg = f"Set coldroom humidity to {value}%"
+                    self.statusBar().showMessage(msg)
+                    logger.info(msg)
+                else:
+                    msg = "MARTA Cold Room client not initialized"
+                    self.statusBar().showMessage(msg)
+                    logger.error(msg)
             else:
-                msg = "MARTA Cold Room client not initialized"
+                msg = "Humidity must be between 0% and 50%"
                 self.statusBar().showMessage(msg)
                 logger.error(msg)
         except ValueError:
@@ -1257,7 +1606,9 @@ class MainApp(QtWidgets.QMainWindow):
         # This would normally require safety checks
         if self.system._martacoldroom:
             # For demo purposes, we're just toggling the state
-            self.system._martacoldroom.publish_cmd("door", self.system._martacoldroom._coldroom_client, str(new_state))
+            self.system._martacoldroom.publish_cmd(
+                "door", self.system._martacoldroom._coldroom_client, str(new_state)
+            )
             msg = f"Set door to {'OPEN' if new_state else 'CLOSED'}"
             self.statusBar().showMessage(msg)
             logger.info(msg)
@@ -1312,8 +1663,12 @@ class MainApp(QtWidgets.QMainWindow):
         central = self.marta_coldroom_tab
 
         # Get all MARTA control buttons
-        start_chiller_btn = central.findChild(QtWidgets.QPushButton, "marta_chiller_start_PB")
-        stop_chiller_btn = central.findChild(QtWidgets.QPushButton, "marta_stop_chiller_PB")
+        start_chiller_btn = central.findChild(
+            QtWidgets.QPushButton, "marta_chiller_start_PB"
+        )
+        stop_chiller_btn = central.findChild(
+            QtWidgets.QPushButton, "marta_stop_chiller_PB"
+        )
         start_co2_btn = central.findChild(QtWidgets.QPushButton, "marta_co2_start_PB")
         stop_co2_btn = central.findChild(QtWidgets.QPushButton, "marta_co2_stop_PB")
 
@@ -1582,13 +1937,25 @@ class MainApp(QtWidgets.QMainWindow):
     def save_settings(self):
         try:
             # Update settings object
-            self.system.settings["mqtt"]["broker"] = self.settings_tab.brokerLineEdit.text()
+            self.system.settings["mqtt"][
+                "broker"
+            ] = self.settings_tab.brokerLineEdit.text()
             self.system.settings["mqtt"]["port"] = self.settings_tab.portSpinBox.value()
-            self.system.settings["MARTA"]["mqtt_topic"] = self.settings_tab.martaTopicLineEdit.text()
-            self.system.settings["Coldroom"]["mqtt_topic"] = self.settings_tab.coldroomTopicLineEdit.text()
-            self.system.settings["Coldroom"]["co2_sensor_topic"] = self.settings_tab.co2SensorTopicLineEdit.text()
-            self.system.settings["ThermalCamera"]["mqtt_topic"] = self.settings_tab.thermalCameraTopicLineEdit.text()
-            self.system.settings["Cleanroom"]["mqtt_topic"] = self.settings_tab.cleanroomTopicLineEdit.text()
+            self.system.settings["MARTA"][
+                "mqtt_topic"
+            ] = self.settings_tab.martaTopicLineEdit.text()
+            self.system.settings["Coldroom"][
+                "mqtt_topic"
+            ] = self.settings_tab.coldroomTopicLineEdit.text()
+            self.system.settings["Coldroom"][
+                "co2_sensor_topic"
+            ] = self.settings_tab.co2SensorTopicLineEdit.text()
+            self.system.settings["ThermalCamera"][
+                "mqtt_topic"
+            ] = self.settings_tab.thermalCameraTopicLineEdit.text()
+            self.system.settings["Cleanroom"][
+                "mqtt_topic"
+            ] = self.settings_tab.cleanroomTopicLineEdit.text()
 
             # Write to file
             with open("settings.yaml", "w") as f:
@@ -1611,12 +1978,17 @@ class MainApp(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description="Cold Room Control Application")
     args.add_argument(
-        "--loglevel", "-log", default="WARNING", help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+        "--loglevel",
+        "-log",
+        default="WARNING",
+        help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
     parsed_args = args.parse_args()
     logger = logging.getLogger("integration")
     log_level = getattr(logging, parsed_args.loglevel.upper(), logging.WARNING)
-    logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=log_level, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
     app = QtWidgets.QApplication(sys.argv)
     window = MainApp()

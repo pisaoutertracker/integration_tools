@@ -1,7 +1,8 @@
+import os
 import sys
 import logging
 import pyvisa as visa
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PyQt5.QtWidgets import QApplication, QWidget, QMessageBox
 from PyQt5.uic import loadUi
 from PyQt5.QtCore import QTimer
 
@@ -16,11 +17,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class PowerSupplyController(QMainWindow):
-    def __init__(self):
-        super(PowerSupplyController, self).__init__()
+class PowerSupplyController(QWidget):
+    def __init__(self, parent=None):
+        super(PowerSupplyController, self).__init__(parent)
         # Load the UI file
-        loadUi('power_supply.ui', self)
+        ui_path = os.path.join(os.path.dirname(__file__), 'power_supply.ui')
+        loadUi(ui_path, self)
         
         # Initialize status dictionary
         self.status = {
@@ -30,15 +32,21 @@ class PowerSupplyController(QMainWindow):
             'set_voltage': 0.0,
             'set_current': 0.0
         }
+        self.connected = False
+
+        # Set up timer early so closeEvent doesn't crash on connection failure
+        self.timer = QTimer(self)
         
         # Connect to the power supply
         self.connect_to_power_supply()
-        
+        if not self.connected:
+            self.timer.stop()
+            return
+
         # Connect UI signals to slots
         self.setup_ui_connections()
         
         # Set up a timer to periodically update measurements
-        self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_measurements)
         self.timer.start(1000)  # Update every 1000ms (1 second)
         
@@ -57,11 +65,11 @@ class PowerSupplyController(QMainWindow):
             ip_address = '192.168.0.16'
             self.rm = visa.ResourceManager()
             self.power_supply = self.rm.open_resource(f'TCPIP0::{ip_address}::INSTR')
+            self.connected = True
             print("Successfully connected to power supply")
         except Exception as e:
             logger.error(f"Failed connection: {e}")
             QMessageBox.critical(self, "Connection Error", f"Failed to connect to power supply: {e}")
-            self.close()
 
     def setup_ui_connections(self):
         """Connect UI signals to slots"""
@@ -84,7 +92,8 @@ class PowerSupplyController(QMainWindow):
     
     def update_measurements(self):
         """Periodically update the voltage and current measurements"""
-        # if self.status['power'] == 'ON':
+        if not self.connected:
+            return
         try:
             # Read actual voltage and current
             voltage = self.power_supply.query('MEAS:VOLT?\x00').strip()
@@ -99,11 +108,11 @@ class PowerSupplyController(QMainWindow):
             self.log_status("Updated measurements")
         except Exception as e:
             logger.error(f"Error reading measurements: {e}")
-            QMessageBox.critical(self, "Measurement Error", f"Failed to read measurements: {e}")
-            print(f"Error reading measurements: {e}")
     
     def set_voltage(self):
         """Set the voltage value from the line edit"""
+        if not self.connected:
+            return
         try:
             voltage = float(self.powsup_voltage_LE.text())
             self.power_supply.write(f'APPLY {voltage}\x00')
@@ -119,6 +128,8 @@ class PowerSupplyController(QMainWindow):
     
     def set_current(self):
         """Set the current value from the line edit"""
+        if not self.connected:
+            return
         try:
             current = float(self.powsup_current_LE.text())
             self.power_supply.write(f'SOUR:CURR {current}\x00')
@@ -134,6 +145,8 @@ class PowerSupplyController(QMainWindow):
     
     def power_on(self):
         """Turn the power supply ON"""
+        if not self.connected:
+            return
         try:
             self.power_supply.write('OUTP:STAT ON\x00')
             self.status['power'] = 'ON'
@@ -147,6 +160,8 @@ class PowerSupplyController(QMainWindow):
     
     def power_off(self):
         """Turn the power supply OFF"""
+        if not self.connected:
+            return
         try:
             self.power_supply.write('OUTP:STAT OFF\x00')
             self.status['power'] = 'OFF'
@@ -163,7 +178,8 @@ class PowerSupplyController(QMainWindow):
     def closeEvent(self, event):
         """Ensure proper cleanup when closing the application"""
         try:
-            self.timer.stop()
+            if hasattr(self, 'timer'):
+                self.timer.stop()
             if hasattr(self, 'power_supply'):
                 self.power_off()  # Turn off power supply when closing
                 self.power_supply.close()
@@ -177,9 +193,14 @@ class PowerSupplyController(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    window = PowerSupplyController()
+    window = QMainWindow()
+    controller = PowerSupplyController()
+    window.setCentralWidget(controller)
+    window.setWindowTitle("Power Supply")
+    window.resize(controller.width(), controller.height())
     window.show()
     sys.exit(app.exec_())
 
 if __name__ == '__main__':
+    from PyQt5.QtWidgets import QMainWindow
     main()
