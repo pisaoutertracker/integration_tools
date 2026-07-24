@@ -6,6 +6,14 @@ Coldroom:
   shellies_air_topic: shellies/coldroomair/status/switch:0
 MARTA:
   mqtt_topic: /MARTA/#
+SoftInterlock:
+  # How often the soft interlock re-evaluates safety, in seconds.
+  check_interval_seconds: 5
+  # Consecutive unsafe checks required before power is actually cut.
+  # 1 = act immediately; 2 = confirm on the next check before tripping.
+  # This debounces transient network/MQTT glitches: the first N-1 unsafe
+  # readings only warn; power is cut only if the condition persists.
+  confirm_checks: 2
 ThermalCamera:
   mqtt_topic: /thermalcamera/#
   stitch_camera: camera0
