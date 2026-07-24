@@ -99,6 +99,40 @@ def check_light_status(system_status):
         return False  # Conservative approach - a bare False, not a truthy tuple
 
 
+def get_on_channels(caen_ch_status):
+    """
+    Derive the set of channels that are actually powered ON directly from the
+    CAEN status dict, independent of which modules the operator has registered
+    in the GUI.
+
+    Status keys look like ``caen_HV1.6_IsOn`` / ``caen_LV9.2_IsOn``; the channel
+    id is the middle token (``HV1.6`` / ``LV9.2``) — exactly the id format that
+    ``caen.on()``/``caen.off()`` expect. A channel counts as ON when its IsOn
+    value is truthy.
+
+    This is the safety-critical source of truth for the soft interlock: it must
+    be able to see and cut power even when no module is registered (which is why
+    ``used_channels`` can be empty while real channels are energized).
+
+    Returns {"LV": [...], "HV": [...]}.
+    """
+    on_channels = {"LV": [], "HV": []}
+    try:
+        for key, value in caen_ch_status.items():
+            if not key.startswith("caen_") or not key.endswith("_IsOn"):
+                continue
+            if not bool(value):
+                continue
+            channel = key[len("caen_") : -len("_IsOn")]  # e.g. "HV1.6" / "LV9.2"
+            if channel.startswith("HV"):
+                on_channels["HV"].append(channel)
+            elif channel.startswith("LV"):
+                on_channels["LV"].append(channel)
+    except Exception as e:
+        logger.debug(f"Error in get_on_channels: {str(e)}")
+    return on_channels
+
+
 def check_any_hv_on(caen_ch_status, used_channels):
     try:
         # Check if any used channel is on
@@ -295,10 +329,12 @@ def Is_any_lv_on(caen_ch_status, used_channels):
     Returns True if any LV channel is on, False if all are off.
     """
     try:
+        print(used_channels)
         for channel in used_channels["LV"]:
             if channel is None:
                 continue
             ch_str = f"caen_{channel}_IsOn"
+            print(f"Checking LV channel {channel}: {caen_ch_status.get(ch_str, False)}")
             if bool(caen_ch_status.get(ch_str, False)):
                 logger.info(f"LV channel {channel} is ON")
                 return True
@@ -350,12 +386,33 @@ def Is_it_safe_to_on_lv(system_status, caen_ch_status, used_channels):
 #         return True  # Conservative - assume LV is on if we can't check
 
 
+def is_co2_flowing(system_status):
+    """
+    Return True only when MARTA reports CO2 actually flowing.
+
+    The MARTA status dict (stored under the lowercase ``marta`` key) carries a
+    ``status`` field whose value is 2 when CO2 is running. Any other value — or
+    a missing field — means CO2 is NOT flowing. Comparison is numeric-tolerant
+    so 2, 2.0 and "2" all count as flowing.
+    """
+    co2_flow = system_status.get("marta", {}).get("status", None)
+    try:
+        flowing = int(co2_flow) == 2
+    except (TypeError, ValueError):
+        flowing = False
+    logger.info(f"MARTA CO2 flow status={co2_flow!r} → flowing={flowing} (2 = flowing)")
+    return flowing
+
+
 def check_marta_on_for_OT(system_status):
     """
     Check if MARTA CO2 supply is active for OT (Outer Tracker).
 
-    Primary signal: MARTA FSM state is not disconnected/idle.
-    Secondary signal: outer_valve from serviceroom data (used when available).
+    Primary signals (ALL required):
+      - MARTA FSM state is not disconnected/idle.
+      - MARTA CO2 flow status == 2 (see is_co2_flowing).
+    Secondary signal: outer_valve from serviceroom data (checked only when
+    serviceroom data is subscribed).
     Returns True only when CO2 is confirmed to be flowing to OT modules.
     """
     try:
@@ -370,8 +427,15 @@ def check_marta_on_for_OT(system_status):
             logger.info("MARTA is disconnected/idle, OT CO2 is OFF")
             return False
 
+        # CO2 flow status is a primary check: CO2 counts as flowing only when
+        # the MARTA status field == 2. This always runs, independent of the
+        # (rarely available) serviceroom valve data.
+        if not is_co2_flowing(system_status):
+            logger.info("MARTA CO2 flow status is not 2, OT CO2 is OFF")
+            return False
+
         # If serviceroom valve data is available, use it for a precise check.
-        # Without it, fall back to FSM state as the best available indicator.
+        # Without it, rely on FSM state + CO2 flow status above.
         if "serviceroom" in system_status:
             OT_valve = system_status["serviceroom"].get("outer_valve", 0)
             logger.info(f"MARTA OT valve status: outer_valve={OT_valve}")
@@ -379,7 +443,7 @@ def check_marta_on_for_OT(system_status):
                 logger.info("OT valve is closed, OT CO2 is OFF")
                 return False
         else:
-            logger.debug("Serviceroom data unavailable, relying on MARTA FSM state for OT check")
+            logger.debug("Serviceroom data unavailable, relying on MARTA FSM + CO2 flow status for OT check")
 
         return True
 
@@ -408,6 +472,13 @@ def check_marta_on_for_IT(system_status):
             logger.info("MARTA is disconnected/idle, IT CO2 is OFF")
             return False
 
+        # CO2 flow status is a primary check: CO2 counts as flowing only when
+        # the MARTA status field == 2. This always runs, independent of the
+        # (rarely available) serviceroom valve data.
+        if not is_co2_flowing(system_status):
+            logger.info("MARTA CO2 flow status is not 2, IT CO2 is OFF")
+            return False
+
         # If serviceroom valve data is available, use it for a precise check.
         if "serviceroom" in system_status:
             IT_valve = system_status["serviceroom"].get("inner_valve", 0)
@@ -416,7 +487,7 @@ def check_marta_on_for_IT(system_status):
                 logger.info("IT valve is closed, IT CO2 is OFF")
                 return False
         else:
-            logger.debug("Serviceroom data unavailable, relying on MARTA FSM state for IT check")
+            logger.debug("Serviceroom data unavailable, relying on MARTA FSM + CO2 flow status for IT check")
 
         return True
 
@@ -464,23 +535,40 @@ def switch_all_lv_off(caen, used_channels):
 
 
 def soft_interlock_loop(
-    system_status, caen_ch_status, used_channels, caen, publish_alarm=None
+    system_status,
+    caen_ch_status,
+    used_channels,
+    caen,
+    publish_alarm=None,
+    interlock_state=None,
+    confirm_checks=2,
 ):
     """
     Soft interlock loop - monitors safety conditions and takes protective action.
 
     Decision tree (evaluated every ~5 s):
       1. If MARTA is not in a safe/connected state AND any power (HV or LV) is on
-             → switch all HV off first, then all LV off
+             → protective cutoff warranted
       2. Else if any power is on AND MARTA CO2 is not flowing to OT modules
-             → switch all HV off first, then all LV off
+             → protective cutoff warranted
       HV is always cut before LV to avoid an uncontrolled discharge
       through the silicon sensors.
       (IT modules share the same MARTA CO2 system; a full MARTA shutdown
        is caught by condition 1.  Per-valve IT protection requires
        serviceroom data to be subscribed — see check_marta_on_for_IT.)
 
-    A message is published to /alarm whenever a protective action fires.
+    Debounce against transient glitches:
+      A single unsafe reading is NOT acted on. When a cutoff is warranted the
+      first time, the loop only WARNS and records the condition in
+      ``interlock_state``. Power is switched off only once the SAME unsafe
+      condition has been seen on ``confirm_checks`` consecutive cycles
+      (default 2 → confirmed after the next ~5 s check). A single safe cycle in
+      between resets the counter, so a dropped MQTT update / momentary network
+      glitch cannot trip the cutoff. If ``interlock_state`` is None the loop
+      cannot debounce and falls back to acting immediately (fail-safe).
+
+    A message is published to /alarm whenever a protective action fires, and a
+    (distinct) warning is published on the first, unconfirmed detection.
 
     Args:
         system_status (dict): Full system status including MARTA, coldroom, etc.
@@ -488,11 +576,39 @@ def soft_interlock_loop(
         used_channels (dict): Active channel list {"LV": [...], "HV": [...]}.
         caen: CAEN control object with on()/off() methods.
         publish_alarm (callable, optional): publish_alarm(message_string)
+        interlock_state (dict, optional): persistent state carried across calls;
+            uses key "pending_count". Pass the SAME dict every cycle to enable
+            debouncing. None disables debouncing (act immediately).
+        confirm_checks (int): consecutive unsafe cycles required before cutting
+            power. 1 = act immediately; 2 = confirm on the next check (default).
 
     Returns:
         tuple: (is_safe: bool, message: str)
     """
     try:
+        print(f"Soft interlock loop: system_status={system_status}, caen_ch_status={caen_ch_status}, used_channels={used_channels}")
+
+        # `used_channels` only lists channels tied to a module the operator has
+        # registered in the GUI, so it is frequently empty. Relying on it alone
+        # makes the interlock blind to any powered channel that isn't mounted.
+        # Merge in the channels that CAEN reports as actually ON so detection and
+        # the cutoff action always cover real power, registered or not.
+        used_channels = used_channels or {"LV": [], "HV": []}
+        detected_on = get_on_channels(caen_ch_status)
+        used_channels = {
+            "LV": list(
+                dict.fromkeys(
+                    [c for c in used_channels.get("LV", []) if c] + detected_on["LV"]
+                )
+            ),
+            "HV": list(
+                dict.fromkeys(
+                    [c for c in used_channels.get("HV", []) if c] + detected_on["HV"]
+                )
+            ),
+        }
+        logger.info(f"Soft interlock effective channels (registered + live-on): {used_channels}")
+
         lv_on = Is_any_lv_on(caen_ch_status, used_channels)
         # Is_it_safe_to_on_lv returns (bool, str) — unpack properly
         lv_safe_to_on, lv_safe_msg = Is_it_safe_to_on_lv(
@@ -515,41 +631,75 @@ def soft_interlock_loop(
         hv_status = "ON" if hv_on else "OFF"
         log_msg += f"HV={hv_status}\n"
 
-        # --- Condition 1: MARTA itself is not safe (e.g. disconnected) ---
+        # --- Decide whether a protective cutoff is warranted this cycle ---
+        power_on = lv_on or hv_on
+        trip_needed = False
+        trip_reason = ""
+        alarm_msg = ""
+
+        # Condition 1: MARTA itself is not safe (e.g. disconnected)
         if not lv_safe_to_on:
             log_msg += "\n!!! Warning: MARTA not safe — LV safe to turn on: NO\n"
             log_msg += lv_safe_msg
-            if lv_on or hv_on:
-                alarm_msg = (
-                    "SAFETY INTERLOCK: MARTA is not in a safe state and power is ON. "
-                    "Turning off all HV then LV channels to prevent module damage."
-                )
-                logger.warning(alarm_msg)
-                switch_all_hv_off(caen, used_channels)
-                switch_all_lv_off(caen, used_channels)
-                if publish_alarm:
-                    publish_alarm(alarm_msg)
-                return False, alarm_msg
-            return True, log_msg
+            if power_on:
+                trip_needed = True
+                trip_reason = "MARTA is not in a safe state and power is ON"
+        else:
+            log_msg += "\nLV safe to turn on: YES\n"
+            # Condition 2: MARTA connected but CO2 not flowing to OT
+            if power_on and not marta_ot:
+                trip_needed = True
+                trip_reason = "Power is ON but MARTA OT CO2 is not flowing"
 
-        log_msg += "\nLV safe to turn on: YES\n"
-
-        # --- Condition 2: MARTA connected but CO2 not flowing to OT ---
-        if (lv_on or hv_on) and not marta_ot:
+        if trip_needed:
             alarm_msg = (
-                "SAFETY INTERLOCK: Power is ON but MARTA OT CO2 is not flowing. "
+                f"SAFETY INTERLOCK: {trip_reason}. "
                 "Turning off all HV then LV channels to prevent module damage."
             )
-            logger.warning(alarm_msg)
-            switch_all_hv_off(caen, used_channels)
-            switch_all_lv_off(caen, used_channels)
-            if publish_alarm:
-                publish_alarm(alarm_msg)
-            return False, alarm_msg
 
-        log_msg += "\nAll safety conditions met.\n"
-        logger.info(log_msg)
-        return True, log_msg
+        # --- Safe this cycle: clear any pending record and report OK ---
+        if not trip_needed:
+            if interlock_state is not None:
+                if interlock_state.get("pending_count"):
+                    logger.info(
+                        "Soft interlock: unsafe condition cleared before "
+                        "confirmation — resetting pending count (was "
+                        f"{interlock_state.get('pending_count')})"
+                    )
+                interlock_state["pending_count"] = 0
+            log_msg += "\nAll safety conditions met.\n"
+            logger.info(log_msg)
+            return True, log_msg
+
+        # --- Unsafe this cycle: debounce before cutting power ---
+        # A single glitchy reading (e.g. a dropped MQTT update making MARTA look
+        # disconnected) must NOT cut power. Require `confirm_checks` consecutive
+        # unsafe cycles before acting; the first detection only warns.
+        if interlock_state is None:
+            # No persistent state → cannot debounce; act immediately (fail-safe).
+            pending_count = confirm_checks
+        else:
+            pending_count = interlock_state.get("pending_count", 0) + 1
+            interlock_state["pending_count"] = pending_count
+
+        if pending_count < confirm_checks:
+            warn_msg = (
+                f"SAFETY WARNING (unconfirmed {pending_count}/{confirm_checks}): "
+                f"{trip_reason}. Re-checking in ~5 s before cutting power; "
+                "power will be switched off if this persists."
+            )
+            logger.warning(warn_msg)
+            if publish_alarm:
+                publish_alarm(warn_msg)
+            return False, warn_msg
+
+        # Confirmed unsafe across consecutive cycles → take protective action.
+        logger.warning(alarm_msg)
+        switch_all_hv_off(caen, used_channels)
+        switch_all_lv_off(caen, used_channels)
+        if publish_alarm:
+            publish_alarm(alarm_msg)
+        return False, alarm_msg
 
     except Exception as e:
         err_msg = f"Error in soft_interlock_loop: {str(e)}"

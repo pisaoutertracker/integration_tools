@@ -52,10 +52,38 @@ class MainApp(QtWidgets.QMainWindow):
         self.update_timer.timeout.connect(self.update_ui)
         self.update_timer.start(1000)  # Update every second
 
-        # Setup soft interlock timer (5-second interval, independent of UI updates)
+        # Setup soft interlock timer (interval + debounce are configurable via
+        # the "SoftInterlock" section of settings_coldroom.yaml).
+        # `interlock_state` persists across ticks so the loop can debounce: an
+        # unsafe reading must repeat on `confirm_checks` consecutive checks
+        # before power is cut, so a one-off network/MQTT glitch only warns.
+        interlock_cfg = self.system.settings.get("SoftInterlock", {}) or {}
+        try:
+            self.interlock_check_interval = int(
+                interlock_cfg.get("check_interval_seconds", 5)
+            )
+            if self.interlock_check_interval <= 0:
+                raise ValueError("check_interval_seconds must be positive")
+        except (TypeError, ValueError) as e:
+            logger.warning(
+                f"Invalid SoftInterlock.check_interval_seconds ({e}); using 5 s"
+            )
+            self.interlock_check_interval = 5
+        try:
+            self.interlock_confirm_checks = int(interlock_cfg.get("confirm_checks", 2))
+            if self.interlock_confirm_checks < 1:
+                raise ValueError("confirm_checks must be >= 1")
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Invalid SoftInterlock.confirm_checks ({e}); using 2")
+            self.interlock_confirm_checks = 2
+        logger.info(
+            f"Soft interlock: interval={self.interlock_check_interval}s, "
+            f"confirm_checks={self.interlock_confirm_checks}"
+        )
+        self.interlock_state = {"pending_count": 0}
         self.soft_interlock_timer = QTimer()
         self.soft_interlock_timer.timeout.connect(self.soft_interlock_check)
-        self.soft_interlock_timer.start(5000)
+        self.soft_interlock_timer.start(self.interlock_check_interval * 1000)
 
         # Connect to MQTT broker at startup
         self.connect_mqtt()
@@ -724,6 +752,8 @@ class MainApp(QtWidgets.QMainWindow):
             used_caen_channels,
             self.caen_tab,
             publish_alarm=alarm_publish,
+            interlock_state=self.interlock_state,
+            confirm_checks=self.interlock_confirm_checks,
         )
         logger.info(f"Soft interlock result: is_safe={is_safe}, msg={msg}")
 
@@ -1103,7 +1133,9 @@ class MainApp(QtWidgets.QMainWindow):
                         else:
                             door_msg += "CO2 levels safe: UNKNOWN (sensor present but no CO2 reading)\n"
                     else:
-                        door_msg += "CO2 levels safe: UNKNOWN (CO2 sensor data not available)\n"
+                        door_msg += (
+                            "CO2 levels safe: UNKNOWN (CO2 sensor data not available)\n"
+                        )
                     safe_to_open_led.setStyleSheet(
                         "background-color: green;"
                         if is_safe

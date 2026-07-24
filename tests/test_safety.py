@@ -6,7 +6,7 @@ so no real hardware or MQTT broker is required.
 
 Minimal "fully safe" system_status:
     {
-        "marta":    {"fsm_state": "RUNNING"},
+        "marta":    {"fsm_state": "RUNNING", "status": 2},  # status 2 = CO2 flowing
         "coldroom": {},   # required guard key in Is_it_safe_to_on_lv
     }
 Extend per-test to trigger the specific condition under test.
@@ -45,9 +45,13 @@ from coldroom.safety import (
 # ---------------------------------------------------------------------------
 
 def _safe_status():
-    """Minimal system_status for a fully connected, safe system."""
+    """Minimal system_status for a fully connected, safe system.
+
+    CO2 must be flowing (marta status == 2) for the system to be considered
+    safe — FSM RUNNING alone is not sufficient.
+    """
     return {
-        "marta": {"fsm_state": "RUNNING"},
+        "marta": {"fsm_state": "RUNNING", "status": 2},
         "coldroom": {},
     }
 
@@ -187,7 +191,7 @@ class TestSoftInterlock(unittest.TestCase):
         """Valve confirmed open → no protective action."""
         caen = _make_caen()
         status = {
-            "marta": {"fsm_state": "RUNNING"},
+            "marta": {"fsm_state": "RUNNING", "status": 2},
             "coldroom": {},
             "serviceroom": {"outer_valve": 1},
         }
@@ -466,17 +470,35 @@ class TestMartaCO2Flow(unittest.TestCase):
     def test_ot_fsm_empty_returns_false(self):
         self.assertFalse(check_marta_on_for_OT({"marta": {"fsm_state": ""}}))
 
-    def test_ot_running_no_serviceroom_trusts_fsm(self):
-        """Without valve data, RUNNING FSM state is sufficient."""
-        self.assertTrue(check_marta_on_for_OT({"marta": {"fsm_state": "RUNNING"}}))
+    def test_ot_running_co2_flowing_no_serviceroom_returns_true(self):
+        """RUNNING + CO2 flowing (status 2), no valve data → CO2 on for OT."""
+        self.assertTrue(
+            check_marta_on_for_OT({"marta": {"fsm_state": "RUNNING", "status": 2}})
+        )
+
+    def test_ot_running_but_co2_not_flowing_returns_false(self):
+        """RUNNING but CO2 flow status != 2 → CO2 is NOT flowing to OT."""
+        self.assertFalse(
+            check_marta_on_for_OT({"marta": {"fsm_state": "RUNNING", "status": 1}})
+        )
+
+    def test_ot_running_co2_status_missing_returns_false(self):
+        """No CO2 flow status field → conservatively treated as not flowing."""
+        self.assertFalse(check_marta_on_for_OT({"marta": {"fsm_state": "RUNNING"}}))
 
     def test_ot_running_outer_valve_open_returns_true(self):
-        status = {"marta": {"fsm_state": "RUNNING"}, "serviceroom": {"outer_valve": 1}}
+        status = {
+            "marta": {"fsm_state": "RUNNING", "status": 2},
+            "serviceroom": {"outer_valve": 1},
+        }
         self.assertTrue(check_marta_on_for_OT(status))
 
     def test_ot_running_outer_valve_closed_returns_false(self):
         """Valve data overrides FSM state — closed valve means no CO2 to OT."""
-        status = {"marta": {"fsm_state": "RUNNING"}, "serviceroom": {"outer_valve": 0}}
+        status = {
+            "marta": {"fsm_state": "RUNNING", "status": 2},
+            "serviceroom": {"outer_valve": 0},
+        }
         self.assertFalse(check_marta_on_for_OT(status))
 
     # ---- IT -----------------------------------------------------------------
@@ -487,21 +509,35 @@ class TestMartaCO2Flow(unittest.TestCase):
     def test_it_fsm_disconnected_returns_false(self):
         self.assertFalse(check_marta_on_for_IT({"marta": {"fsm_state": "DISCONNECTED"}}))
 
-    def test_it_running_no_serviceroom_trusts_fsm(self):
-        self.assertTrue(check_marta_on_for_IT({"marta": {"fsm_state": "RUNNING"}}))
+    def test_it_running_co2_flowing_no_serviceroom_returns_true(self):
+        self.assertTrue(
+            check_marta_on_for_IT({"marta": {"fsm_state": "RUNNING", "status": 2}})
+        )
+
+    def test_it_running_but_co2_not_flowing_returns_false(self):
+        """RUNNING but CO2 flow status != 2 → CO2 is NOT flowing to IT."""
+        self.assertFalse(
+            check_marta_on_for_IT({"marta": {"fsm_state": "RUNNING", "status": 0}})
+        )
 
     def test_it_running_inner_valve_open_returns_true(self):
-        status = {"marta": {"fsm_state": "RUNNING"}, "serviceroom": {"inner_valve": 1}}
+        status = {
+            "marta": {"fsm_state": "RUNNING", "status": 2},
+            "serviceroom": {"inner_valve": 1},
+        }
         self.assertTrue(check_marta_on_for_IT(status))
 
     def test_it_running_inner_valve_closed_returns_false(self):
-        status = {"marta": {"fsm_state": "RUNNING"}, "serviceroom": {"inner_valve": 0}}
+        status = {
+            "marta": {"fsm_state": "RUNNING", "status": 2},
+            "serviceroom": {"inner_valve": 0},
+        }
         self.assertFalse(check_marta_on_for_IT(status))
 
     def test_ot_and_it_valves_are_independent(self):
         """OT valve closed should not affect IT result and vice versa."""
         status = {
-            "marta": {"fsm_state": "RUNNING"},
+            "marta": {"fsm_state": "RUNNING", "status": 2},
             "serviceroom": {"outer_valve": 0, "inner_valve": 1},
         }
         self.assertFalse(check_marta_on_for_OT(status))
