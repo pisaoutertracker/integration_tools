@@ -15,7 +15,10 @@ import requests
 import yaml
 import os
 import re
+import logging
 from db.module_db_gui import Ui_ModuleDBWidget
+
+logger = logging.getLogger(__name__)
 
 
 class ModuleDB(QWidget):
@@ -196,7 +199,12 @@ class ModuleDB(QWidget):
         """Update the module list from database"""
         success, modules = self.make_api_request("modules")
         if not success:
-            self.show_error_dialog(f"Failed to fetch modules: {modules}")
+            # Don't block startup with a modal dialog when the DB is unreachable
+            # (e.g. running outside the lab). Log it and carry on with whatever
+            # module list we already have so the GUI stays usable offline.
+            logger.warning(f"Failed to fetch modules: {modules}")
+            if not hasattr(self, "all_modules"):
+                self.all_modules = []
             return
 
         self.all_modules = modules

@@ -638,6 +638,27 @@ class ModulesListTab(QtWidgets.QMainWindow):
                 active_channels["HV"].append(module_info.get("HV"))
         return active_channels
 
+    def get_all_channels(self):
+        """Get every LV and HV channel belonging to the mounted modules.
+
+        These are the modules on the ring fed by the coldroom's power cable
+        (hardcoded as "I1" in cold.py), so this is the full set of CAEN channels
+        the coldroom safety interlock is allowed to switch off — independent of
+        whether a channel is currently reporting on. The LV/HV values are
+        resolved from the module DB by db.utils.get_module_endpoints and are in
+        the same "LV9.2"/"HV1.6" id format used by the CAEN status keys and
+        caen.off().
+        """
+        scope_channels = {"LV": [], "HV": []}
+        for module_name, module_info in self.mounted_modules.items():
+            lv = module_info.get("LV")
+            hv = module_info.get("HV")
+            if lv:
+                scope_channels["LV"].append(lv)
+            if hv:
+                scope_channels["HV"].append(hv)
+        return scope_channels
+
     def set_show_test_results(self, show=True):
         """Control whether test result popups are shown."""
         self._show_test_results = show

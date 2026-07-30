@@ -546,11 +546,19 @@ def soft_interlock_loop(
     """
     Soft interlock loop - monitors safety conditions and takes protective action.
 
+    Channel scope (cable I1):
+      ``used_channels`` is the set of CAEN channels belonging to the modules on
+      the coldroom's power cable (cable "I1"), resolved from the module DB. The
+      interlock ONLY ever switches off these channels — never other setups that
+      share the CAEN crate. If the scope is empty (DB unavailable / no modules
+      mounted) the loop cuts nothing; if cooling is unsafe while crate power is
+      on it warns loudly and demands manual intervention instead.
+
     Decision tree (evaluated every ~5 s):
-      1. If MARTA is not in a safe/connected state AND any power (HV or LV) is on
-             → protective cutoff warranted
-      2. Else if any power is on AND MARTA CO2 is not flowing to OT modules
-             → protective cutoff warranted
+      1. If MARTA is not in a safe/connected state AND any I1 power (HV or LV) is on
+             → protective cutoff of I1 channels warranted
+      2. Else if any I1 power is on AND MARTA CO2 is not flowing to OT modules
+             → protective cutoff of I1 channels warranted
       HV is always cut before LV to avoid an uncontrolled discharge
       through the silicon sensors.
       (IT modules share the same MARTA CO2 system; a full MARTA shutdown
@@ -573,7 +581,9 @@ def soft_interlock_loop(
     Args:
         system_status (dict): Full system status including MARTA, coldroom, etc.
         caen_ch_status (dict): CAEN channel status with caen_{channel}_IsOn keys.
-        used_channels (dict): Active channel list {"LV": [...], "HV": [...]}.
+        used_channels (dict): Cable-I1 channel scope {"LV": [...], "HV": [...]} —
+            every LV/HV channel of the modules on cable I1 (the only channels the
+            interlock is permitted to switch off).
         caen: CAEN control object with on()/off() methods.
         publish_alarm (callable, optional): publish_alarm(message_string)
         interlock_state (dict, optional): persistent state carried across calls;
@@ -588,26 +598,19 @@ def soft_interlock_loop(
     try:
         print(f"Soft interlock loop: system_status={system_status}, caen_ch_status={caen_ch_status}, used_channels={used_channels}")
 
-        # `used_channels` only lists channels tied to a module the operator has
-        # registered in the GUI, so it is frequently empty. Relying on it alone
-        # makes the interlock blind to any powered channel that isn't mounted.
-        # Merge in the channels that CAEN reports as actually ON so detection and
-        # the cutoff action always cover real power, registered or not.
+        # SCOPE: `used_channels` is the set of CAEN channels belonging to the
+        # modules on the coldroom's power cable (cable "I1"), resolved from the
+        # module DB (see ModulesListTab.get_all_channels). The interlock may ONLY
+        # ever switch off these channels — never other setups sharing the CAEN
+        # crate. We deliberately do NOT scan the whole crate for powered channels
+        # here; a channel we cannot attribute to cable I1 is never touched.
         used_channels = used_channels or {"LV": [], "HV": []}
-        detected_on = get_on_channels(caen_ch_status)
         used_channels = {
-            "LV": list(
-                dict.fromkeys(
-                    [c for c in used_channels.get("LV", []) if c] + detected_on["LV"]
-                )
-            ),
-            "HV": list(
-                dict.fromkeys(
-                    [c for c in used_channels.get("HV", []) if c] + detected_on["HV"]
-                )
-            ),
+            "LV": [c for c in used_channels.get("LV", []) if c],
+            "HV": [c for c in used_channels.get("HV", []) if c],
         }
-        logger.info(f"Soft interlock effective channels (registered + live-on): {used_channels}")
+        scope_empty = not used_channels["LV"] and not used_channels["HV"]
+        logger.info(f"Soft interlock I1 channel scope: {used_channels} (empty={scope_empty})")
 
         lv_on = Is_any_lv_on(caen_ch_status, used_channels)
         # Is_it_safe_to_on_lv returns (bool, str) — unpack properly
@@ -631,30 +634,58 @@ def soft_interlock_loop(
         hv_status = "ON" if hv_on else "OFF"
         log_msg += f"HV={hv_status}\n"
 
-        # --- Decide whether a protective cutoff is warranted this cycle ---
+        # --- Evaluate the cooling condition (independent of which channels) ---
         power_on = lv_on or hv_on
-        trip_needed = False
-        trip_reason = ""
-        alarm_msg = ""
+        cooling_unsafe = False
+        cooling_reason = ""
 
         # Condition 1: MARTA itself is not safe (e.g. disconnected)
         if not lv_safe_to_on:
             log_msg += "\n!!! Warning: MARTA not safe — LV safe to turn on: NO\n"
             log_msg += lv_safe_msg
-            if power_on:
-                trip_needed = True
-                trip_reason = "MARTA is not in a safe state and power is ON"
+            cooling_unsafe = True
+            cooling_reason = "MARTA is not in a safe state"
         else:
             log_msg += "\nLV safe to turn on: YES\n"
             # Condition 2: MARTA connected but CO2 not flowing to OT
-            if power_on and not marta_ot:
-                trip_needed = True
-                trip_reason = "Power is ON but MARTA OT CO2 is not flowing"
+            if not marta_ot:
+                cooling_unsafe = True
+                cooling_reason = "MARTA OT CO2 is not flowing"
 
+        # --- Empty scope: we cannot identify cable I1's channels ---
+        # Per operational policy we must NEVER cut a channel we can't attribute
+        # to cable I1 (other setups share the CAEN crate). If cooling is unsafe
+        # and there IS power somewhere in the crate, warn loudly and demand
+        # manual intervention — but cut nothing.
+        if scope_empty:
+            log_msg += "\n!!! I1 channel scope is EMPTY — cannot identify cable-I1 channels.\n"
+            if cooling_unsafe:
+                crate_on = get_on_channels(caen_ch_status)
+                crate_power = bool(crate_on["LV"] or crate_on["HV"])
+                if crate_power:
+                    warn = (
+                        f"SAFETY WARNING: {cooling_reason} and power is ON in the "
+                        "CAEN crate, but the cable-I1 channel scope is unknown "
+                        "(module DB unavailable or no modules mounted). NOT cutting "
+                        "any power to avoid affecting other setups — MANUAL "
+                        "INTERVENTION REQUIRED."
+                    )
+                    logger.error(warn)
+                    if publish_alarm:
+                        publish_alarm(warn)
+                    return False, warn
+            logger.info(log_msg)
+            return True, log_msg
+
+        # --- Decide whether a protective cutoff of I1 channels is warranted ---
+        trip_needed = cooling_unsafe and power_on
+        trip_reason = ""
+        alarm_msg = ""
         if trip_needed:
+            trip_reason = f"{cooling_reason} and power is ON"
             alarm_msg = (
                 f"SAFETY INTERLOCK: {trip_reason}. "
-                "Turning off all HV then LV channels to prevent module damage."
+                "Turning off cable-I1 HV then LV channels to prevent module damage."
             )
 
         # --- Safe this cycle: clear any pending record and report OK ---
@@ -699,6 +730,16 @@ def soft_interlock_loop(
         switch_all_lv_off(caen, used_channels)
         if publish_alarm:
             publish_alarm(alarm_msg)
+        # Latch the trip: record that a protective cutoff actually fired so the
+        # UI can hold a "TRIPPED" state until the operator acknowledges it. This
+        # is distinct from a merely-unsafe cycle (which returns False without a
+        # cut). The flag is only ever cleared by the operator's acknowledgement.
+        if interlock_state is not None:
+            interlock_state["tripped"] = True
+            interlock_state["trip_message"] = alarm_msg
+            interlock_state["trip_time"] = datetime.datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         return False, alarm_msg
 
     except Exception as e:

@@ -20,10 +20,18 @@ def get_module_name_from_fc7(fc7, optical_group, db_url="http://cmslabserver:500
 
 
 def get_ring_from_cable(cable_id, db_url="http://cmslabserver:5000"):
-    """Navigate from cable to modules, then check the mounted_on attribute removing the ;position trailing part"""
+    """Navigate from cable to modules, then check the mounted_on attribute removing the ;position trailing part.
+
+    Returns None if the DB is unreachable (e.g. running outside the lab) so
+    callers can fall back gracefully instead of crashing.
+    """
     url = f"{db_url}/snapshot"
     modules = []
-    response = requests.post(url, json={"cable": cable_id, "side": "detSide"})
+    try:
+        response = requests.post(url, json={"cable": cable_id, "side": "detSide"})
+    except requests.RequestException as e:
+        print(f"Error making request to {url}: {str(e)}")
+        return None
 
     if response.status_code == 200:
         snapshot = response.json()

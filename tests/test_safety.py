@@ -599,5 +599,140 @@ class TestSwitchHelpers(unittest.TestCase):
         caen.off.assert_not_called()
 
 
+class TestInterlockCableI1Scope(unittest.TestCase):
+    """
+    The soft interlock is scoped to cable I1: it may only ever switch off the
+    LV/HV channels belonging to the modules on I1's ring (passed in as
+    used_channels). Channels sharing the CAEN crate but NOT on cable I1 must
+    never be touched.
+    """
+
+    UNSAFE = {"marta": {"fsm_state": "DISCONNECTED"}, "coldroom": {}}
+    I1_SCOPE = {"LV": ["LV9.2"], "HV": ["HV1.6"]}
+
+    def _confirm(self, status, ch_status, scope, caen, publish=None):
+        """Drive two consecutive unsafe cycles (debounce) to force the cut."""
+        state = {"pending_count": 0}
+        for _ in range(2):
+            result = soft_interlock_loop(
+                status, ch_status, scope, caen,
+                publish_alarm=publish, interlock_state=state,
+            )
+        return result
+
+    def test_only_i1_channels_are_cut(self):
+        """I1 channels are cut; a foreign powered channel is left alone."""
+        caen = _make_caen()
+        ch_status = {
+            "caen_LV9.2_IsOn": True,   # on cable I1
+            "caen_HV1.6_IsOn": True,   # on cable I1
+            "caen_LV15.1_IsOn": True,  # foreign setup, NOT on I1
+        }
+        is_safe, _ = self._confirm(self.UNSAFE, ch_status, self.I1_SCOPE, caen)
+
+        self.assertFalse(is_safe)
+        off_calls = [c.args[0] for c in caen.off.call_args_list]
+        self.assertIn("HV1.6", off_calls)
+        self.assertIn("LV9.2", off_calls)
+        self.assertNotIn("LV15.1", off_calls)  # foreign channel spared
+
+    def test_hv_cut_before_lv_within_scope(self):
+        """HV must be switched off before LV to avoid uncontrolled discharge."""
+        caen = _make_caen()
+        ch_status = {"caen_LV9.2_IsOn": True, "caen_HV1.6_IsOn": True}
+        self._confirm(self.UNSAFE, ch_status, self.I1_SCOPE, caen)
+
+        off_calls = [c.args[0] for c in caen.off.call_args_list]
+        self.assertLess(off_calls.index("HV1.6"), off_calls.index("LV9.2"))
+
+    def test_foreign_power_only_does_not_trip(self):
+        """Power on a non-I1 channel is not the coldroom's concern → no cut."""
+        caen = _make_caen()
+        ch_status = {"caen_LV15.1_IsOn": True}  # only foreign power
+        is_safe, _ = self._confirm(self.UNSAFE, ch_status, self.I1_SCOPE, caen)
+
+        self.assertTrue(is_safe)
+        caen.off.assert_not_called()
+
+    def test_empty_scope_warns_loudly_but_cuts_nothing(self):
+        """
+        Scope unknown (DB down / nothing mounted) + cooling unsafe + crate power
+        → warn loudly and demand manual intervention, but never cut power.
+        """
+        caen = _make_caen()
+        published = []
+        ch_status = {"caen_LV9.2_IsOn": True, "caen_HV1.6_IsOn": True}
+        is_safe, msg = soft_interlock_loop(
+            self.UNSAFE, ch_status, {"LV": [], "HV": []}, caen,
+            publish_alarm=published.append, interlock_state={"pending_count": 0},
+        )
+
+        self.assertFalse(is_safe)
+        caen.off.assert_not_called()
+        self.assertIn("MANUAL INTERVENTION", msg)
+        self.assertTrue(any("MANUAL INTERVENTION" in p for p in published))
+
+    def test_empty_scope_no_crate_power_is_safe(self):
+        """Scope unknown but nothing powered anywhere → nothing to warn about."""
+        caen = _make_caen()
+        ch_status = {"caen_LV9.2_IsOn": False, "caen_HV1.6_IsOn": False}
+        is_safe, _ = soft_interlock_loop(
+            self.UNSAFE, ch_status, {"LV": [], "HV": []}, caen,
+            interlock_state={"pending_count": 0},
+        )
+
+        self.assertTrue(is_safe)
+        caen.off.assert_not_called()
+
+
+class TestInterlockTripLatch(unittest.TestCase):
+    """
+    A confirmed protective cutoff must LATCH interlock_state["tripped"] = True so
+    the UI can hold a 'TRIPPED' state until the operator acknowledges. The latch
+    is set only on an actual cut, and the loop never clears it on its own.
+    """
+
+    UNSAFE = {"marta": {"fsm_state": "DISCONNECTED"}, "coldroom": {}}
+    SAFE = {"marta": {"fsm_state": "RUNNING", "status": 2}, "coldroom": {}}
+    I1_SCOPE = {"LV": ["LV9.2"], "HV": ["HV1.6"]}
+
+    def test_confirmed_trip_sets_latch(self):
+        caen = _make_caen()
+        ch_on = {"caen_LV9.2_IsOn": True, "caen_HV1.6_IsOn": True}
+        state = {"pending_count": 0, "tripped": False}
+        # First cycle only warns (debounce); second cycle cuts and latches.
+        soft_interlock_loop(self.UNSAFE, ch_on, self.I1_SCOPE, caen, interlock_state=state)
+        self.assertFalse(state["tripped"])
+        soft_interlock_loop(self.UNSAFE, ch_on, self.I1_SCOPE, caen, interlock_state=state)
+        self.assertTrue(state["tripped"])
+        self.assertIn("trip_time", state)
+
+    def test_warning_only_does_not_latch(self):
+        """A single unconfirmed unsafe cycle warns but must not latch a trip."""
+        caen = _make_caen()
+        ch_on = {"caen_LV9.2_IsOn": True, "caen_HV1.6_IsOn": True}
+        state = {"pending_count": 0, "tripped": False}
+        soft_interlock_loop(self.UNSAFE, ch_on, self.I1_SCOPE, caen, interlock_state=state)
+        self.assertFalse(state["tripped"])
+        caen.off.assert_not_called()
+
+    def test_latch_persists_after_conditions_return_safe(self):
+        """Once tripped, the latch stays set even when the next cycle is safe."""
+        caen = _make_caen()
+        ch_on = {"caen_LV9.2_IsOn": True, "caen_HV1.6_IsOn": True}
+        state = {"pending_count": 0, "tripped": False}
+        # Force a trip (two unsafe cycles).
+        soft_interlock_loop(self.UNSAFE, ch_on, self.I1_SCOPE, caen, interlock_state=state)
+        soft_interlock_loop(self.UNSAFE, ch_on, self.I1_SCOPE, caen, interlock_state=state)
+        self.assertTrue(state["tripped"])
+        # Power now off and cooling restored → loop reports safe, but latch holds.
+        ch_off = {"caen_LV9.2_IsOn": False, "caen_HV1.6_IsOn": False}
+        is_safe, _ = soft_interlock_loop(
+            self.SAFE, ch_off, self.I1_SCOPE, caen, interlock_state=state
+        )
+        self.assertTrue(is_safe)
+        self.assertTrue(state["tripped"])  # still latched until acknowledged
+
+
 if __name__ == "__main__":
     unittest.main()

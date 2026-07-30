@@ -80,7 +80,9 @@ class MainApp(QtWidgets.QMainWindow):
             f"Soft interlock: interval={self.interlock_check_interval}s, "
             f"confirm_checks={self.interlock_confirm_checks}"
         )
-        self.interlock_state = {"pending_count": 0}
+        # "tripped" latches True when a protective cutoff actually fires and is
+        # only cleared by the operator via acknowledge_soft_interlock().
+        self.interlock_state = {"pending_count": 0, "tripped": False}
         self.soft_interlock_timer = QTimer()
         self.soft_interlock_timer.timeout.connect(self.soft_interlock_check)
         self.soft_interlock_timer.start(self.interlock_check_interval * 1000)
@@ -240,6 +242,18 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info("UI setup completed")
 
     def get_ring_id(self):
+        try:
+            return self._get_ring_id_impl()
+        except Exception as e:
+            # Never let a module-DB problem stop the GUI from starting — the
+            # coldroom safety monitor must come up even fully offline.
+            logger.error(f"Could not load ring/modules at startup: {e}")
+            self.mounted_modules = {}
+            self.number_of_modules = 0
+            self.ring_id = getattr(self, "ring_id", None)
+            return self.ring_id
+
+    def _get_ring_id_impl(self):
         self.number_of_modules = 0  # Add default at the start
         # self.ring_id=get_ring_from_cable("I1") #hardcode the single harting cable I1
         self.ring_id = get_ring_from_cable(
@@ -306,12 +320,21 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info(f"Ring ID {self.ring_id} saved successfully.")
 
     def get_mounted_modules(self):
-        self.mounted_modules = get_modules_on_ring(
-            self.ring_id, db_url=self.module_db.db_url
+        # get_modules_on_ring returns None if the module DB is unreachable
+        # (e.g. running outside the lab) — degrade to an empty set so the GUI
+        # can still start instead of crashing on a None iteration.
+        self.mounted_modules = (
+            get_modules_on_ring(self.ring_id, db_url=self.module_db.db_url) or {}
         )
+        if not self.mounted_modules:
+            logger.warning(
+                f"No modules loaded for ring {self.ring_id} "
+                "(module DB unreachable or ring empty)"
+            )
+            return self.mounted_modules
         for module_name in self.mounted_modules:
             self.mounted_modules[module_name].update(
-                get_module_endpoints(module_name, db_url=self.module_db.db_url)
+                get_module_endpoints(module_name, db_url=self.module_db.db_url) or {}
             )
             self.mounted_modules[module_name].update(
                 {"speed": get_module_speed(module_name, db_url=self.module_db.db_url)}
@@ -323,11 +346,12 @@ class MainApp(QtWidgets.QMainWindow):
                     )
                 }
             )
+            module_details = get_module(module_name, db_url=self.module_db.db_url) or {}
             self.mounted_modules[module_name].update(
                 {
-                    "temperature_offsets": get_module(
-                        module_name, db_url=self.module_db.db_url
-                    ).get("temperature_offsets", {})
+                    "temperature_offsets": module_details.get(
+                        "temperature_offsets", {}
+                    )
                 }
             )
         logger.debug(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
@@ -400,6 +424,16 @@ class MainApp(QtWidgets.QMainWindow):
         self.marta_coldroom_tab.findChild(
             QtWidgets.QPushButton, "coldroom_dry_air_bypass_off_PB"
         ).clicked.connect(self.coldroom_dry_air_bypass_off)
+
+        # Soft-interlock trip acknowledge button: always visible, but greyed out
+        # and non-functional in normal operation; enabled only while a trip is
+        # latched (see set_ack_button_state / soft_interlock_check).
+        ack_button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "soft_interlock_ack_PB"
+        )
+        if ack_button:
+            self.set_ack_button_state(ack_button, enabled=False)
+            ack_button.clicked.connect(self.acknowledge_soft_interlock)
 
         # Door controls
         button = self.marta_coldroom_tab.findChild(
@@ -738,8 +772,11 @@ class MainApp(QtWidgets.QMainWindow):
 
     def soft_interlock_check(self):
         logger.info("Called soft Interlock")
-        used_caen_channels = self.modules_list_tab.get_used_channels()
-        logger.info(f"Used CAEN channels for safety checks: {used_caen_channels}")
+        # Scope the interlock to cable I1: every LV/HV channel of the modules on
+        # I1's ring (not just those currently flagged on) — these are the only
+        # channels the interlock is allowed to switch off.
+        used_caen_channels = self.modules_list_tab.get_all_channels()
+        logger.info(f"Cable-I1 channel scope for safety checks: {used_caen_channels}")
         alarm_publish = (
             (lambda msg: self.system._martacoldroom._client.publish("/alarm", msg))
             if self.system._martacoldroom
@@ -757,19 +794,29 @@ class MainApp(QtWidgets.QMainWindow):
         )
         logger.info(f"Soft interlock result: is_safe={is_safe}, msg={msg}")
 
+        # A trip LATCHES: once a protective cutoff has fired, the LED stays in
+        # the "TRIPPED" state (and cannot go green) until the operator presses
+        # the Acknowledge button, even after conditions return to safe. This
+        # ensures a trip is never silently cleared without the operator noticing.
+        tripped_latched = self.interlock_state.get("tripped", False)
+
         soft_interlock_led = self.marta_coldroom_tab.findChild(
             QtWidgets.QFrame, "soft_interlock_LED"
         )
         if soft_interlock_led:
-            status_color = "green" if is_safe else "red"
-            soft_interlock_led.setStyleSheet("background-color: white;")
-            QTimer.singleShot(
-                500,
-                lambda led=soft_interlock_led, color=status_color: led.setStyleSheet(
-                    f"background-color: {color};"
-                ),
-            )
-            logger.info(f"Updated soft interlock LED: {status_color} with pulse")
+            if tripped_latched:
+                # Hold a steady red — no pulsing — to read as a latched alarm.
+                soft_interlock_led.setStyleSheet("background-color: red;")
+            else:
+                status_color = "green" if is_safe else "red"
+                soft_interlock_led.setStyleSheet("background-color: white;")
+                QTimer.singleShot(
+                    500,
+                    lambda led=soft_interlock_led, color=status_color: led.setStyleSheet(
+                        f"background-color: {color};"
+                    ),
+                )
+                logger.info(f"Updated soft interlock LED: {status_color} with pulse")
 
         verdict = interpret_soft_interlock(is_safe)
 
@@ -778,20 +825,79 @@ class MainApp(QtWidgets.QMainWindow):
             QtWidgets.QLabel, "soft_interlock_label"
         )
         if soft_interlock_caption:
-            caption = "Soft Interlock\n" + ("OK" if is_safe else "TRIPPED")
+            if tripped_latched:
+                caption = "Soft Interlock\nTRIPPED — ACK"
+            else:
+                caption = "Soft Interlock\n" + ("OK" if is_safe else "TRIPPED")
             soft_interlock_caption.setText(caption)
             soft_interlock_caption.setStyleSheet(
-                "color: #1a7f37;" if is_safe else "color: #c0362c;"
+                "color: #1a7f37;" if (is_safe and not tripped_latched) else "color: #c0362c;"
             )
+
+        # Enable the Acknowledge button while a trip is latched; otherwise keep
+        # it visible but greyed out and non-functional.
+        ack_button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "soft_interlock_ack_PB"
+        )
+        if ack_button:
+            self.set_ack_button_state(ack_button, enabled=tripped_latched)
 
         soft_interlock_msg_label = self.marta_coldroom_tab.findChild(
             QtWidgets.QLabel, "soft_interlock_msg"
         )
         if soft_interlock_msg_label:
-            soft_interlock_msg_label.setText(f"{verdict}\n{msg}")
-            logger.info(f"Updated soft interlock message: {verdict} | {msg}")
+            if tripped_latched:
+                trip_time = self.interlock_state.get("trip_time", "")
+                trip_message = self.interlock_state.get("trip_message", msg)
+                soft_interlock_msg_label.setText(
+                    f"INTERLOCK TRIPPED at {trip_time} — press Acknowledge to clear.\n"
+                    f"{trip_message}"
+                )
+            else:
+                soft_interlock_msg_label.setText(f"{verdict}\n{msg}")
+                logger.info(f"Updated soft interlock message: {verdict} | {msg}")
 
         logger.info("Completed soft interlock loop")
+
+    def acknowledge_soft_interlock(self):
+        """Operator acknowledges a latched soft-interlock trip.
+
+        Clears the latch so the LED can return to reflecting live safety status,
+        and hides the Acknowledge button. Does NOT re-energize anything — that
+        remains a deliberate, separate operator action.
+        """
+        was_tripped = self.interlock_state.get("tripped", False)
+        self.interlock_state["tripped"] = False
+        self.interlock_state.pop("trip_message", None)
+        trip_time = self.interlock_state.pop("trip_time", None)
+        logger.warning(
+            f"Soft interlock trip acknowledged by operator "
+            f"(original trip at {trip_time})"
+        )
+
+        ack_button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "soft_interlock_ack_PB"
+        )
+        if ack_button:
+            self.set_ack_button_state(ack_button, enabled=False)
+
+        # Re-evaluate immediately so the LED/caption reflect current status
+        # rather than waiting up to one full check interval.
+        if was_tripped:
+            self.soft_interlock_check()
+
+    def set_ack_button_state(self, ack_button, enabled):
+        """Enable/disable the trip-acknowledge button and style it accordingly.
+
+        The button is always visible so the operator knows it exists; it is only
+        clickable (and coloured as an active alarm-clear button) while a trip is
+        latched. Otherwise it is greyed out and non-functional.
+        """
+        ack_button.setEnabled(enabled)
+        if enabled:
+            ack_button.setStyleSheet("background-color: #c0362c; color: white;")
+        else:
+            ack_button.setStyleSheet("background-color: #b0b0b0; color: #eeeeee;")
 
     def update_ui(self):
         """Update UI with current system status"""
