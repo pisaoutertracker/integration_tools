@@ -133,6 +133,74 @@ def get_on_channels(caen_ch_status):
     return on_channels
 
 
+def get_cable_channels(mounted_modules):
+    """
+    Build the CAEN channel whitelist for the modules physically connected to
+    the harting cable this GUI drives (cable ``I1``).
+
+    ``mounted_modules`` is the dict cold.py assembles at startup: the ring is
+    resolved from cable I1 (``db.utils.get_ring_from_cable("I1")``), every
+    module on that ring is fetched with ``get_modules_on_ring()``, and each is
+    then annotated with its crate-side endpoints by
+    ``db.utils.get_module_endpoints()`` → ``{"LV": "LV9.2", "HV": "HV1.6",
+    "FC7": ...}``. Those LV/HV endpoint ids are exactly the channel ids
+    ``caen.off()`` expects, so they are the I1 channel set.
+
+    Returns {"LV": [...], "HV": [...]} with duplicates and None dropped, or
+    empty lists when no endpoint information is available (module DB
+    unreachable, ring unknown, nothing mounted).
+    """
+    channels = {"LV": [], "HV": []}
+    try:
+        for module_info in (mounted_modules or {}).values():
+            if not isinstance(module_info, dict):
+                continue
+            for kind in ("LV", "HV"):
+                channel = module_info.get(kind)
+                if channel and channel not in channels[kind]:
+                    channels[kind].append(channel)
+    except Exception as e:
+        logger.debug(f"Error in get_cable_channels: {str(e)}")
+    return channels
+
+
+def restrict_to_cable_channels(used_channels, allowed_channels):
+    """
+    Narrow an effective channel set to the channels belonging to cable I1.
+
+    Fail-safe by design: when ``allowed_channels`` carries no channel at all for
+    a rail (the module DB was unreachable, or nothing is mounted on the ring),
+    that rail is left UNRESTRICTED. Silently narrowing to an empty list would
+    turn the interlock into a no-op and leave real power on during a cooling
+    loss, so an unknown whitelist must never disable protection.
+
+    Returns (restricted_channels, note) where `note` explains what was applied.
+    """
+    allowed_channels = allowed_channels or {}
+    restricted = {"LV": [], "HV": []}
+    notes = []
+    for kind in ("LV", "HV"):
+        current = [c for c in used_channels.get(kind, []) if c]
+        allowed = [c for c in allowed_channels.get(kind, []) if c]
+        if not allowed:
+            restricted[kind] = current
+            notes.append(
+                f"{kind}: no cable-I1 channel list available — acting on all "
+                f"{len(current)} channel(s) (fail-safe)"
+            )
+            continue
+        kept = [c for c in current if c in allowed]
+        skipped = [c for c in current if c not in allowed]
+        restricted[kind] = kept
+        if skipped:
+            notes.append(
+                f"{kind}: ignoring {skipped} — not connected to cable I1"
+            )
+        else:
+            notes.append(f"{kind}: all {len(kept)} channel(s) are on cable I1")
+    return restricted, "; ".join(notes)
+
+
 def check_any_hv_on(caen_ch_status, used_channels):
     try:
         # Check if any used channel is on
@@ -164,16 +232,95 @@ def interpret_door_safety(is_safe):
     return "DO NOT OPEN — conditions are unsafe, keep the door closed."
 
 
-def interpret_soft_interlock(is_safe):
+def interpret_soft_interlock(is_safe, trip_unacknowledged=False):
     """
     Human-readable verdict for the 'Soft Interlock' LED.
 
     Note: green means "no protective action needed" (e.g. LV is off), not
     necessarily "safe to energize LV" — the detailed message says which.
+
+    ``trip_unacknowledged`` latches the verdict: once power has actually been
+    cut, the operator must acknowledge the trip, so the LED keeps reporting it
+    even after conditions recover (see acknowledge_trip).
     """
-    if is_safe:
-        return "OK — no protective action needed (LV is protected)."
-    return "INTERLOCK TRIPPED — unsafe condition, LV has been switched off."
+    if not is_safe:
+        return "INTERLOCK TRIPPED — unsafe condition, LV has been switched off."
+    if trip_unacknowledged:
+        return (
+            "TRIPPED EARLIER — conditions have recovered, but the trip has not "
+            "been acknowledged. Press 'Acknowledge Trip' to clear."
+        )
+    return "OK — no protective action needed (LV is protected)."
+
+
+### Trip acknowledgement ###
+# A trip is latched in `interlock_state` when the loop actually cuts power, and
+# stays latched until the operator acknowledges it, so a short trip that
+# recovers on its own cannot silently disappear from the GUI.
+
+
+def record_trip(interlock_state, trip_reason, channels=None):
+    """
+    Latch a confirmed trip into the persistent interlock state.
+
+    Called only when power was really switched off — not for the unconfirmed
+    first-detection warning. Safe to call with interlock_state=None (no
+    persistent state → nothing to latch).
+    """
+    if interlock_state is None:
+        return
+    interlock_state["tripped"] = True
+    interlock_state["trip_acknowledged"] = False
+    interlock_state["trip_reason"] = trip_reason
+    interlock_state["trip_time"] = datetime.datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    interlock_state["trip_channels"] = {
+        "LV": list((channels or {}).get("LV", [])),
+        "HV": list((channels or {}).get("HV", [])),
+    }
+    interlock_state["trip_count"] = interlock_state.get("trip_count", 0) + 1
+
+
+def is_trip_unacknowledged(interlock_state):
+    """True when a trip has been latched and not yet acknowledged."""
+    if not interlock_state:
+        return False
+    return bool(interlock_state.get("tripped")) and not interlock_state.get(
+        "trip_acknowledged", False
+    )
+
+
+def describe_trip(interlock_state):
+    """One-line summary of the latched trip, for the GUI and the log."""
+    if not interlock_state or not interlock_state.get("tripped"):
+        return ""
+    channels = interlock_state.get("trip_channels", {}) or {}
+    switched = list(channels.get("HV", [])) + list(channels.get("LV", []))
+    parts = [
+        f"Trip #{interlock_state.get('trip_count', 1)} at "
+        f"{interlock_state.get('trip_time', 'unknown time')}: "
+        f"{interlock_state.get('trip_reason', 'unknown reason')}."
+    ]
+    if switched:
+        parts.append(f"Channels switched off: {', '.join(switched)}.")
+    return " ".join(parts)
+
+
+def acknowledge_trip(interlock_state):
+    """
+    Clear the latch after the operator has acknowledged the trip.
+
+    Returns the description of the trip that was acknowledged (empty string if
+    there was nothing to acknowledge), so the caller can log it.
+    """
+    if not is_trip_unacknowledged(interlock_state):
+        return ""
+    description = describe_trip(interlock_state)
+    interlock_state["trip_acknowledged"] = True
+    interlock_state["tripped"] = False
+    logger.warning(f"Soft interlock trip acknowledged by operator: {description}")
+    return description
 
 
 def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
@@ -542,6 +689,7 @@ def soft_interlock_loop(
     publish_alarm=None,
     interlock_state=None,
     confirm_checks=2,
+    allowed_channels=None,
 ):
     """
     Soft interlock loop - monitors safety conditions and takes protective action.
@@ -567,6 +715,11 @@ def soft_interlock_loop(
       glitch cannot trip the cutoff. If ``interlock_state`` is None the loop
       cannot debounce and falls back to acting immediately (fail-safe).
 
+    Scope: when ``allowed_channels`` is given, the loop only monitors and only
+    switches off the CAEN channels connected to cable I1 (see
+    get_cable_channels / restrict_to_cable_channels). Channels belonging to
+    other cables are left alone — they are not this GUI's to cut.
+
     A message is published to /alarm whenever a protective action fires, and a
     (distinct) warning is published on the first, unconfirmed detection.
 
@@ -577,10 +730,15 @@ def soft_interlock_loop(
         caen: CAEN control object with on()/off() methods.
         publish_alarm (callable, optional): publish_alarm(message_string)
         interlock_state (dict, optional): persistent state carried across calls;
-            uses key "pending_count". Pass the SAME dict every cycle to enable
-            debouncing. None disables debouncing (act immediately).
+            uses key "pending_count", plus the trip latch written by
+            record_trip(). Pass the SAME dict every cycle to enable debouncing.
+            None disables debouncing (act immediately).
         confirm_checks (int): consecutive unsafe cycles required before cutting
             power. 1 = act immediately; 2 = confirm on the next check (default).
+        allowed_channels (dict, optional): cable-I1 channel whitelist
+            {"LV": [...], "HV": [...]}. None/empty leaves the loop
+            unrestricted (fail-safe — an unknown whitelist must never disable
+            protection).
 
     Returns:
         tuple: (is_safe: bool, message: str)
@@ -609,6 +767,15 @@ def soft_interlock_loop(
         }
         logger.info(f"Soft interlock effective channels (registered + live-on): {used_channels}")
 
+        # Restrict the scope to the channels wired to cable I1. Only those
+        # modules are cooled by the MARTA line this GUI watches, so cutting
+        # anything else would take down hardware that isn't at risk.
+        used_channels, restriction_note = restrict_to_cable_channels(
+            used_channels, allowed_channels
+        )
+        logger.info(f"Soft interlock cable-I1 scope: {restriction_note}")
+        logger.info(f"Soft interlock channels after cable-I1 filter: {used_channels}")
+
         lv_on = Is_any_lv_on(caen_ch_status, used_channels)
         # Is_it_safe_to_on_lv returns (bool, str) — unpack properly
         lv_safe_to_on, lv_safe_msg = Is_it_safe_to_on_lv(
@@ -622,7 +789,7 @@ def soft_interlock_loop(
         marta_it_status = "RUNNING" if marta_it else "NOT RUNNING"
 
         log_msg = (
-            f"\nSoft interlock: LV={lv_status}, "
+            f"\nSoft interlock (cable I1 scope): LV={lv_status}, "
             f"MARTA_OT={marta_ot_status}, MARTA_IT={marta_it_status}\n"
         )
         logger.info(log_msg)
@@ -654,7 +821,8 @@ def soft_interlock_loop(
         if trip_needed:
             alarm_msg = (
                 f"SAFETY INTERLOCK: {trip_reason}. "
-                "Turning off all HV then LV channels to prevent module damage."
+                "Turning off the cable-I1 HV then LV channels to prevent "
+                "module damage."
             )
 
         # --- Safe this cycle: clear any pending record and report OK ---
@@ -697,6 +865,9 @@ def soft_interlock_loop(
         logger.warning(alarm_msg)
         switch_all_hv_off(caen, used_channels)
         switch_all_lv_off(caen, used_channels)
+        # Latch the trip so the GUI keeps reporting it until the operator
+        # acknowledges — a trip that recovers on its own must stay visible.
+        record_trip(interlock_state, trip_reason, used_channels)
         if publish_alarm:
             publish_alarm(alarm_msg)
         return False, alarm_msg

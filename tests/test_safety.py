@@ -31,9 +31,15 @@ from unittest.mock import MagicMock, call
 logging.getLogger("coldroom.safety").setLevel(logging.CRITICAL)
 
 from coldroom.safety import (
+    acknowledge_trip,
     check_door_safe_to_open,
     check_marta_on_for_IT,
     check_marta_on_for_OT,
+    describe_trip,
+    get_cable_channels,
+    interpret_soft_interlock,
+    is_trip_unacknowledged,
+    restrict_to_cable_channels,
     soft_interlock_loop,
     switch_all_hv_off,
     switch_all_lv_off,
@@ -597,6 +603,259 @@ class TestSwitchHelpers(unittest.TestCase):
         self.assertTrue(switch_all_hv_off(caen, {"LV": [], "HV": []}))
         self.assertTrue(switch_all_lv_off(caen, {"LV": [], "HV": []}))
         caen.off.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Cable I1 scoping
+# ---------------------------------------------------------------------------
+
+# Shape of cold.py's self.mounted_modules: modules on the ring resolved from
+# cable I1, each annotated with its crate-side endpoints by
+# db.utils.get_module_endpoints().
+MOUNTED_I1 = {
+    "PS_16_10_IPG-00005": {"LV": "LV0.1", "HV": "HV0.1", "FC7": "FC7OT5_OG1"},
+    "PS_16_10_IPG-00006": {"LV": "LV0.2", "HV": "HV0.2", "FC7": "FC7OT5_OG2"},
+}
+
+
+class TestCableChannels(unittest.TestCase):
+    """get_cable_channels: derive the I1 channel whitelist from mounted modules."""
+
+    def test_collects_lv_and_hv_endpoints(self):
+        self.assertEqual(
+            get_cable_channels(MOUNTED_I1),
+            {"LV": ["LV0.1", "LV0.2"], "HV": ["HV0.1", "HV0.2"]},
+        )
+
+    def test_missing_and_none_endpoints_are_skipped(self):
+        mounted = {
+            "mod_a": {"LV": "LV0.1", "HV": None},
+            "mod_b": {"FC7": "FC7OT5_OG1"},
+            "mod_c": {"LV": "LV0.1", "HV": "HV0.3"},  # duplicate LV
+        }
+        self.assertEqual(
+            get_cable_channels(mounted), {"LV": ["LV0.1"], "HV": ["HV0.3"]}
+        )
+
+    def test_no_module_info_returns_empty_lists(self):
+        self.assertEqual(get_cable_channels(None), {"LV": [], "HV": []})
+        self.assertEqual(get_cable_channels({}), {"LV": [], "HV": []})
+
+
+class TestRestrictToCableChannels(unittest.TestCase):
+    """restrict_to_cable_channels: keep only I1 channels, fail-safe when unknown."""
+
+    def test_channels_outside_cable_are_dropped(self):
+        restricted, note = restrict_to_cable_channels(
+            {"LV": ["LV0.1", "LV9.9"], "HV": ["HV0.1", "HV9.9"]},
+            get_cable_channels(MOUNTED_I1),
+        )
+        self.assertEqual(restricted, {"LV": ["LV0.1"], "HV": ["HV0.1"]})
+        self.assertIn("LV9.9", note)
+
+    def test_empty_whitelist_leaves_everything_unrestricted(self):
+        """DB unreachable → must NOT silently disable the interlock."""
+        used = {"LV": ["LV0.1"], "HV": ["HV0.1"]}
+        restricted, note = restrict_to_cable_channels(used, {"LV": [], "HV": []})
+        self.assertEqual(restricted, used)
+        self.assertIn("fail-safe", note)
+
+    def test_none_whitelist_leaves_everything_unrestricted(self):
+        used = {"LV": ["LV0.1"], "HV": ["HV0.1"]}
+        restricted, _ = restrict_to_cable_channels(used, None)
+        self.assertEqual(restricted, used)
+
+    def test_per_rail_whitelist_is_independent(self):
+        """An HV-only whitelist must not restrict LV as a side effect."""
+        restricted, _ = restrict_to_cable_channels(
+            {"LV": ["LV9.9"], "HV": ["HV0.1", "HV9.9"]},
+            {"LV": [], "HV": ["HV0.1"]},
+        )
+        self.assertEqual(restricted, {"LV": ["LV9.9"], "HV": ["HV0.1"]})
+
+
+class TestSoftInterlockCableScope(unittest.TestCase):
+    """The interlock only cuts channels connected to cable I1."""
+
+    def test_only_cable_channels_are_switched_off(self):
+        caen = _make_caen()
+        status = {"marta": {"fsm_state": "DISCONNECTED"}}
+        ch_status = {
+            "caen_LV0.1_IsOn": True,   # on cable I1
+            "caen_HV0.1_IsOn": True,   # on cable I1
+            "caen_LV9.9_IsOn": True,   # another cable — must be left alone
+            "caen_HV9.9_IsOn": True,   # another cable — must be left alone
+        }
+
+        soft_interlock_loop(
+            status,
+            ch_status,
+            {"LV": [], "HV": []},
+            caen,
+            allowed_channels=get_cable_channels(MOUNTED_I1),
+        )
+
+        switched = [c.args[0] for c in caen.off.call_args_list]
+        self.assertIn("LV0.1", switched)
+        self.assertIn("HV0.1", switched)
+        self.assertNotIn("LV9.9", switched)
+        self.assertNotIn("HV9.9", switched)
+
+    def test_power_on_only_outside_cable_does_not_trip(self):
+        """Channels on other cables are not this GUI's responsibility."""
+        caen = _make_caen()
+        status = {"marta": {"fsm_state": "DISCONNECTED"}}
+        ch_status = {"caen_LV9.9_IsOn": True, "caen_HV9.9_IsOn": True}
+
+        is_safe, _ = soft_interlock_loop(
+            status,
+            ch_status,
+            {"LV": [], "HV": []},
+            caen,
+            allowed_channels=get_cable_channels(MOUNTED_I1),
+        )
+
+        self.assertTrue(is_safe)
+        caen.off.assert_not_called()
+
+    def test_unknown_cable_channels_fall_back_to_cutting_everything(self):
+        """No DB info → protection must stay as broad as before."""
+        caen = _make_caen()
+        status = {"marta": {"fsm_state": "DISCONNECTED"}}
+        ch_status = {"caen_LV9.9_IsOn": True}
+
+        is_safe, _ = soft_interlock_loop(
+            status,
+            ch_status,
+            {"LV": [], "HV": []},
+            caen,
+            allowed_channels={"LV": [], "HV": []},
+        )
+
+        self.assertFalse(is_safe)
+        caen.off.assert_any_call("LV9.9")
+
+    def test_omitting_allowed_channels_keeps_legacy_behaviour(self):
+        caen = _make_caen()
+        status = {"marta": {"fsm_state": "DISCONNECTED"}}
+        ch_status = {"caen_LV9.9_IsOn": True}
+
+        is_safe, _ = soft_interlock_loop(status, ch_status, {"LV": [], "HV": []}, caen)
+
+        self.assertFalse(is_safe)
+        caen.off.assert_any_call("LV9.9")
+
+
+# ---------------------------------------------------------------------------
+# Trip acknowledgement latch
+# ---------------------------------------------------------------------------
+
+class TestTripAcknowledgement(unittest.TestCase):
+    """A confirmed trip stays latched until the operator acknowledges it."""
+
+    def _trip(self, state):
+        """Drive the loop into a confirmed trip, honouring the debounce."""
+        caen = _make_caen()
+        status = {"marta": {"fsm_state": "DISCONNECTED"}}
+        ch_status = {"caen_LV0.1_IsOn": True, "caen_HV0.1_IsOn": False}
+        for _ in range(state.get("_confirm", 2) if state else 2):
+            soft_interlock_loop(
+                status, ch_status, USED, caen, interlock_state=state, confirm_checks=2
+            )
+        return caen
+
+    def test_no_trip_means_nothing_to_acknowledge(self):
+        state = {"pending_count": 0}
+        soft_interlock_loop(
+            _safe_status(), _all_off(), USED, caen := _make_caen(),
+            interlock_state=state,
+        )
+        self.assertFalse(is_trip_unacknowledged(state))
+        self.assertEqual(acknowledge_trip(state), "")
+        caen.off.assert_not_called()
+
+    def test_confirmed_trip_latches_state(self):
+        state = {"pending_count": 0}
+        caen = self._trip(state)
+        caen.off.assert_called()
+        self.assertTrue(is_trip_unacknowledged(state))
+        self.assertEqual(state["trip_count"], 1)
+        self.assertIn("MARTA", state["trip_reason"])
+
+    def test_unconfirmed_warning_does_not_latch(self):
+        """The first, unconfirmed detection only warns — no trip to acknowledge."""
+        state = {"pending_count": 0}
+        caen = _make_caen()
+        soft_interlock_loop(
+            {"marta": {"fsm_state": "DISCONNECTED"}},
+            {"caen_LV0.1_IsOn": True},
+            USED,
+            caen,
+            interlock_state=state,
+            confirm_checks=2,
+        )
+        caen.off.assert_not_called()
+        self.assertFalse(is_trip_unacknowledged(state))
+
+    def test_latch_survives_recovery_until_acknowledged(self):
+        """Conditions recovering must NOT clear the latch on their own."""
+        state = {"pending_count": 0}
+        self._trip(state)
+
+        is_safe, _ = soft_interlock_loop(
+            _safe_status(), _all_off(), USED, _make_caen(), interlock_state=state
+        )
+
+        self.assertTrue(is_safe)                      # conditions are fine again
+        self.assertTrue(is_trip_unacknowledged(state))  # but the trip is still latched
+        self.assertEqual(state["pending_count"], 0)
+
+    def test_acknowledge_clears_latch(self):
+        state = {"pending_count": 0}
+        self._trip(state)
+
+        description = acknowledge_trip(state)
+
+        self.assertIn("Trip #1", description)
+        self.assertFalse(is_trip_unacknowledged(state))
+        self.assertEqual(acknowledge_trip(state), "")  # idempotent
+
+    def test_describe_trip_names_the_switched_channels(self):
+        state = {"pending_count": 0}
+        self._trip(state)
+        description = describe_trip(state)
+        self.assertIn("LV0.1", description)
+        self.assertIn("HV0.1", description)
+
+    def test_second_trip_relatches_after_acknowledgement(self):
+        state = {"pending_count": 0}
+        self._trip(state)
+        acknowledge_trip(state)
+        soft_interlock_loop(
+            _safe_status(), _all_off(), USED, _make_caen(), interlock_state=state
+        )
+        self._trip(state)
+        self.assertTrue(is_trip_unacknowledged(state))
+        self.assertEqual(state["trip_count"], 2)
+
+    def test_no_persistent_state_does_not_crash(self):
+        """interlock_state=None acts immediately and simply cannot latch."""
+        caen = _make_caen()
+        is_safe, _ = soft_interlock_loop(
+            {"marta": {"fsm_state": "DISCONNECTED"}},
+            {"caen_LV0.1_IsOn": True},
+            USED,
+            caen,
+        )
+        self.assertFalse(is_safe)
+        caen.off.assert_called()
+        self.assertFalse(is_trip_unacknowledged(None))
+
+    def test_verdict_reports_unacknowledged_trip_after_recovery(self):
+        self.assertIn("TRIPPED EARLIER", interpret_soft_interlock(True, True))
+        self.assertIn("OK", interpret_soft_interlock(True, False))
+        # A live unsafe verdict outranks the latch.
+        self.assertIn("INTERLOCK TRIPPED", interpret_soft_interlock(False, True))
 
 
 if __name__ == "__main__":
