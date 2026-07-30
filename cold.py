@@ -22,6 +22,10 @@ from coldroom.safety import (
     soft_interlock_loop,
     interpret_door_safety,
     interpret_soft_interlock,
+    get_cable_channels,
+    is_trip_unacknowledged,
+    describe_trip,
+    acknowledge_trip,
 )
 from caen.caenGUIall import caenGUIall
 from Inner_tracker_GUI.caenGUIall_v2 import caenGUI8LV
@@ -484,6 +488,14 @@ class MainApp(QtWidgets.QMainWindow):
         )
         if soft_interlock_msg:
             logger.debug("Connected soft interlock message label")
+        # Soft interlock trip acknowledgement button. The LED latches on a trip
+        # and only this button clears it, so a trip cannot scroll past unnoticed.
+        soft_interlock_ack = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "soft_interlock_ack_PB"
+        )
+        if soft_interlock_ack:
+            soft_interlock_ack.clicked.connect(self.acknowledge_soft_interlock_trip)
+            logger.debug("Connected soft interlock acknowledge button")
 
         # Temperature setpoint controls
         button = self.marta_coldroom_tab.findChild(
@@ -736,6 +748,19 @@ class MainApp(QtWidgets.QMainWindow):
             self.statusBar().showMessage(error_msg)
             logger.error(error_msg)
 
+    def get_cable_i1_channels(self):
+        """
+        CAEN channels wired to the harting cable I1, for the safety interlock.
+
+        `mounted_modules` is built from the ring resolved from cable I1 (see
+        get_ring_id / get_mounted_modules), and each module carries its LV/HV
+        crate endpoints. Returns empty lists when the module DB was unreachable
+        — the interlock treats that as "unknown" and stays unrestricted.
+        """
+        channels = get_cable_channels(self.mounted_modules)
+        logger.info(f"Cable I1 CAEN channels: {channels}")
+        return channels
+
     def soft_interlock_check(self):
         logger.info("Called soft Interlock")
         used_caen_channels = self.modules_list_tab.get_used_channels()
@@ -754,44 +779,100 @@ class MainApp(QtWidgets.QMainWindow):
             publish_alarm=alarm_publish,
             interlock_state=self.interlock_state,
             confirm_checks=self.interlock_confirm_checks,
+            allowed_channels=self.get_cable_i1_channels(),
         )
         logger.info(f"Soft interlock result: is_safe={is_safe}, msg={msg}")
+
+        # Kept so the acknowledge button can repaint without waiting for, or
+        # inventing, a fresh safety verdict.
+        self._last_interlock_result = (is_safe, msg)
+        self.update_soft_interlock_ui(is_safe, msg)
+        logger.info("Completed soft interlock loop")
+
+    def update_soft_interlock_ui(self, is_safe, msg):
+        """
+        Paint the soft interlock LED, caption, message and acknowledge button.
+
+        Three visual states, so a trip is never lost between two 5 s checks:
+          * red (pulsing)  — unsafe right now, power was/is being cut
+          * amber (steady) — conditions recovered but the trip is not yet
+                             acknowledged; the LED stays latched here
+          * green          — safe and nothing outstanding
+        """
+        trip_pending = is_trip_unacknowledged(self.interlock_state)
 
         soft_interlock_led = self.marta_coldroom_tab.findChild(
             QtWidgets.QFrame, "soft_interlock_LED"
         )
         if soft_interlock_led:
-            status_color = "green" if is_safe else "red"
-            soft_interlock_led.setStyleSheet("background-color: white;")
-            QTimer.singleShot(
-                500,
-                lambda led=soft_interlock_led, color=status_color: led.setStyleSheet(
-                    f"background-color: {color};"
-                ),
-            )
-            logger.info(f"Updated soft interlock LED: {status_color} with pulse")
+            if not is_safe:
+                status_color = "red"
+            elif trip_pending:
+                status_color = "orange"
+            else:
+                status_color = "green"
+            if is_safe and trip_pending:
+                # Latched: hold a steady amber instead of pulsing, so the
+                # operator can tell "still tripped" from "tripping right now".
+                soft_interlock_led.setStyleSheet(
+                    f"background-color: {status_color};"
+                )
+            else:
+                soft_interlock_led.setStyleSheet("background-color: white;")
+                QTimer.singleShot(
+                    500,
+                    lambda led=soft_interlock_led, color=status_color: led.setStyleSheet(
+                        f"background-color: {color};"
+                    ),
+                )
+            logger.info(f"Updated soft interlock LED: {status_color}")
 
-        verdict = interpret_soft_interlock(is_safe)
+        verdict = interpret_soft_interlock(is_safe, trip_unacknowledged=trip_pending)
 
         # Also show the verdict as the LED caption so the light is self-explanatory
         soft_interlock_caption = self.marta_coldroom_tab.findChild(
             QtWidgets.QLabel, "soft_interlock_label"
         )
         if soft_interlock_caption:
-            caption = "Soft Interlock\n" + ("OK" if is_safe else "TRIPPED")
+            if not is_safe:
+                caption, colour = "Soft Interlock\nTRIPPED", "#c0362c"
+            elif trip_pending:
+                caption, colour = "Soft Interlock\nTRIPPED (acknowledge)", "#b26a00"
+            else:
+                caption, colour = "Soft Interlock\nOK", "#1a7f37"
             soft_interlock_caption.setText(caption)
-            soft_interlock_caption.setStyleSheet(
-                "color: #1a7f37;" if is_safe else "color: #c0362c;"
-            )
+            soft_interlock_caption.setStyleSheet(f"color: {colour};")
 
         soft_interlock_msg_label = self.marta_coldroom_tab.findChild(
             QtWidgets.QLabel, "soft_interlock_msg"
         )
         if soft_interlock_msg_label:
-            soft_interlock_msg_label.setText(f"{verdict}\n{msg}")
+            text = f"{verdict}\n{msg}"
+            if trip_pending:
+                text = f"{describe_trip(self.interlock_state)}\n\n{text}"
+            soft_interlock_msg_label.setText(text)
             logger.info(f"Updated soft interlock message: {verdict} | {msg}")
 
-        logger.info("Completed soft interlock loop")
+        # The button only does something while a trip is latched.
+        soft_interlock_ack = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "soft_interlock_ack_PB"
+        )
+        if soft_interlock_ack:
+            soft_interlock_ack.setEnabled(trip_pending)
+
+    def acknowledge_soft_interlock_trip(self):
+        """Operator confirms they have seen the trip — clears the latched LED."""
+        description = acknowledge_trip(self.interlock_state)
+        if not description:
+            logger.info("Acknowledge pressed with no outstanding interlock trip")
+            return
+        logger.warning(f"Soft interlock trip acknowledged: {description}")
+        self.statusBar().showMessage(f"Interlock trip acknowledged — {description}")
+        # Repaint immediately rather than waiting for the next 5 s check, reusing
+        # the last real verdict so an acknowledgement can never paint the LED
+        # green while conditions are still unsafe.
+        is_safe, msg = getattr(self, "_last_interlock_result", (True, ""))
+        self.update_soft_interlock_ui(is_safe, msg)
 
     def update_ui(self):
         """Update UI with current system status"""

@@ -19,8 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 class PowerSupplyController(QWidget):
-    def __init__(self, parent=None):
+    # Rigol DP116A, reachable over TCP/VISA
+    DEFAULT_IP = "192.168.0.16"
+
+    def __init__(self, parent=None, ip_address=None):
         super(PowerSupplyController, self).__init__(parent)
+        self.ip_address = ip_address or self.DEFAULT_IP
         # Load the UI file
         ui_path = os.path.join(os.path.dirname(__file__), "power_supply.ui")
         loadUi(ui_path, self)
@@ -34,14 +38,20 @@ class PowerSupplyController(QWidget):
             "set_current": 0.0,
         }
         self.connected = False
+        self.connection_error = None
 
         # Set up timer early so closeEvent doesn't crash on connection failure
         self.timer = QTimer(self)
 
-        # Connect to the power supply
+        # Connect to the power supply. A failure here is reported inline in this
+        # tab (see show_connection_status) rather than as a modal pop-up — the
+        # power supply is optional hardware and a blocking dialog at startup
+        # interrupts the operator before the main GUI is even usable.
         self.connect_to_power_supply()
+        self.show_connection_status()
         if not self.connected:
             self.timer.stop()
+            self.set_controls_enabled(False)
             return
 
         # Connect UI signals to slots
@@ -63,16 +73,57 @@ class PowerSupplyController(QWidget):
     def connect_to_power_supply(self):
         """Connect to the power supply device"""
         try:
-            ip_address = "192.168.0.16"
             self.rm = visa.ResourceManager()
-            self.power_supply = self.rm.open_resource(f"TCPIP0::{ip_address}::INSTR")
+            self.power_supply = self.rm.open_resource(
+                f"TCPIP0::{self.ip_address}::INSTR"
+            )
             self.connected = True
             print("Successfully connected to power supply")
         except Exception as e:
             logger.error(f"Failed connection: {e}")
-            QMessageBox.critical(
-                self, "Connection Error", f"Failed to connect to power supply: {e}"
+            self.connected = False
+            self.connection_error = str(e)
+
+    def show_connection_status(self):
+        """
+        Report the connection outcome in this tab instead of a modal dialog.
+
+        On failure the operator sees the full VISA error (e.g.
+        VI_ERROR_RSRC_NFOUND) right where the controls are, so the rest of the
+        GUI stays usable and the reason is still visible later.
+        """
+        label = getattr(self, "powsup_connection_status_label", None)
+        if label is None:
+            return
+        if self.connected:
+            label.setText(f"Connected to power supply at {self.ip_address}")
+            label.setStyleSheet(
+                "padding: 8px; border-radius: 6px; "
+                "color: #1a7f37; background-color: #eaf6ec;"
             )
+        else:
+            label.setText(
+                f"Not connected to power supply at {self.ip_address} — controls "
+                f"disabled.\n{self.connection_error}"
+            )
+            label.setStyleSheet(
+                "padding: 8px; border-radius: 6px; "
+                "color: #c0362c; background-color: #fdeceb;"
+            )
+
+    def set_controls_enabled(self, enabled):
+        """Enable/disable the control widgets (used when there is no device)."""
+        for name in (
+            "powsup_voltage_set_PB",
+            "powsup_current_set_PB",
+            "power_ON_PB",
+            "power_OFF_PB",
+            "powsup_voltage_LE",
+            "powsup_current_LE",
+        ):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.setEnabled(enabled)
 
     def setup_ui_connections(self):
         """Connect UI signals to slots"""
