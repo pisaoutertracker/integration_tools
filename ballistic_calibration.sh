@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: ./balistic_calibration.sh modulename co2temperature
+# Usage: ./ballistic_calibration.sh modulename co2temperature
 if [ $# -le 2 ]; then
     echo "Usage: $0 modulename co2temperature [tag]"
     exit 1
@@ -24,11 +24,11 @@ echo "Extracted OT Number: $OT_NUMBER"
 echo "Extracted LV Channel: $LV_CHANNEL"
 
 source setup.sh
-cp balistic_template.xml ./balistic.xml
-perl -pe 's/target=.*:5000/target=192.168.0.19'$OT_NUMBER':5000/' -i balistic.xml
-perl -pe 's/OpticalGroup Id="0"/OpticalGroup Id="'$OG_NUMBER'"/' -i balistic.xml
+cp ballistic_template.xml ./ballistic.xml
+perl -pe 's/target=.*:5000/target=192.168.0.19'$OT_NUMBER':5000/' -i ballistic.xml
+perl -pe 's/OpticalGroup Id="0"/OpticalGroup Id="'$OG_NUMBER'"/' -i ballistic.xml
 
-runCalibration -f balistic.xml  -c monitoronly  -b >& /tmp/balistic.log &
+runCalibration -f ballistic.xml  -c monitoronly  -b >& /tmp/ballistic.log &
 #get pid of the last background process
 pid=$!
 echo "Running calibration with PID: $pid"
