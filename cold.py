@@ -10,6 +10,7 @@ from PyQt5.QtCore import Qt, QTimer
 from coldroom.system import System
 from coldroom.thermal_camera_gui import ThermalCameraTab
 from coldroom.modules_list_gui import ModulesListTab
+from coldroom.alarm_log import AlarmLog
 from coldroom.module_temperatures_gui import ModuleTemperaturesTAB
 from coldroom.safety import (
     check_door_safe_to_open,
@@ -80,8 +81,68 @@ class MainApp(QtWidgets.QMainWindow):
             f"Soft interlock: interval={self.interlock_check_interval}s, "
             f"confirm_checks={self.interlock_confirm_checks}"
         )
+        # Cooling / valve policy (see OT_IT_VALVE_QUESTIONS.md).
+        # require_valve_open: fail safe when a valve position is UNKNOWN.
+        # enforce_it_valve: let a closed IT (pixel) valve trip the interlock.
+        # Both default OFF: the channel scope is cable-I1 (OT) only, and with no
+        # serviceroom data a strict policy would trip whenever power is on.
+        self.interlock_require_valve_open = bool(
+            interlock_cfg.get("require_valve_open", False)
+        )
+        self.interlock_enforce_it_valve = bool(
+            interlock_cfg.get("enforce_it_valve", False)
+        )
+        try:
+            self.interlock_valve_max_age = float(
+                interlock_cfg.get("valve_max_age_seconds", 120) or 0
+            )
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Invalid SoftInterlock.valve_max_age_seconds ({e}); using 120 s")
+            self.interlock_valve_max_age = 120.0
+        logger.info(
+            f"Cooling policy: require_valve_open={self.interlock_require_valve_open}, "
+            f"enforce_it_valve={self.interlock_enforce_it_valve}, "
+            f"valve_max_age_seconds={self.interlock_valve_max_age}"
+        )
+
+        # Alarm journal + cross-instance trip latch. Several cold.py instances
+        # may run at once; they share these files so a trip raised in one is
+        # visible in all of them, and one acknowledgement clears it everywhere.
+        self.alarm_log = AlarmLog(
+            log_dir=interlock_cfg.get("alarm_log_dir") or None,
+            heartbeat_every=int(interlock_cfg.get("journal_heartbeat_cycles", 60) or 0),
+        )
+        logger.info(
+            f"Alarm journal: {self.alarm_log.journal_path} "
+            f"(latch: {self.alarm_log.latch_path}, instance {self.alarm_log.instance_id})"
+        )
+        self.alarm_log.log(
+            "startup",
+            "cold.py soft interlock started",
+            check_interval_s=self.interlock_check_interval,
+            confirm_checks=self.interlock_confirm_checks,
+        )
+        existing_latch = self.alarm_log.read_latch()
+        if existing_latch:
+            # A trip is already latched by another instance (or a previous run
+            # that exited without acknowledgement). Adopt it rather than showing
+            # a clean slate the operator would wrongly read as "nothing wrong".
+            logger.warning(
+                "Adopting unacknowledged interlock trip from "
+                f"{existing_latch.get('host')}:{existing_latch.get('pid')} "
+                f"at {existing_latch.get('ts')}"
+            )
+            self.alarm_log.log(
+                "latch_adopted",
+                "Started with an unacknowledged trip already latched",
+                trip_id=existing_latch.get("trip_id"),
+                original_trip_ts=existing_latch.get("ts"),
+            )
+
         # "tripped" latches True when a protective cutoff actually fires and is
-        # only cleared by the operator via acknowledge_soft_interlock().
+        # only cleared by the operator via acknowledge_soft_interlock(). The
+        # shared latch file, not this flag, is the source of truth across
+        # instances; soft_interlock_check() reconciles the two every cycle.
         self.interlock_state = {"pending_count": 0, "tripped": False}
         self.soft_interlock_timer = QTimer()
         self.soft_interlock_timer.timeout.connect(self.soft_interlock_check)
@@ -104,6 +165,16 @@ class MainApp(QtWidgets.QMainWindow):
             if hasattr(self, "soft_interlock_timer"):
                 self.soft_interlock_timer.stop()
                 logger.debug("Stopped soft interlock timer")
+
+            # Journal the shutdown so a gap in the file reads as a clean exit
+            # rather than a crash. Note the latch deliberately SURVIVES exit:
+            # an unacknowledged trip must not be erased by restarting the app.
+            if hasattr(self, "alarm_log"):
+                self.alarm_log.log(
+                    "shutdown",
+                    "cold.py soft interlock stopped",
+                    latch_still_set=self.alarm_log.read_latch() is not None,
+                )
 
             # Cleanup Thermal Camera tab if it exists
             if hasattr(self, "thermal_camera_tab"):
@@ -777,12 +848,20 @@ class MainApp(QtWidgets.QMainWindow):
         # channels the interlock is allowed to switch off.
         used_caen_channels = self.modules_list_tab.get_all_channels()
         logger.info(f"Cable-I1 channel scope for safety checks: {used_caen_channels}")
-        alarm_publish = (
-            (lambda msg: self.system._martacoldroom._client.publish("/alarm", msg))
-            if self.system._martacoldroom
-            else None
-        )
-        logger.info(f"Alarm publish function: {alarm_publish}")
+        # Journal every alarm at the point it is published, so the file records
+        # warnings and the scope-empty case too, not only confirmed trips. Each
+        # record carries host+pid, which is what distinguishes duplicate Slack
+        # alarms coming from two instances.
+        def alarm_publish(msg):
+            self.alarm_log.log(
+                "alarm_published",
+                msg,
+                conditions=self.interlock_state.get("last_conditions"),
+            )
+            if self.system._martacoldroom:
+                self.system._martacoldroom._client.publish("/alarm", msg)
+            else:
+                logger.warning(f"MQTT unavailable, alarm not published: {msg}")
         is_safe, msg = soft_interlock_loop(
             self.system.status,
             self.caen_tab.last_response,
@@ -791,14 +870,44 @@ class MainApp(QtWidgets.QMainWindow):
             publish_alarm=alarm_publish,
             interlock_state=self.interlock_state,
             confirm_checks=self.interlock_confirm_checks,
+            require_valve_open=self.interlock_require_valve_open,
+            enforce_it_valve=self.interlock_enforce_it_valve,
+            valve_max_age_seconds=self.interlock_valve_max_age,
         )
         logger.info(f"Soft interlock result: is_safe={is_safe}, msg={msg}")
+
+        conditions = self.interlock_state.get("last_conditions")
+        self.alarm_log.log_cycle(conditions)
 
         # A trip LATCHES: once a protective cutoff has fired, the LED stays in
         # the "TRIPPED" state (and cannot go green) until the operator presses
         # the Acknowledge button, even after conditions return to safe. This
         # ensures a trip is never silently cleared without the operator noticing.
-        tripped_latched = self.interlock_state.get("tripped", False)
+        #
+        # The latch is SHARED between instances via a file. If this process just
+        # tripped, publish it; then read the file back and let it drive the UI,
+        # so an instance that never tripped still shows another's trip, and an
+        # acknowledgement made anywhere clears it here too.
+        if self.interlock_state.get("tripped") and not self.interlock_state.get(
+            "trip_published"
+        ):
+            self.alarm_log.record_trip(
+                self.interlock_state.get("trip_message", msg),
+                conditions=conditions,
+                reason=self.interlock_state.get("trip_reason", ""),
+            )
+            self.interlock_state["trip_published"] = True
+
+        latch = self.alarm_log.read_latch()
+        tripped_latched = latch is not None
+        self.interlock_state["tripped"] = tripped_latched
+        if tripped_latched:
+            # Show the ORIGINAL trip (whichever instance raised it), not this
+            # process's local copy, so both windows describe the same event.
+            self.interlock_state["trip_time"] = latch.get("ts")
+            self.interlock_state["trip_message"] = latch.get("message", msg)
+        else:
+            self.interlock_state["trip_published"] = False
 
         soft_interlock_led = self.marta_coldroom_tab.findChild(
             QtWidgets.QFrame, "soft_interlock_LED"
@@ -849,9 +958,19 @@ class MainApp(QtWidgets.QMainWindow):
             if tripped_latched:
                 trip_time = self.interlock_state.get("trip_time", "")
                 trip_message = self.interlock_state.get("trip_message", msg)
+                origin = ""
+                if latch:
+                    raised_by = f"{latch.get('host', '?')}:{latch.get('pid', '?')}"
+                    if latch.get("pid") != self.alarm_log.pid:
+                        # Raised by a DIFFERENT process — say so explicitly, so a
+                        # second running instance is obvious rather than confusing.
+                        origin = f"\nRaised by another instance ({raised_by})."
+                    repeats = int(latch.get("repeat_count", 1) or 1)
+                    if repeats > 1:
+                        origin += f" Re-tripped {repeats}x (last {latch.get('last_trip_ts', '')})."
                 soft_interlock_msg_label.setText(
                     f"INTERLOCK TRIPPED at {trip_time} — press Acknowledge to clear.\n"
-                    f"{trip_message}"
+                    f"{trip_message}{origin}"
                 )
             else:
                 soft_interlock_msg_label.setText(f"{verdict}\n{msg}")
@@ -867,12 +986,20 @@ class MainApp(QtWidgets.QMainWindow):
         remains a deliberate, separate operator action.
         """
         was_tripped = self.interlock_state.get("tripped", False)
+        # Clear the SHARED latch first: the acknowledgement must reach every
+        # running instance, not just this one. Before this, an ack in one
+        # process left the other still showing TRIPPED -- and an instance that
+        # never saw the trip showed it as already acknowledged.
+        cleared = self.alarm_log.clear_latch()
         self.interlock_state["tripped"] = False
+        self.interlock_state["trip_published"] = False
         self.interlock_state.pop("trip_message", None)
+        self.interlock_state.pop("trip_reason", None)
         trip_time = self.interlock_state.pop("trip_time", None)
         logger.warning(
             f"Soft interlock trip acknowledged by operator "
-            f"(original trip at {trip_time})"
+            f"(original trip at {trip_time}, raised by "
+            f"{(cleared or {}).get('host', '?')}:{(cleared or {}).get('pid', '?')})"
         )
 
         ack_button = self.marta_coldroom_tab.findChild(

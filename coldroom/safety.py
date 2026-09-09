@@ -404,96 +404,204 @@ def is_co2_flowing(system_status):
     return flowing
 
 
-def check_marta_on_for_OT(system_status):
-    """
-    Check if MARTA CO2 supply is active for OT (Outer Tracker).
+# MARTA FSM states in which CO2 is actually circulating.
+#
+# Per the operations decision in OT_IT_VALVE_QUESTIONS.md (Q3), only
+# CO2_RUNNING counts as cooling: CONNECTED means MARTA is idle, CHILLER_RUNNING
+# has the chiller on but no CO2 flowing to the modules, and ALARM is not a
+# healthy state. Previously every state except DISCONNECTED/NONE/"" was accepted,
+# so an idle or alarming MARTA passed as "cooling on".
+COOLING_FSM_STATES = ("CO2_RUNNING",)
 
-    Primary signals (ALL required):
-      - MARTA FSM state is not disconnected/idle.
-      - MARTA CO2 flow status == 2 (see is_co2_flowing).
-    Secondary signal: outer_valve from serviceroom data (checked only when
-    serviceroom data is subscribed).
-    Returns True only when CO2 is confirmed to be flowing to OT modules.
+# Valve field names on the /serviceroom/status payload.
+#
+# The live payload is {"pixel": "open", "outer": "open"} — verified against the
+# broker. Note this differs from what Grafana/Influx shows: Telegraf renames the
+# fields to outer_valve / pixel_valve on ingest, so the dashboard field names are
+# NOT the MQTT field names. Both spellings are accepted here, plus "inner_valve"
+# as a legacy alias, so the check works whichever publisher is in front of it.
+#
+# IT == pixel (Inner Tracker == pixel detector).
+VALVE_FIELDS = {
+    "OT": ("outer", "outer_valve"),
+    "IT": ("pixel", "pixel_valve", "inner_valve"),
+}
+
+# Accepted spellings for an open / closed valve. The live publisher sends the
+# strings "open"/"closed"; numeric 1/0 is accepted too because that is what the
+# Influx-side representation uses. Anything else is UNKNOWN rather than guessed.
+_VALVE_OPEN_VALUES = {"open", "opened", "1", "true", "on"}
+_VALVE_CLOSED_VALUES = {"closed", "close", "shut", "0", "false", "off"}
+
+
+def parse_valve_value(raw):
+    """Map one raw valve reading to True (open) / False (closed) / None (unknown)."""
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return None
+    text = str(raw).strip().lower()
+    if text in _VALVE_OPEN_VALUES:
+        return True
+    if text in _VALVE_CLOSED_VALUES:
+        return False
+    # Tolerate 1.0 / 0.0 coming through as floats.
+    try:
+        number = float(text)
+    except ValueError:
+        return None
+    if number == 1:
+        return True
+    if number == 0:
+        return False
+    return None
+
+
+def get_valve_state(system_status, circuit, max_age_seconds=None):
+    """Tri-state read of a serviceroom valve.
+
+    Returns ``(state, reason)`` where state is:
+      ``True``  — valve reported open,
+      ``False`` — valve reported closed,
+      ``None``  — UNKNOWN (no serviceroom data, field absent, unparseable, or
+                  the reading is older than ``max_age_seconds``).
+
+    The distinction between False and None is the whole point: "closed" is a
+    real measurement that must stop cooling being called healthy, while
+    "unknown" must NOT be silently treated as either. The previous code used
+    ``.get("outer_valve", 0)``, which quietly turned a missing field into
+    "closed" — that would have tripped the interlock continuously the moment a
+    serviceroom key appeared in the status dict without valve fields in it.
+
+    Args:
+        system_status: full system status dict.
+        circuit: "OT" or "IT".
+        max_age_seconds: if set, a serviceroom reading older than this is
+            treated as UNKNOWN rather than trusted. None/0 disables the check.
+    """
+    try:
+        serviceroom = system_status.get("serviceroom")
+        if not serviceroom:
+            return None, "no serviceroom data"
+
+        if max_age_seconds:
+            received = serviceroom.get("_received_epoch")
+            try:
+                age = datetime.datetime.now().timestamp() - float(received)
+            except (TypeError, ValueError):
+                return None, "serviceroom data has no timestamp"
+            if age > max_age_seconds:
+                return None, f"serviceroom data stale ({age:.0f}s > {max_age_seconds}s)"
+
+        fields = VALVE_FIELDS.get(circuit, ())
+        for field in fields:
+            if field not in serviceroom:
+                continue
+            raw = serviceroom[field]
+            state = parse_valve_value(raw)
+            if state is True:
+                return True, f"{field}={raw!r} (open)"
+            if state is False:
+                return False, f"{field}={raw!r} (closed)"
+            # Not a state we know how to read; say so rather than guessing in
+            # either direction.
+            return None, f"{field}={raw!r} is not a known open/closed value"
+
+        return None, f"none of {list(fields)} present in serviceroom data"
+
+    except Exception as e:
+        logger.debug(f"Error in get_valve_state({circuit}): {str(e)}")
+        return None, f"error reading valve: {e}"
+
+
+def _check_marta_on_for(
+    system_status, circuit, require_valve_open=False, valve_max_age_seconds=None
+):
+    """Shared implementation of the OT and IT cooling checks.
+
+    Cooling counts as ON for a circuit when ALL of:
+      1. MARTA FSM state is in COOLING_FSM_STATES (i.e. CO2_RUNNING);
+      2. MARTA CO2 flow status == 2 (see is_co2_flowing);
+      3. that circuit's valve is open.
+
+    Step 3 is tri-state. A valve reported CLOSED always means cooling is off. A
+    valve whose state is UNKNOWN follows the configured policy: by default
+    (``require_valve_open=False``) the FSM + CO2 signals are trusted and the gap
+    is reported in the returned reason, which is the behaviour recorded in
+    OT_IT_VALVE_QUESTIONS.md (Q2). Setting ``require_valve_open=True`` makes an
+    unknown valve fail safe instead — only sensible once valve data is known to
+    be flowing reliably.
+
+    Returns ``(is_on, reason)``.
     """
     try:
         if "marta" not in system_status:
-            logger.debug("MARTA data not available, treating OT CO2 as OFF")
-            return False
+            return False, "MARTA data not available"
 
         fsm_state = system_status["marta"].get("fsm_state", "")
-        logger.info(f"Checking MARTA OT status: fsm_state={fsm_state!r}")
+        if fsm_state not in COOLING_FSM_STATES:
+            return False, (
+                f"MARTA FSM state {fsm_state!r} is not "
+                f"{'/'.join(COOLING_FSM_STATES)}"
+            )
 
-        if fsm_state in ("DISCONNECTED", "NONE", ""):
-            logger.info("MARTA is disconnected/idle, OT CO2 is OFF")
-            return False
-
-        # CO2 flow status is a primary check: CO2 counts as flowing only when
-        # the MARTA status field == 2. This always runs, independent of the
-        # (rarely available) serviceroom valve data.
         if not is_co2_flowing(system_status):
-            logger.info("MARTA CO2 flow status is not 2, OT CO2 is OFF")
-            return False
+            co2 = system_status.get("marta", {}).get("status")
+            return False, f"MARTA CO2 flow status is {co2!r}, not 2"
 
-        # If serviceroom valve data is available, use it for a precise check.
-        # Without it, rely on FSM state + CO2 flow status above.
-        if "serviceroom" in system_status:
-            OT_valve = system_status["serviceroom"].get("outer_valve", 0)
-            logger.info(f"MARTA OT valve status: outer_valve={OT_valve}")
-            if OT_valve != 1:
-                logger.info("OT valve is closed, OT CO2 is OFF")
-                return False
-        else:
-            logger.debug("Serviceroom data unavailable, relying on MARTA FSM + CO2 flow status for OT check")
+        valve_open, valve_reason = get_valve_state(
+            system_status, circuit, max_age_seconds=valve_max_age_seconds
+        )
 
-        return True
+        if valve_open is False:
+            return False, f"{circuit} valve is closed ({valve_reason})"
+
+        if valve_open is None:
+            if require_valve_open:
+                return False, (
+                    f"{circuit} valve state UNKNOWN ({valve_reason}) and "
+                    "require_valve_open is set"
+                )
+            # Reported, not silent: this is the known blind spot.
+            return True, (
+                f"MARTA CO2 running, but {circuit} valve state is UNKNOWN "
+                f"({valve_reason}) — trusting FSM + CO2 status"
+            )
+
+        return True, f"MARTA CO2 running and {circuit} valve is open ({valve_reason})"
 
     except Exception as e:
-        logger.debug(f"Error in check_marta_on_for_OT: {str(e)}")
-        return False
+        logger.debug(f"Error in check_marta_on_for_{circuit}: {str(e)}")
+        return False, f"error checking {circuit} cooling: {e}"
 
 
-def check_marta_on_for_IT(system_status):
+def check_marta_on_for_OT(
+    system_status, require_valve_open=False, valve_max_age_seconds=None
+):
+    """Is MARTA CO2 actually flowing to the OUTER tracker modules?
+
+    Returns ``(is_on, reason)`` — note this is a TUPLE, not a bare bool; a bare
+    ``if check_marta_on_for_OT(...)`` is always true. See _check_marta_on_for.
     """
-    Check if MARTA CO2 supply is active for IT (Inner Tracker).
+    is_on, reason = _check_marta_on_for(
+        system_status, "OT", require_valve_open, valve_max_age_seconds
+    )
+    logger.info(f"MARTA OT cooling: {'ON' if is_on else 'OFF'} — {reason}")
+    return is_on, reason
 
-    Primary signal: MARTA FSM state is not disconnected/idle.
-    Secondary signal: inner_valve from serviceroom data (used when available).
-    Returns True only when CO2 is confirmed to be flowing to IT modules.
+
+def check_marta_on_for_IT(
+    system_status, require_valve_open=False, valve_max_age_seconds=None
+):
+    """Is MARTA CO2 actually flowing to the INNER tracker (pixel) modules?
+
+    Returns ``(is_on, reason)`` — a TUPLE, see check_marta_on_for_OT.
     """
-    try:
-        if "marta" not in system_status:
-            logger.debug("MARTA data not available, treating IT CO2 as OFF")
-            return False
-
-        fsm_state = system_status["marta"].get("fsm_state", "")
-        logger.info(f"Checking MARTA IT status: fsm_state={fsm_state!r}")
-
-        if fsm_state in ("DISCONNECTED", "NONE", ""):
-            logger.info("MARTA is disconnected/idle, IT CO2 is OFF")
-            return False
-
-        # CO2 flow status is a primary check: CO2 counts as flowing only when
-        # the MARTA status field == 2. This always runs, independent of the
-        # (rarely available) serviceroom valve data.
-        if not is_co2_flowing(system_status):
-            logger.info("MARTA CO2 flow status is not 2, IT CO2 is OFF")
-            return False
-
-        # If serviceroom valve data is available, use it for a precise check.
-        if "serviceroom" in system_status:
-            IT_valve = system_status["serviceroom"].get("inner_valve", 0)
-            logger.info(f"MARTA IT valve status: inner_valve={IT_valve}")
-            if IT_valve != 1:
-                logger.info("IT valve is closed, IT CO2 is OFF")
-                return False
-        else:
-            logger.debug("Serviceroom data unavailable, relying on MARTA FSM + CO2 flow status for IT check")
-
-        return True
-
-    except Exception as e:
-        logger.debug(f"Error in check_marta_on_for_IT: {str(e)}")
-        return False
+    is_on, reason = _check_marta_on_for(
+        system_status, "IT", require_valve_open, valve_max_age_seconds
+    )
+    logger.info(f"MARTA IT cooling: {'ON' if is_on else 'OFF'} — {reason}")
+    return is_on, reason
 
 
 def switch_all_hv_off(caen, used_channels):
@@ -534,6 +642,66 @@ def switch_all_lv_off(caen, used_channels):
         return False
 
 
+def build_condition_snapshot(
+    system_status,
+    used_channels,
+    lv_on,
+    hv_on,
+    marta_ot,
+    marta_it,
+    cooling_unsafe,
+    cooling_reason,
+    scope_empty,
+    pending_count=0,
+    confirm_checks=0,
+    marta_ot_reason="",
+    marta_it_reason="",
+    ot_valve=None,
+    it_valve=None,
+):
+    """Flat, JSON-serialisable record of everything the trip decision used.
+
+    Written into ``interlock_state["last_conditions"]`` every cycle so the alarm
+    journal can answer, after the fact, exactly what the interlock was looking at
+    when it warned or cut power — in particular the MARTA ``fsm_state`` and the
+    age of the message it came from, which is not recoverable from the alarm text.
+    """
+    marta = system_status.get("marta", {}) or {}
+    # Age of the MARTA message these values came from. A large age means the
+    # fsm_state below is a latched leftover, not something MARTA just said.
+    received_epoch = marta.get("_received_epoch")
+    try:
+        age_s = round(datetime.datetime.now().timestamp() - float(received_epoch), 1)
+    except (TypeError, ValueError):
+        age_s = None
+    return {
+        "fsm_state": marta.get("fsm_state"),
+        "co2_status": marta.get("status"),
+        # Stamped by MartaColdRoomMQTTClient on each received status message.
+        # A snapshot whose fsm_state is old is a latched value, not a live one.
+        "marta_msg_ts": marta.get("_received_at"),
+        "marta_msg_age_s": age_s,
+        "marta_ot": bool(marta_ot),
+        "marta_it": bool(marta_it),
+        "marta_ot_reason": marta_ot_reason,
+        "marta_it_reason": marta_it_reason,
+        # Tri-state: True open, False closed, None UNKNOWN. None is the normal
+        # value until the serviceroom publisher is reachable.
+        "ot_valve": ot_valve,
+        "it_valve": it_valve,
+        "lv_on": bool(lv_on),
+        "hv_on": bool(hv_on),
+        "power_on": bool(lv_on or hv_on),
+        "cooling_unsafe": bool(cooling_unsafe),
+        "cooling_reason": cooling_reason,
+        "scope_empty": bool(scope_empty),
+        "scope_lv": list((used_channels or {}).get("LV", [])),
+        "scope_hv": list((used_channels or {}).get("HV", [])),
+        "pending_count": pending_count,
+        "confirm_checks": confirm_checks,
+    }
+
+
 def soft_interlock_loop(
     system_status,
     caen_ch_status,
@@ -542,6 +710,9 @@ def soft_interlock_loop(
     publish_alarm=None,
     interlock_state=None,
     confirm_checks=2,
+    require_valve_open=False,
+    enforce_it_valve=False,
+    valve_max_age_seconds=None,
 ):
     """
     Soft interlock loop - monitors safety conditions and takes protective action.
@@ -617,8 +788,23 @@ def soft_interlock_loop(
         lv_safe_to_on, lv_safe_msg = Is_it_safe_to_on_lv(
             system_status, caen_ch_status, used_channels
         )
-        marta_ot = check_marta_on_for_OT(system_status)
-        marta_it = check_marta_on_for_IT(system_status)
+        # Both return (bool, reason) — unpack, never test the tuple directly.
+        marta_ot, marta_ot_reason = check_marta_on_for_OT(
+            system_status,
+            require_valve_open=require_valve_open,
+            valve_max_age_seconds=valve_max_age_seconds,
+        )
+        marta_it, marta_it_reason = check_marta_on_for_IT(
+            system_status,
+            require_valve_open=require_valve_open,
+            valve_max_age_seconds=valve_max_age_seconds,
+        )
+        ot_valve, _ = get_valve_state(
+            system_status, "OT", max_age_seconds=valve_max_age_seconds
+        )
+        it_valve, _ = get_valve_state(
+            system_status, "IT", max_age_seconds=valve_max_age_seconds
+        )
 
         lv_status = "ON" if lv_on else "OFF"
         marta_ot_status = "RUNNING" if marta_ot else "NOT RUNNING"
@@ -626,7 +812,8 @@ def soft_interlock_loop(
 
         log_msg = (
             f"\nSoft interlock: LV={lv_status}, "
-            f"MARTA_OT={marta_ot_status}, MARTA_IT={marta_it_status}\n"
+            f"MARTA_OT={marta_ot_status} ({marta_ot_reason}), "
+            f"MARTA_IT={marta_it_status} ({marta_it_reason})\n"
         )
         logger.info(log_msg)
 
@@ -647,10 +834,42 @@ def soft_interlock_loop(
             cooling_reason = "MARTA is not in a safe state"
         else:
             log_msg += "\nLV safe to turn on: YES\n"
-            # Condition 2: MARTA connected but CO2 not flowing to OT
+            # Condition 2: MARTA connected but CO2 not flowing to OT.
             if not marta_ot:
                 cooling_unsafe = True
-                cooling_reason = "MARTA OT CO2 is not flowing"
+                cooling_reason = f"MARTA OT CO2 is not flowing ({marta_ot_reason})"
+            # Condition 3: same for IT, but OFF BY DEFAULT. Per the operations
+            # decision in OT_IT_VALVE_QUESTIONS.md (Q5), only OT gates the trip
+            # for now; a closed IT valve must not cut power unless explicitly
+            # enabled. The channel scope is still cable-I1 (OT) only, so enabling
+            # this without an IT scope would cut OT channels for an IT fault —
+            # hence the separate, deliberate flag.
+            elif enforce_it_valve and not marta_it:
+                cooling_unsafe = True
+                cooling_reason = f"MARTA IT CO2 is not flowing ({marta_it_reason})"
+
+        # Snapshot the full decision input every cycle (including safe ones) so
+        # the alarm journal can show the transition INTO an unsafe state, not
+        # just the alarm that followed it.
+        conditions = build_condition_snapshot(
+            system_status,
+            used_channels,
+            lv_on,
+            hv_on,
+            marta_ot,
+            marta_it,
+            cooling_unsafe,
+            cooling_reason,
+            scope_empty,
+            pending_count=(interlock_state or {}).get("pending_count", 0),
+            confirm_checks=confirm_checks,
+            marta_ot_reason=marta_ot_reason,
+            marta_it_reason=marta_it_reason,
+            ot_valve=ot_valve,
+            it_valve=it_valve,
+        )
+        if interlock_state is not None:
+            interlock_state["last_conditions"] = conditions
 
         # --- Empty scope: we cannot identify cable I1's channels ---
         # Per operational policy we must NEVER cut a channel we can't attribute
@@ -698,6 +917,9 @@ def soft_interlock_loop(
                         f"{interlock_state.get('pending_count')})"
                     )
                 interlock_state["pending_count"] = 0
+            # Reflect the reset in the journalled snapshot too, so a safe cycle
+            # is not recorded carrying the previous cycle's pending count.
+            conditions["pending_count"] = 0
             log_msg += "\nAll safety conditions met.\n"
             logger.info(log_msg)
             return True, log_msg
@@ -712,6 +934,10 @@ def soft_interlock_loop(
         else:
             pending_count = interlock_state.get("pending_count", 0) + 1
             interlock_state["pending_count"] = pending_count
+
+        conditions["pending_count"] = pending_count
+        if interlock_state is not None:
+            interlock_state["last_conditions"] = conditions
 
         if pending_count < confirm_checks:
             warn_msg = (
@@ -736,6 +962,7 @@ def soft_interlock_loop(
         # cut). The flag is only ever cleared by the operator's acknowledgement.
         if interlock_state is not None:
             interlock_state["tripped"] = True
+            interlock_state["trip_reason"] = trip_reason
             interlock_state["trip_message"] = alarm_msg
             interlock_state["trip_time"] = datetime.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"

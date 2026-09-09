@@ -23,6 +23,7 @@ python -m pytest tests/test_safety.py
 
 import datetime
 import logging
+import inspect
 import unittest
 from unittest.mock import MagicMock, call
 
@@ -34,6 +35,8 @@ from coldroom.safety import (
     check_door_safe_to_open,
     check_marta_on_for_IT,
     check_marta_on_for_OT,
+    get_valve_state,
+    parse_valve_value,
     soft_interlock_loop,
     switch_all_hv_off,
     switch_all_lv_off,
@@ -51,7 +54,7 @@ def _safe_status():
     safe — FSM RUNNING alone is not sufficient.
     """
     return {
-        "marta": {"fsm_state": "RUNNING", "status": 2},
+        "marta": {"fsm_state": "CO2_RUNNING", "status": 2},
         "coldroom": {},
     }
 
@@ -175,7 +178,7 @@ class TestSoftInterlock(unittest.TestCase):
         """MARTA connected but serviceroom reports OT valve closed → cut power."""
         caen = _make_caen()
         status = {
-            "marta": {"fsm_state": "RUNNING"},
+            "marta": {"fsm_state": "CO2_RUNNING", "status": 2},
             "coldroom": {},
             "serviceroom": {"outer_valve": 0},
         }
@@ -191,7 +194,7 @@ class TestSoftInterlock(unittest.TestCase):
         """Valve confirmed open → no protective action."""
         caen = _make_caen()
         status = {
-            "marta": {"fsm_state": "RUNNING", "status": 2},
+            "marta": {"fsm_state": "CO2_RUNNING", "status": 2},
             "coldroom": {},
             "serviceroom": {"outer_valve": 1},
         }
@@ -203,7 +206,7 @@ class TestSoftInterlock(unittest.TestCase):
         caen.off.assert_not_called()
 
     def test_marta_running_no_serviceroom_falls_back_to_fsm(self):
-        """Without serviceroom data, RUNNING FSM state is trusted for OT."""
+        """Without serviceroom data, CO2_RUNNING + CO2 flowing is trusted for OT."""
         caen = _make_caen()
         status = _safe_status()  # no 'serviceroom' key
         ch_status = {"caen_LV0.1_IsOn": True, "caen_HV0.1_IsOn": False}
@@ -217,7 +220,7 @@ class TestSoftInterlock(unittest.TestCase):
         """OT CO2 not flowing, but all channels already off — nothing to cut."""
         caen = _make_caen()
         status = {
-            "marta": {"fsm_state": "RUNNING"},
+            "marta": {"fsm_state": "CO2_RUNNING", "status": 2},
             "coldroom": {},
             "serviceroom": {"outer_valve": 0},
         }
@@ -454,94 +457,292 @@ class TestDoorSafety(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestMartaCO2Flow(unittest.TestCase):
-    """OT and IT valve checks: FSM state is primary; valve data refines when available."""
+    """OT and IT cooling checks.
 
-    # ---- OT -----------------------------------------------------------------
+    Both return a ``(bool, reason)`` TUPLE — never assert on the raw return
+    value, a non-empty tuple is always truthy.
 
-    def test_ot_no_marta_data_returns_false(self):
-        self.assertFalse(check_marta_on_for_OT({}))
+    These cases deliberately use the FSM states MARTA really publishes
+    (CONNECTED / CHILLER_RUNNING / CO2_RUNNING / ALARM / DISCONNECTED) and the
+    valve field names the serviceroom really publishes (outer_valve /
+    pixel_valve), so a branch that cannot run in production cannot pass here.
+    """
 
-    def test_ot_fsm_disconnected_returns_false(self):
-        self.assertFalse(check_marta_on_for_OT({"marta": {"fsm_state": "DISCONNECTED"}}))
+    # ---- shape --------------------------------------------------------------
 
-    def test_ot_fsm_none_returns_false(self):
-        self.assertFalse(check_marta_on_for_OT({"marta": {"fsm_state": "NONE"}}))
+    def test_both_return_a_bool_reason_tuple(self):
+        """Guards the truthy-tuple trap: callers must unpack, not test directly."""
+        for fn in (check_marta_on_for_OT, check_marta_on_for_IT):
+            result = fn(_safe_status())
+            self.assertIsInstance(result, tuple)
+            self.assertEqual(len(result), 2)
+            self.assertIsInstance(result[0], bool)
+            self.assertIsInstance(result[1], str)
+            self.assertTrue(result[1], "reason must never be empty")
 
-    def test_ot_fsm_empty_returns_false(self):
-        self.assertFalse(check_marta_on_for_OT({"marta": {"fsm_state": ""}}))
+    # ---- FSM gating (Q3: only CO2_RUNNING counts) ---------------------------
 
-    def test_ot_running_co2_flowing_no_serviceroom_returns_true(self):
-        """RUNNING + CO2 flowing (status 2), no valve data → CO2 on for OT."""
-        self.assertTrue(
-            check_marta_on_for_OT({"marta": {"fsm_state": "RUNNING", "status": 2}})
-        )
+    def test_no_marta_data(self):
+        self.assertFalse(check_marta_on_for_OT({})[0])
+        self.assertFalse(check_marta_on_for_IT({})[0])
 
-    def test_ot_running_but_co2_not_flowing_returns_false(self):
-        """RUNNING but CO2 flow status != 2 → CO2 is NOT flowing to OT."""
-        self.assertFalse(
-            check_marta_on_for_OT({"marta": {"fsm_state": "RUNNING", "status": 1}})
-        )
+    def test_only_co2_running_counts_as_cooling(self):
+        """CONNECTED (idle), CHILLER_RUNNING and ALARM are NOT cooling."""
+        for state in ("DISCONNECTED", "NONE", "", "CONNECTED", "CHILLER_RUNNING", "ALARM"):
+            status = {"marta": {"fsm_state": state, "status": 2}}
+            with self.subTest(fsm_state=state):
+                on, reason = check_marta_on_for_OT(status)
+                self.assertFalse(on)
+                self.assertIn("not CO2_RUNNING", reason)
+                self.assertFalse(check_marta_on_for_IT(status)[0])
 
-    def test_ot_running_co2_status_missing_returns_false(self):
-        """No CO2 flow status field → conservatively treated as not flowing."""
-        self.assertFalse(check_marta_on_for_OT({"marta": {"fsm_state": "RUNNING"}}))
+    def test_co2_running_with_flow_is_cooling(self):
+        status = {"marta": {"fsm_state": "CO2_RUNNING", "status": 2}}
+        self.assertTrue(check_marta_on_for_OT(status)[0])
+        self.assertTrue(check_marta_on_for_IT(status)[0])
 
-    def test_ot_running_outer_valve_open_returns_true(self):
-        status = {
-            "marta": {"fsm_state": "RUNNING", "status": 2},
-            "serviceroom": {"outer_valve": 1},
-        }
-        self.assertTrue(check_marta_on_for_OT(status))
+    # ---- CO2 flow status (Q4: only status == 2 counts) ----------------------
 
-    def test_ot_running_outer_valve_closed_returns_false(self):
-        """Valve data overrides FSM state — closed valve means no CO2 to OT."""
-        status = {
-            "marta": {"fsm_state": "RUNNING", "status": 2},
-            "serviceroom": {"outer_valve": 0},
-        }
-        self.assertFalse(check_marta_on_for_OT(status))
+    def test_co2_status_not_two_is_not_flowing(self):
+        for value in (0, 1, 3, "x", None):
+            status = {"marta": {"fsm_state": "CO2_RUNNING", "status": value}}
+            with self.subTest(status=value):
+                on, reason = check_marta_on_for_OT(status)
+                self.assertFalse(on)
+                self.assertIn("not 2", reason)
 
-    # ---- IT -----------------------------------------------------------------
+    def test_co2_status_missing_is_not_flowing(self):
+        on, reason = check_marta_on_for_OT({"marta": {"fsm_state": "CO2_RUNNING"}})
+        self.assertFalse(on)
+        self.assertIn("not 2", reason)
 
-    def test_it_no_marta_data_returns_false(self):
-        self.assertFalse(check_marta_on_for_IT({}))
+    # ---- valve handling -----------------------------------------------------
 
-    def test_it_fsm_disconnected_returns_false(self):
-        self.assertFalse(check_marta_on_for_IT({"marta": {"fsm_state": "DISCONNECTED"}}))
+    def test_outer_valve_closed_stops_ot(self):
+        status = dict(_safe_status(), serviceroom={"outer_valve": 0})
+        on, reason = check_marta_on_for_OT(status)
+        self.assertFalse(on)
+        self.assertIn("closed", reason)
 
-    def test_it_running_co2_flowing_no_serviceroom_returns_true(self):
-        self.assertTrue(
-            check_marta_on_for_IT({"marta": {"fsm_state": "RUNNING", "status": 2}})
-        )
+    def test_outer_valve_open_allows_ot(self):
+        status = dict(_safe_status(), serviceroom={"outer_valve": 1})
+        on, reason = check_marta_on_for_OT(status)
+        self.assertTrue(on)
+        self.assertIn("open", reason)
 
-    def test_it_running_but_co2_not_flowing_returns_false(self):
-        """RUNNING but CO2 flow status != 2 → CO2 is NOT flowing to IT."""
-        self.assertFalse(
-            check_marta_on_for_IT({"marta": {"fsm_state": "RUNNING", "status": 0}})
-        )
+    def test_it_uses_pixel_valve(self):
+        """The IT valve is published as pixel_valve, not inner_valve."""
+        closed = dict(_safe_status(), serviceroom={"pixel_valve": 0})
+        self.assertFalse(check_marta_on_for_IT(closed)[0])
 
-    def test_it_running_inner_valve_open_returns_true(self):
-        status = {
-            "marta": {"fsm_state": "RUNNING", "status": 2},
-            "serviceroom": {"inner_valve": 1},
-        }
-        self.assertTrue(check_marta_on_for_IT(status))
+        open_ = dict(_safe_status(), serviceroom={"pixel_valve": 1})
+        self.assertTrue(check_marta_on_for_IT(open_)[0])
 
-    def test_it_running_inner_valve_closed_returns_false(self):
-        status = {
-            "marta": {"fsm_state": "RUNNING", "status": 2},
-            "serviceroom": {"inner_valve": 0},
-        }
-        self.assertFalse(check_marta_on_for_IT(status))
+    def test_live_payload_format_open_closed_strings(self):
+        """The real /serviceroom/status payload: {"pixel":"open","outer":"open"}.
+
+        Field names and value types both differ from what Grafana/Influx shows
+        (Telegraf renames them to outer_valve/pixel_valve on ingest), so this
+        pins the format actually seen on the broker.
+        """
+        status = dict(_safe_status(), serviceroom={"pixel": "open", "outer": "open"})
+        self.assertTrue(get_valve_state(status, "OT")[0])
+        self.assertTrue(get_valve_state(status, "IT")[0])
+        self.assertTrue(check_marta_on_for_OT(status)[0])
+        self.assertTrue(check_marta_on_for_IT(status)[0])
+
+        status = dict(_safe_status(), serviceroom={"pixel": "open", "outer": "closed"})
+        self.assertFalse(check_marta_on_for_OT(status)[0])
+        self.assertTrue(check_marta_on_for_IT(status)[0])
+
+    def test_valve_value_spellings(self):
+        for raw, expected in [
+            ("open", True), ("OPEN", True), (" Open ", True), (1, True), ("1", True),
+            (True, True), (1.0, True),
+            ("closed", False), ("CLOSED", False), (0, False), ("0", False),
+            (False, False), (0.0, False),
+            ("", None), ("unknown", None), (None, None), (7, None), ("ajar", None),
+        ]:
+            with self.subTest(raw=raw):
+                self.assertIs(parse_valve_value(raw), expected)
+
+    def test_it_accepts_inner_valve_alias(self):
+        status = dict(_safe_status(), serviceroom={"inner_valve": 0})
+        self.assertFalse(check_marta_on_for_IT(status)[0])
 
     def test_ot_and_it_valves_are_independent(self):
-        """OT valve closed should not affect IT result and vice versa."""
+        """The whole point of having two functions: they must differ."""
+        status = dict(_safe_status(), serviceroom={"outer_valve": 0, "pixel_valve": 1})
+        self.assertFalse(check_marta_on_for_OT(status)[0])
+        self.assertTrue(check_marta_on_for_IT(status)[0])
+
+        status = dict(_safe_status(), serviceroom={"outer_valve": 1, "pixel_valve": 0})
+        self.assertTrue(check_marta_on_for_OT(status)[0])
+        self.assertFalse(check_marta_on_for_IT(status)[0])
+
+    def test_ot_valve_does_not_answer_for_it(self):
+        """An OT-only payload must leave IT UNKNOWN, not silently 'open'."""
+        status = dict(_safe_status(), serviceroom={"outer_valve": 1})
+        self.assertIsNone(get_valve_state(status, "IT")[0])
+
+    # ---- UNKNOWN valve policy (Q2) -----------------------------------------
+
+    def test_unknown_valve_is_permissive_by_default_but_reported(self):
+        """Production case today: no serviceroom data at all."""
+        on, reason = check_marta_on_for_OT(_safe_status())
+        self.assertTrue(on)
+        self.assertIn("UNKNOWN", reason)
+
+    def test_empty_serviceroom_is_unknown_not_closed(self):
+        """A serviceroom key with no valve fields must not read as 'closed'.
+
+        System._status now always contains a 'serviceroom' key, so a
+        `.get(field, 0)` style default would trip the interlock continuously.
+        """
+        status = dict(_safe_status(), serviceroom={})
+        self.assertIsNone(get_valve_state(status, "OT")[0])
+        self.assertTrue(check_marta_on_for_OT(status)[0])
+
+        status = dict(_safe_status(), serviceroom={"outer_str": 5})
+        self.assertIsNone(get_valve_state(status, "OT")[0])
+        self.assertTrue(check_marta_on_for_OT(status)[0])
+
+    def test_unknown_valve_fails_safe_when_required(self):
+        on, reason = check_marta_on_for_OT(_safe_status(), require_valve_open=True)
+        self.assertFalse(on)
+        self.assertIn("UNKNOWN", reason)
+
+    def test_closed_valve_overrides_the_permissive_policy(self):
+        """require_valve_open only affects UNKNOWN; closed is always closed."""
+        status = dict(_safe_status(), serviceroom={"outer_valve": 0})
+        self.assertFalse(check_marta_on_for_OT(status, require_valve_open=False)[0])
+
+    def test_unparseable_valve_is_unknown(self):
+        """"open" now parses; a value with no known meaning must still be UNKNOWN."""
+        status = dict(_safe_status(), serviceroom={"outer_valve": "moving"})
+        state, reason = get_valve_state(status, "OT")
+        self.assertIsNone(state)
+        self.assertIn("not a known", reason)
+
+    def test_out_of_range_valve_value_is_unknown(self):
+        status = dict(_safe_status(), serviceroom={"outer_valve": 7})
+        state, reason = get_valve_state(status, "OT")
+        self.assertIsNone(state)
+        self.assertIn("not a known", reason)
+
+    # ---- staleness ----------------------------------------------------------
+
+    def test_stale_valve_reading_is_unknown(self):
+        """A dead publisher must not latch its last valve position forever."""
+        old = datetime.datetime.now().timestamp() - 600
+        status = dict(
+            _safe_status(),
+            serviceroom={"outer_valve": 1, "_received_epoch": old},
+        )
+        state, reason = get_valve_state(status, "OT", max_age_seconds=120)
+        self.assertIsNone(state)
+        self.assertIn("stale", reason)
+        # ... and with no age limit the same reading is used normally.
+        self.assertTrue(get_valve_state(status, "OT", max_age_seconds=0)[0])
+
+    def test_fresh_valve_reading_is_used(self):
+        now = datetime.datetime.now().timestamp()
+        status = dict(
+            _safe_status(),
+            serviceroom={"outer_valve": 0, "_received_epoch": now},
+        )
+        self.assertFalse(get_valve_state(status, "OT", max_age_seconds=120)[0])
+
+    def test_valve_without_timestamp_is_unknown_when_age_enforced(self):
+        status = dict(_safe_status(), serviceroom={"outer_valve": 1})
+        self.assertIsNone(get_valve_state(status, "OT", max_age_seconds=120)[0])
+
+
+class TestProductionStatusShape(unittest.TestCase):
+    """Guards against the class of bug this whole change was about.
+
+    The old valve code was gated on ``if "serviceroom" in system_status``, which
+    was never true in production, so six tests passed against a branch that could
+    not run. These build the status dict the way System actually builds it.
+    """
+
+    @staticmethod
+    def _production_status(**overrides):
         status = {
-            "marta": {"fsm_state": "RUNNING", "status": 2},
-            "serviceroom": {"outer_valve": 0, "inner_valve": 1},
+            "marta": {},
+            "coldroom": {},
+            "thermal_camera": {},
+            "caen": {},
+            "cleanroom": {},
+            "coldroomair": {},
+            "serviceroom": {},
         }
-        self.assertFalse(check_marta_on_for_OT(status))
-        self.assertTrue(check_marta_on_for_IT(status))
+        status.update(overrides)
+        return status
+
+    def test_system_status_really_has_a_serviceroom_key(self):
+        from coldroom.system import System
+
+        src = inspect.getsource(System.__init__)
+        self.assertIn('"serviceroom"', src)
+
+    def test_ot_and_it_differ_on_the_production_shape(self):
+        status = self._production_status(
+            marta={"fsm_state": "CO2_RUNNING", "status": 2},
+            serviceroom={"outer_valve": 1, "pixel_valve": 0},
+        )
+        self.assertTrue(check_marta_on_for_OT(status)[0])
+        self.assertFalse(check_marta_on_for_IT(status)[0])
+
+    def test_empty_serviceroom_does_not_read_as_closed(self):
+        status = self._production_status(
+            marta={"fsm_state": "CO2_RUNNING", "status": 2}
+        )
+        self.assertTrue(check_marta_on_for_OT(status)[0])
+        self.assertIn("UNKNOWN", check_marta_on_for_OT(status)[1])
+
+
+class TestItEnforcementFlag(unittest.TestCase):
+    """Q5: a closed IT valve must NOT cut power unless explicitly enabled."""
+
+    @staticmethod
+    def _status():
+        return {
+            "marta": {"fsm_state": "CO2_RUNNING", "status": 2},
+            "coldroom": {},
+            "serviceroom": {"outer_valve": 1, "pixel_valve": 0},
+        }
+
+    def test_closed_it_valve_does_not_trip_by_default(self):
+        caen = _make_caen()
+        ch_status = {"caen_LV0.1_IsOn": True, "caen_HV0.1_IsOn": False}
+        is_safe, _ = soft_interlock_loop(self._status(), ch_status, USED, caen)
+        self.assertTrue(is_safe)
+        caen.off.assert_not_called()
+
+    def test_closed_it_valve_trips_when_enforced(self):
+        caen = _make_caen()
+        ch_status = {"caen_LV0.1_IsOn": True, "caen_HV0.1_IsOn": False}
+        state = {"pending_count": 0}
+        for _ in range(2):
+            is_safe, msg = soft_interlock_loop(
+                self._status(), ch_status, USED, caen,
+                interlock_state=state, confirm_checks=2, enforce_it_valve=True,
+            )
+        self.assertFalse(is_safe)
+        self.assertIn("IT CO2", msg)
+        caen.off.assert_called()
+
+    def test_open_it_valve_is_safe_even_when_enforced(self):
+        caen = _make_caen()
+        status = self._status()
+        status["serviceroom"]["pixel_valve"] = 1
+        ch_status = {"caen_LV0.1_IsOn": True, "caen_HV0.1_IsOn": False}
+        is_safe, _ = soft_interlock_loop(
+            status, ch_status, USED, caen, enforce_it_valve=True
+        )
+        self.assertTrue(is_safe)
+        caen.off.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
