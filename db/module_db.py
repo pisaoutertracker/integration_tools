@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 import requests
+from db.utils import DB_TIMEOUT
 import yaml
 import os
 import re
@@ -179,11 +180,11 @@ class ModuleDB(QWidget):
         try:
             url = self.get_api_url(endpoint)
             if method == "GET":
-                response = requests.get(url)
+                response = requests.get(url, timeout=DB_TIMEOUT)
             elif method == "POST":
-                response = requests.post(url, json=data)
+                response = requests.post(url, json=data, timeout=DB_TIMEOUT)
             elif method == "PUT":
-                response = requests.put(url, json=data)
+                response = requests.put(url, json=data, timeout=DB_TIMEOUT)
             else:
                 return False, f"Unsupported method: {method}"
 

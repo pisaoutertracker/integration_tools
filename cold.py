@@ -842,10 +842,23 @@ class MainApp(QtWidgets.QMainWindow):
             # Start MQTT thread
             self.system.start_mqtt_thread()
 
-            # Update status
-            status_msg = f"Connected to MQTT broker at {server}:{port}"
-            self.statusBar().showMessage(status_msg)
-            logger.info(status_msg)
+            # Report what actually happened. The client is built in
+            # System.__init__, which sets _martacoldroom to None if connect()
+            # raised (e.g. the broker timed out) -- and nothing retries it, so no
+            # topic is ever subscribed and every field stays "?". Reporting
+            # "Connected" unconditionally hid exactly that failure.
+            if self.system._martacoldroom is None:
+                status_msg = (
+                    f"NOT connected to MQTT broker at {server}:{port} — the client "
+                    "failed to start, so no live data will arrive. Check the broker "
+                    "address in settings_coldroom.yaml, then restart."
+                )
+                self.statusBar().showMessage(status_msg)
+                logger.error(status_msg)
+            else:
+                status_msg = f"Connected to MQTT broker at {server}:{port}"
+                self.statusBar().showMessage(status_msg)
+                logger.info(status_msg)
 
         except Exception as e:
             error_msg = f"Failed to connect to MQTT broker: {str(e)}"
@@ -1170,13 +1183,20 @@ class MainApp(QtWidgets.QMainWindow):
                     QtWidgets.QLabel, "cleanroom_last_update_value_label_2"
                 )
                 if label:
-                    delta_t_update = (
-                        self.system._martacoldroom._cleanroom_last_update_elapsed_time
-                    )
-                    delta_t_update = time.strftime(
-                        "%H:%M:%S", time.gmtime(delta_t_update)
-                    )
-                    label.setText(delta_t_update)
+                    # Read the elapsed time from the status dict, not straight off
+                    # the MQTT client: `_martacoldroom` is None whenever the broker
+                    # was unreachable at startup, and this dereference is inside the
+                    # single try/except wrapping the whole of update_ui -- so the
+                    # AttributeError aborted every remaining UI update below it,
+                    # leaving the coldroom and MARTA panels stuck showing "?".
+                    delta_t_update = cleanroom.get("elapsed_time")
+                    if delta_t_update is None:
+                        label.setText("--:--:--")
+                    else:
+                        delta_t_update = time.strftime(
+                            "%H:%M:%S", time.gmtime(delta_t_update)
+                        )
+                        label.setText(delta_t_update)
                     logger.debug(f"Updated Cleanroom delta t update: {delta_t_update}")
 
             # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>

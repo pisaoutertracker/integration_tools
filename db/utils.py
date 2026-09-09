@@ -1,11 +1,23 @@
+import os
 import requests
+
+# Every DB call is made from the Qt main thread during setup_ui(), so an
+# unreachable database blocks the GUI from ever being shown -- requests has NO
+# default timeout, and a dead host stalls each call until the OS gives up. That
+# turns "DB is down" into "the application never opens a window". Cap it: the
+# callers already handle a failed request by returning None.
+# Override with COLDROOM_DB_TIMEOUT if the DB is legitimately slow.
+DB_TIMEOUT = float(os.environ.get("COLDROOM_DB_TIMEOUT", "5"))
+
 
 
 def get_module_name_from_fc7(fc7, optical_group, db_url="http://cmslabserver:5000"):
     """Get the module name from the FC7 and optical group."""
     url = f"{db_url}/snapshot"
     response = requests.post(
-        url, json={"cable": fc7, "port": optical_group, "side": "detSide"}
+        url,
+        json={"cable": fc7, "port": optical_group, "side": "detSide"},
+        timeout=DB_TIMEOUT,
     )
     if response.status_code == 200:
         snapshot = response.json()
@@ -28,7 +40,7 @@ def get_ring_from_cable(cable_id, db_url="http://cmslabserver:5000"):
     url = f"{db_url}/snapshot"
     modules = []
     try:
-        response = requests.post(url, json={"cable": cable_id, "side": "detSide"})
+        response = requests.post(url, json={"cable": cable_id, "side": "detSide"}, timeout=DB_TIMEOUT)
     except requests.RequestException as e:
         print(f"Error making request to {url}: {str(e)}")
         return None
@@ -64,7 +76,7 @@ def get_modules_on_ring(ring_id, db_url="http://cmslabserver:5000"):
     """Get the modules on a specific ring from the database snapshot."""
     url = f"{db_url}/generic_module_query"
     try:
-        response = requests.post(url, json={"mounted_on": {"$regex": ring_id + ".*"}})
+        response = requests.post(url, json={"mounted_on": {"$regex": ring_id + ".*"}}, timeout=DB_TIMEOUT)
         if response.status_code == 200:
             snapshot = response.json()
             modules = {}
@@ -108,7 +120,7 @@ def get_module(module_id, db_url="http://cmslabserver:5000"):
     """Get a specific module from the database snapshot."""
     url = f"{db_url}/modules/{module_id}"
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=DB_TIMEOUT)
         if response.status_code == 200:
             return response.json()
         else:
@@ -197,7 +209,7 @@ def get_module_endpoints(module_id, db_url="http://cmslabserver:5000"):
     """Get the module endpoints from the database snapshot."""
     url = f"{db_url}/snapshot"
     try:
-        response = requests.post(url, json={"cable": module_id, "side": "crateSide"})
+        response = requests.post(url, json={"cable": module_id, "side": "crateSide"}, timeout=DB_TIMEOUT)
         if response.status_code == 200:
             snapshot = response.json()
             ret = {"LV": None, "HV": None, "FC7": None}
