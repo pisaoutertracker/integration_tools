@@ -25,6 +25,11 @@ class MartaColdRoomMQTTClient:
         self.TOPIC_BASE_COLDROOM = self.TOPIC_COLDROOM.replace("#", "")
         self.TOPIC_CO2_SENSOR = system_obj.settings["Coldroom"]["co2_sensor_topic"]
         self.TOPIC_COLDROOM_AIR = system_obj.settings["Coldroom"]["shellies_air_topic"]
+        # Serviceroom publishes the OT/IT valve positions. Defaulted rather than
+        # indexed so an older settings_coldroom.yaml without the section still works.
+        self.TOPIC_SERVICEROOM = (system_obj.settings.get("Serviceroom") or {}).get(
+            "mqtt_topic", "/serviceroom/status"
+        )
         self.TOPIC_ALARM = "/alarm"
 
         self.DRY_AIR_BYPASS_URL = "http://192.168.0.204/relay/0?turn="
@@ -34,6 +39,7 @@ class MartaColdRoomMQTTClient:
         logger.info(f"MARTA topic: {self.TOPIC_MARTA}")
         logger.info(f"Coldroom topic: {self.TOPIC_COLDROOM}")
         logger.info(f"CO2 sensor topic: {self.TOPIC_CO2_SENSOR}")
+        logger.info(f"Serviceroom topic: {self.TOPIC_SERVICEROOM}")
 
         # Create single MQTT client
         self._client = mqtt.Client()
@@ -47,6 +53,7 @@ class MartaColdRoomMQTTClient:
         # Initialize status dictionaries
         self._marta_status = {}
         self._coldroom_state = {}
+        self._serviceroom_status = {}
         self._dry_air_bypass_status = None
         self._cleanroom_status = {}
         self._co2_sensor_data = {}
@@ -92,6 +99,8 @@ class MartaColdRoomMQTTClient:
             logger.info(f"Subscribed to Coldroom topic: {self.TOPIC_COLDROOM}")
             self._client.subscribe(self.TOPIC_CO2_SENSOR)
             logger.info(f"Subscribed to CO2 sensor topic: {self.TOPIC_CO2_SENSOR}")
+            self._client.subscribe(self.TOPIC_SERVICEROOM)
+            logger.info(f"Subscribed to Serviceroom topic: {self.TOPIC_SERVICEROOM}")
             self._client.subscribe(self.TOPIC_ALARM)
             self.publish_cmd("refresh", "marta", "")
             self._client.subscribe(self.TOPIC_COLDROOM_AIR)
@@ -148,6 +157,12 @@ class MartaColdRoomMQTTClient:
                 logger.info("Received MyKratos alarm")
                 self._system.update_status({"alarm": alarm})
                 logger.info(f"Updated alarm status: {self._system.status['alarm']}")
+
+        # Handle Serviceroom messages (OT/IT valve positions)
+        elif msg.topic.startswith(self.TOPIC_SERVICEROOM.replace("#", "")):
+            logger.info("Processing Serviceroom status message")
+            self.handle_serviceroom_status_message(msg.payload)
+            logger.info(f"Updated Serviceroom status: {self._serviceroom_status}")
 
         # Handle CO2 sensor messages
         elif msg.topic == self.TOPIC_CO2_SENSOR:  # Add CO2 sensor topic
@@ -207,10 +222,48 @@ class MartaColdRoomMQTTClient:
     def handle_marta_status_message(self, payload):
         try:
             self._marta_status.update(json.loads(payload))
+            # Stamp arrival time. `update()` MERGES, so a field like fsm_state
+            # keeps its last received value indefinitely if MARTA stops
+            # publishing -- the interlock cannot otherwise tell a live reading
+            # from one latched minutes ago. These stamps make the age visible
+            # in the alarm journal.
+            _now = datetime.datetime.now()
+            self._marta_status["_received_at"] = _now.strftime("%Y-%m-%d %H:%M:%S")
+            self._marta_status["_received_epoch"] = _now.timestamp()
             logger.debug(f"Parsed MARTA status: {self._marta_status}")
             self._system.update_status({"marta": self._marta_status})
         except Exception as e:
             logger.error(f"Error parsing MARTA status message: {e}")
+
+    ### SERVICEROOM ###
+
+    def handle_serviceroom_status_message(self, payload):
+        """Parse /serviceroom/status and publish it into the shared status dict.
+
+        The payload carries the valve positions the cooling checks need:
+        ``outer_valve`` (OT) and ``pixel_valve`` (IT), alongside ``outer_str`` /
+        ``pixel_str``. Values are 1 = open, 0 = closed.
+
+        Like the MARTA handler this MERGES into the existing dict, so the arrival
+        stamps below are what let get_valve_state() tell a live reading from one
+        latched minutes ago: a stale valve reads as UNKNOWN, not as its last value.
+        """
+        try:
+            data = json.loads(payload)
+            if not isinstance(data, dict):
+                logger.error(f"Serviceroom payload is not a JSON object: {data!r}")
+                return
+            self._serviceroom_status.update(data)
+            _now = datetime.datetime.now()
+            self._serviceroom_status["_received_at"] = _now.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            self._serviceroom_status["_received_epoch"] = _now.timestamp()
+            logger.debug(f"Parsed Serviceroom status: {self._serviceroom_status}")
+            self._system.update_status({"serviceroom": self._serviceroom_status})
+        except Exception as e:
+            logger.error(f"Error parsing Serviceroom status message: {e}")
+            logger.error(f"Payload was: {payload}")
 
     ## Commands ##
 

@@ -6,6 +6,11 @@ Coldroom:
   shellies_air_topic: shellies/coldroomair/status/switch:0
 MARTA:
   mqtt_topic: /MARTA/#
+Serviceroom:
+  # Publishes the valve positions the cooling checks need:
+  #   outer_valve = OT (Outer Tracker), pixel_valve = IT (Inner Tracker/pixel)
+  # 1 = open, 0 = closed. Also carries outer_str / pixel_str.
+  mqtt_topic: /serviceroom/status
 SoftInterlock:
   # How often the soft interlock re-evaluates safety, in seconds.
   check_interval_seconds: 5
@@ -14,9 +19,48 @@ SoftInterlock:
   # This debounces transient network/MQTT glitches: the first N-1 unsafe
   # readings only warn; power is cut only if the condition persists.
   confirm_checks: 2
+  # Directory for the shared alarm journal (alarm_journal.jsonl) and the
+  # cross-instance trip latch (interlock_latch.json). All cold.py instances on
+  # a machine MUST point at the same directory: it is what makes a trip raised
+  # by one instance visible in the others, and one acknowledgement clear them
+  # all. Leave blank for the default, $XDG_STATE_HOME/coldroom_interlock
+  # (i.e. ~/.local/state/coldroom_interlock).
+  alarm_log_dir:
+  # Journal an unchanged cycle every N checks as a liveness heartbeat. Cycles
+  # whose safety-relevant values changed are always journalled regardless.
+  # 0 disables heartbeats (only changes and alarms are recorded).
+  journal_heartbeat_cycles: 60
+  # Where to ALSO drop an easy-to-find copy of the journal, since alarm_log_dir
+  # lives under ~/.local/state and is invisible while you work in the repo.
+  # Blank = a logs/ folder next to cold.py (gitignored); "none" disables it.
+  # Only the journal is mirrored -- the shared trip latch stays in
+  # alarm_log_dir, so all instances keep resolving it to the same file.
+  alarm_log_mirror_dir:
+  # --- Cooling / valve policy ---------------------------------------------
+  # How OT/IT cooling is judged. Cooling counts as ON only when MARTA's FSM
+  # state is CO2_RUNNING, its CO2 flow status is 2, AND the circuit's valve is
+  # not reported closed.
+  #
+  # What to do when a valve position is UNKNOWN (serviceroom unreachable, field
+  # absent, or the reading is stale). false = trust the MARTA FSM + CO2 signals
+  # and report the gap; true = fail safe and treat unknown as "not cooling".
+  # Leave false until serviceroom valve data is known to arrive reliably --
+  # with true and no valve data, the interlock trips whenever power is on.
+  require_valve_open: false
+  # Whether a closed IT (pixel) valve trips the interlock. OFF by default: theclear
+  # channel scope is cable-I1 (OT) only, so enabling this would cut OT channels
+  # in response to an IT fault. Needs an IT channel scope before turning on.
+  enforce_it_valve: false
+  # A serviceroom reading older than this many seconds is treated as UNKNOWN
+  # rather than trusted, so a dead publisher cannot latch a stale valve
+  # position forever. 0 disables the age check.
+  valve_max_age_seconds: 120
 ThermalCamera:
   mqtt_topic: /thermalcamera/#
   stitch_camera: camera0
 mqtt:
+  # pccmslab1 resolves both on the lab LAN and from outside; 192.168.0.45 is
+  # the internal address and only routes when you are on the lab network.
+  # broker: pccmslab1
   broker: 192.168.0.45
   port: 1883

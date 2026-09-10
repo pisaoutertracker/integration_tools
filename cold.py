@@ -10,6 +10,7 @@ from PyQt5.QtCore import Qt, QTimer
 from coldroom.system import System
 from coldroom.thermal_camera_gui import ThermalCameraTab
 from coldroom.modules_list_gui import ModulesListTab
+from coldroom.alarm_log import AlarmLog, resolve_mirror_dir
 from coldroom.module_temperatures_gui import ModuleTemperaturesTAB
 from coldroom.safety import (
     check_door_safe_to_open,
@@ -84,7 +85,85 @@ class MainApp(QtWidgets.QMainWindow):
             f"Soft interlock: interval={self.interlock_check_interval}s, "
             f"confirm_checks={self.interlock_confirm_checks}"
         )
-        self.interlock_state = {"pending_count": 0}
+        # Cooling / valve policy (see OT_IT_VALVE_QUESTIONS.md).
+        # require_valve_open: fail safe when a valve position is UNKNOWN.
+        # enforce_it_valve: let a closed IT (pixel) valve trip the interlock.
+        # Both default OFF: the channel scope is cable-I1 (OT) only, and with no
+        # serviceroom data a strict policy would trip whenever power is on.
+        self.interlock_require_valve_open = bool(
+            interlock_cfg.get("require_valve_open", False)
+        )
+        self.interlock_enforce_it_valve = bool(
+            interlock_cfg.get("enforce_it_valve", False)
+        )
+        try:
+            self.interlock_valve_max_age = float(
+                interlock_cfg.get("valve_max_age_seconds", 120) or 0
+            )
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Invalid SoftInterlock.valve_max_age_seconds ({e}); using 120 s")
+            self.interlock_valve_max_age = 120.0
+        logger.info(
+            f"Cooling policy: require_valve_open={self.interlock_require_valve_open}, "
+            f"enforce_it_valve={self.interlock_enforce_it_valve}, "
+            f"valve_max_age_seconds={self.interlock_valve_max_age}"
+        )
+
+        # Alarm journal + cross-instance trip latch. Several cold.py instances
+        # may run at once; they share these files so a trip raised in one is
+        # visible in all of them, and one acknowledgement clears it everywhere.
+        # A second, easy-to-find copy of the journal next to cold.py, because the
+        # canonical one lives under ~/.local/state and is invisible when you are
+        # working in the repo. Set alarm_log_mirror_dir to "none" to turn it off.
+        # Only the JOURNAL is mirrored: the trip latch stays in alarm_log_dir so
+        # every instance on the machine still resolves it to the same file.
+        mirror_dir = resolve_mirror_dir(
+            interlock_cfg.get("alarm_log_mirror_dir"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"),
+        )
+
+        self.alarm_log = AlarmLog(
+            log_dir=interlock_cfg.get("alarm_log_dir") or None,
+            heartbeat_every=int(interlock_cfg.get("journal_heartbeat_cycles", 60) or 0),
+            mirror_dir=mirror_dir,
+        )
+        logger.info(
+            f"Alarm journal: {self.alarm_log.journal_path} "
+            f"(latch: {self.alarm_log.latch_path}, instance {self.alarm_log.instance_id})"
+        )
+        if self.alarm_log.mirror_text_path:
+            logger.info(
+                f"Readable alarm log mirrored to: {self.alarm_log.mirror_text_path} "
+                f"(and {self.alarm_log.mirror_json_path})"
+            )
+        self.alarm_log.log(
+            "startup",
+            "cold.py soft interlock started",
+            check_interval_s=self.interlock_check_interval,
+            confirm_checks=self.interlock_confirm_checks,
+        )
+        existing_latch = self.alarm_log.read_latch()
+        if existing_latch:
+            # A trip is already latched by another instance (or a previous run
+            # that exited without acknowledgement). Adopt it rather than showing
+            # a clean slate the operator would wrongly read as "nothing wrong".
+            logger.warning(
+                "Adopting unacknowledged interlock trip from "
+                f"{existing_latch.get('host')}:{existing_latch.get('pid')} "
+                f"at {existing_latch.get('ts')}"
+            )
+            self.alarm_log.log(
+                "latch_adopted",
+                "Started with an unacknowledged trip already latched",
+                trip_id=existing_latch.get("trip_id"),
+                original_trip_ts=existing_latch.get("ts"),
+            )
+
+        # "tripped" latches True when a protective cutoff actually fires and is
+        # only cleared by the operator via acknowledge_soft_interlock_trip(). The
+        # shared latch file, not this flag, is the source of truth across
+        # instances; soft_interlock_check() reconciles the two every cycle.
+        self.interlock_state = {"pending_count": 0, "tripped": False}
         self.soft_interlock_timer = QTimer()
         self.soft_interlock_timer.timeout.connect(self.soft_interlock_check)
         self.soft_interlock_timer.start(self.interlock_check_interval * 1000)
@@ -106,6 +185,16 @@ class MainApp(QtWidgets.QMainWindow):
             if hasattr(self, "soft_interlock_timer"):
                 self.soft_interlock_timer.stop()
                 logger.debug("Stopped soft interlock timer")
+
+            # Journal the shutdown so a gap in the file reads as a clean exit
+            # rather than a crash. Note the latch deliberately SURVIVES exit:
+            # an unacknowledged trip must not be erased by restarting the app.
+            if hasattr(self, "alarm_log"):
+                self.alarm_log.log(
+                    "shutdown",
+                    "cold.py soft interlock stopped",
+                    latch_still_set=self.alarm_log.read_latch() is not None,
+                )
 
             # Cleanup Thermal Camera tab if it exists
             if hasattr(self, "thermal_camera_tab"):
@@ -244,6 +333,18 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info("UI setup completed")
 
     def get_ring_id(self):
+        try:
+            return self._get_ring_id_impl()
+        except Exception as e:
+            # Never let a module-DB problem stop the GUI from starting — the
+            # coldroom safety monitor must come up even fully offline.
+            logger.error(f"Could not load ring/modules at startup: {e}")
+            self.mounted_modules = {}
+            self.number_of_modules = 0
+            self.ring_id = getattr(self, "ring_id", None)
+            return self.ring_id
+
+    def _get_ring_id_impl(self):
         self.number_of_modules = 0  # Add default at the start
         # self.ring_id=get_ring_from_cable("I1") #hardcode the single harting cable I1
         self.ring_id = get_ring_from_cable(
@@ -310,12 +411,21 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info(f"Ring ID {self.ring_id} saved successfully.")
 
     def get_mounted_modules(self):
-        self.mounted_modules = get_modules_on_ring(
-            self.ring_id, db_url=self.module_db.db_url
+        # get_modules_on_ring returns None if the module DB is unreachable
+        # (e.g. running outside the lab) — degrade to an empty set so the GUI
+        # can still start instead of crashing on a None iteration.
+        self.mounted_modules = (
+            get_modules_on_ring(self.ring_id, db_url=self.module_db.db_url) or {}
         )
+        if not self.mounted_modules:
+            logger.warning(
+                f"No modules loaded for ring {self.ring_id} "
+                "(module DB unreachable or ring empty)"
+            )
+            return self.mounted_modules
         for module_name in self.mounted_modules:
             self.mounted_modules[module_name].update(
-                get_module_endpoints(module_name, db_url=self.module_db.db_url)
+                get_module_endpoints(module_name, db_url=self.module_db.db_url) or {}
             )
             self.mounted_modules[module_name].update(
                 {"speed": get_module_speed(module_name, db_url=self.module_db.db_url)}
@@ -327,11 +437,12 @@ class MainApp(QtWidgets.QMainWindow):
                     )
                 }
             )
+            module_details = get_module(module_name, db_url=self.module_db.db_url) or {}
             self.mounted_modules[module_name].update(
                 {
-                    "temperature_offsets": get_module(
-                        module_name, db_url=self.module_db.db_url
-                    ).get("temperature_offsets", {})
+                    "temperature_offsets": module_details.get(
+                        "temperature_offsets", {}
+                    )
                 }
             )
         logger.debug(f"Mounted modules for ring {self.ring_id}: {self.mounted_modules}")
@@ -404,6 +515,15 @@ class MainApp(QtWidgets.QMainWindow):
         self.marta_coldroom_tab.findChild(
             QtWidgets.QPushButton, "coldroom_dry_air_bypass_off_PB"
         ).clicked.connect(self.coldroom_dry_air_bypass_off)
+
+        # Soft-interlock trip acknowledge button: always visible, but greyed out
+        # and non-functional until a trip latches. The clicked signal is wired
+        # once, further down in this method.
+        ack_button = self.marta_coldroom_tab.findChild(
+            QtWidgets.QPushButton, "soft_interlock_ack_PB"
+        )
+        if ack_button:
+            self.set_ack_button_state(ack_button, enabled=False)
 
         # Door controls
         button = self.marta_coldroom_tab.findChild(
@@ -738,10 +858,23 @@ class MainApp(QtWidgets.QMainWindow):
             # Start MQTT thread
             self.system.start_mqtt_thread()
 
-            # Update status
-            status_msg = f"Connected to MQTT broker at {server}:{port}"
-            self.statusBar().showMessage(status_msg)
-            logger.info(status_msg)
+            # Report what actually happened. The client is built in
+            # System.__init__, which sets _martacoldroom to None if connect()
+            # raised (e.g. the broker timed out) -- and nothing retries it, so no
+            # topic is ever subscribed and every field stays "?". Reporting
+            # "Connected" unconditionally hid exactly that failure.
+            if self.system._martacoldroom is None:
+                status_msg = (
+                    f"NOT connected to MQTT broker at {server}:{port} — the client "
+                    "failed to start, so no live data will arrive. Check the broker "
+                    "address in settings_coldroom.yaml, then restart."
+                )
+                self.statusBar().showMessage(status_msg)
+                logger.error(status_msg)
+            else:
+                status_msg = f"Connected to MQTT broker at {server}:{port}"
+                self.statusBar().showMessage(status_msg)
+                logger.info(status_msg)
 
         except Exception as e:
             error_msg = f"Failed to connect to MQTT broker: {str(e)}"
@@ -765,12 +898,22 @@ class MainApp(QtWidgets.QMainWindow):
         logger.info("Called soft Interlock")
         used_caen_channels = self.modules_list_tab.get_used_channels()
         logger.info(f"Used CAEN channels for safety checks: {used_caen_channels}")
-        alarm_publish = (
-            (lambda msg: self.system._martacoldroom._client.publish("/alarm", msg))
-            if self.system._martacoldroom
-            else None
-        )
-        logger.info(f"Alarm publish function: {alarm_publish}")
+
+        # Journal every alarm at the point it is published, so the file records
+        # warnings and the scope-empty case too, not only confirmed trips. Each
+        # record carries host+pid, which is what distinguishes duplicate Slack
+        # alarms coming from two instances.
+        def alarm_publish(msg):
+            self.alarm_log.log(
+                "alarm_published",
+                msg,
+                conditions=self.interlock_state.get("last_conditions"),
+            )
+            if self.system._martacoldroom:
+                self.system._martacoldroom._client.publish("/alarm", msg)
+            else:
+                logger.warning(f"MQTT unavailable, alarm not published: {msg}")
+
         is_safe, msg = soft_interlock_loop(
             self.system.status,
             self.caen_tab.last_response,
@@ -779,15 +922,78 @@ class MainApp(QtWidgets.QMainWindow):
             publish_alarm=alarm_publish,
             interlock_state=self.interlock_state,
             confirm_checks=self.interlock_confirm_checks,
+            require_valve_open=self.interlock_require_valve_open,
+            enforce_it_valve=self.interlock_enforce_it_valve,
+            valve_max_age_seconds=self.interlock_valve_max_age,
             allowed_channels=self.get_cable_i1_channels(),
         )
         logger.info(f"Soft interlock result: is_safe={is_safe}, msg={msg}")
+
+        self.alarm_log.log_cycle(self.interlock_state.get("last_conditions"))
+        self.sync_interlock_latch(msg)
 
         # Kept so the acknowledge button can repaint without waiting for, or
         # inventing, a fresh safety verdict.
         self._last_interlock_result = (is_safe, msg)
         self.update_soft_interlock_ui(is_safe, msg)
         logger.info("Completed soft interlock loop")
+
+    def sync_interlock_latch(self, msg=""):
+        """Reconcile this process's trip latch with the shared, on-disk one.
+
+        Several cold.py instances can run at once, each with its own
+        ``interlock_state``. The shared latch file -- not this process's memory --
+        is the source of truth, so that:
+
+          * a trip raised by ANY instance shows as TRIPPED in all of them, and
+          * one acknowledgement, made anywhere, clears it everywhere.
+
+        Without this an instance that never tripped showed a clean LED, and an
+        acknowledgement in one window left the other still latched.
+        """
+        # This process just tripped -> publish it to the shared latch.
+        if self.interlock_state.get("tripped") and not self.interlock_state.get(
+            "trip_published"
+        ):
+            self.alarm_log.record_trip(
+                self.interlock_state.get("trip_message", msg),
+                conditions=self.interlock_state.get("last_conditions"),
+                reason=self.interlock_state.get("trip_reason", ""),
+            )
+            self.interlock_state["trip_published"] = True
+
+        # Then let the shared latch drive local state, in both directions.
+        latch = self.alarm_log.read_latch()
+        self.interlock_latch = latch
+        if latch:
+            self.interlock_state["tripped"] = True
+            self.interlock_state["trip_acknowledged"] = False
+            # Describe the ORIGINAL trip, whichever instance raised it, so every
+            # window reports the same event rather than its own local view.
+            self.interlock_state["trip_time"] = latch.get("ts")
+            self.interlock_state["trip_message"] = latch.get("message", msg)
+            if latch.get("reason"):
+                self.interlock_state["trip_reason"] = latch["reason"]
+            self.interlock_state["trip_count"] = latch.get("repeat_count", 1)
+        else:
+            self.interlock_state["tripped"] = False
+            self.interlock_state["trip_published"] = False
+
+    def describe_latch_origin(self):
+        """Note which instance raised the latched trip, when it was not this one."""
+        latch = getattr(self, "interlock_latch", None)
+        if not latch:
+            return ""
+        note = ""
+        if latch.get("pid") != self.alarm_log.pid:
+            note = (
+                f"\nRaised by another instance "
+                f"({latch.get('host', '?')}:{latch.get('pid', '?')})."
+            )
+        repeats = int(latch.get("repeat_count", 1) or 1)
+        if repeats > 1:
+            note += f" Re-tripped {repeats}x (last {latch.get('last_trip_ts', '')})."
+        return note
 
     def update_soft_interlock_ui(self, is_safe, msg):
         """
@@ -849,7 +1055,10 @@ class MainApp(QtWidgets.QMainWindow):
         if soft_interlock_msg_label:
             text = f"{verdict}\n{msg}"
             if trip_pending:
-                text = f"{describe_trip(self.interlock_state)}\n\n{text}"
+                text = (
+                    f"{describe_trip(self.interlock_state)}"
+                    f"{self.describe_latch_origin()}\n\n{text}"
+                )
             soft_interlock_msg_label.setText(text)
             logger.info(f"Updated soft interlock message: {verdict} | {msg}")
 
@@ -858,21 +1067,46 @@ class MainApp(QtWidgets.QMainWindow):
             QtWidgets.QPushButton, "soft_interlock_ack_PB"
         )
         if soft_interlock_ack:
-            soft_interlock_ack.setEnabled(trip_pending)
+            self.set_ack_button_state(soft_interlock_ack, enabled=trip_pending)
 
     def acknowledge_soft_interlock_trip(self):
-        """Operator confirms they have seen the trip — clears the latched LED."""
+        """Operator confirms they have seen the trip — clears the latched LED.
+
+        Clears the SHARED latch first, so the acknowledgement reaches every
+        running instance and not just this one. Does NOT re-energize anything;
+        that stays a separate, deliberate operator action.
+        """
         description = acknowledge_trip(self.interlock_state)
         if not description:
             logger.info("Acknowledge pressed with no outstanding interlock trip")
             return
-        logger.warning(f"Soft interlock trip acknowledged: {description}")
+        cleared = self.alarm_log.clear_latch()
+        self.interlock_latch = None
+        self.interlock_state["trip_published"] = False
+        logger.warning(
+            f"Soft interlock trip acknowledged: {description} "
+            f"(raised by {(cleared or {}).get('host', '?')}:"
+            f"{(cleared or {}).get('pid', '?')})"
+        )
         self.statusBar().showMessage(f"Interlock trip acknowledged — {description}")
         # Repaint immediately rather than waiting for the next 5 s check, reusing
         # the last real verdict so an acknowledgement can never paint the LED
         # green while conditions are still unsafe.
         is_safe, msg = getattr(self, "_last_interlock_result", (True, ""))
         self.update_soft_interlock_ui(is_safe, msg)
+
+    def set_ack_button_state(self, ack_button, enabled):
+        """Enable/disable the trip-acknowledge button and style it accordingly.
+
+        The button is always visible so the operator knows it exists; it is only
+        clickable (and coloured as an active alarm-clear button) while a trip is
+        latched. Otherwise it is greyed out and non-functional.
+        """
+        ack_button.setEnabled(enabled)
+        if enabled:
+            ack_button.setStyleSheet("background-color: #c0362c; color: white;")
+        else:
+            ack_button.setStyleSheet("background-color: #b0b0b0; color: #eeeeee;")
 
     def update_ui(self):
         """Update UI with current system status"""
@@ -965,13 +1199,20 @@ class MainApp(QtWidgets.QMainWindow):
                     QtWidgets.QLabel, "cleanroom_last_update_value_label_2"
                 )
                 if label:
-                    delta_t_update = (
-                        self.system._martacoldroom._cleanroom_last_update_elapsed_time
-                    )
-                    delta_t_update = time.strftime(
-                        "%H:%M:%S", time.gmtime(delta_t_update)
-                    )
-                    label.setText(delta_t_update)
+                    # Read the elapsed time from the status dict, not straight off
+                    # the MQTT client: `_martacoldroom` is None whenever the broker
+                    # was unreachable at startup, and this dereference is inside the
+                    # single try/except wrapping the whole of update_ui -- so the
+                    # AttributeError aborted every remaining UI update below it,
+                    # leaving the coldroom and MARTA panels stuck showing "?".
+                    delta_t_update = cleanroom.get("elapsed_time")
+                    if delta_t_update is None:
+                        label.setText("--:--:--")
+                    else:
+                        delta_t_update = time.strftime(
+                            "%H:%M:%S", time.gmtime(delta_t_update)
+                        )
+                        label.setText(delta_t_update)
                     logger.debug(f"Updated Cleanroom delta t update: {delta_t_update}")
 
             # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>

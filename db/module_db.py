@@ -12,10 +12,14 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 import requests
+from db.utils import DB_TIMEOUT
 import yaml
 import os
 import re
+import logging
 from db.module_db_gui import Ui_ModuleDBWidget
+
+logger = logging.getLogger(__name__)
 
 
 class ModuleDB(QWidget):
@@ -176,11 +180,11 @@ class ModuleDB(QWidget):
         try:
             url = self.get_api_url(endpoint)
             if method == "GET":
-                response = requests.get(url)
+                response = requests.get(url, timeout=DB_TIMEOUT)
             elif method == "POST":
-                response = requests.post(url, json=data)
+                response = requests.post(url, json=data, timeout=DB_TIMEOUT)
             elif method == "PUT":
-                response = requests.put(url, json=data)
+                response = requests.put(url, json=data, timeout=DB_TIMEOUT)
             else:
                 return False, f"Unsupported method: {method}"
 
@@ -196,7 +200,12 @@ class ModuleDB(QWidget):
         """Update the module list from database"""
         success, modules = self.make_api_request("modules")
         if not success:
-            self.show_error_dialog(f"Failed to fetch modules: {modules}")
+            # Don't block startup with a modal dialog when the DB is unreachable
+            # (e.g. running outside the lab). Log it and carry on with whatever
+            # module list we already have so the GUI stays usable offline.
+            logger.warning(f"Failed to fetch modules: {modules}")
+            if not hasattr(self, "all_modules"):
+                self.all_modules = []
             return
 
         self.all_modules = modules

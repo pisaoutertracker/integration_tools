@@ -33,6 +33,7 @@ class System:
                 "Cleanroom": {"mqtt_topic": "/environment/HumAndTemp001/#"},
                 "MARTA": {"mqtt_topic": "/MARTA/#"},
                 "Coldroom": {"mqtt_topic": "/coldroom/#"},
+                "Serviceroom": {"mqtt_topic": "/serviceroom/status"},
                 "ThermalCamera": {"mqtt_topic": "/thermalcamera/#"},
             }
 
@@ -46,6 +47,11 @@ class System:
             "caen": {},
             "cleanroom": {},
             "coldroomair": {},
+            # Populated from /serviceroom/status; carries the OT (outer_valve)
+            # and IT (pixel_valve) valve positions used by the cooling checks.
+            # Stays {} until the first message arrives, which get_valve_state
+            # reads as UNKNOWN rather than as "closed".
+            "serviceroom": {},
         }
         self.safety_flags = {
             "door_locked": True,

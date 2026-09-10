@@ -233,7 +233,7 @@ QCheckBox {
              </property>
             </widget>
            </item>
-           <item>
+           <item alignment="Qt::AlignHCenter">
             <widget class="QPushButton" name="soft_interlock_ack_PB">
              <property name="enabled">
               <bool>false</bool>
@@ -244,8 +244,17 @@ QCheckBox {
                <height>32</height>
               </size>
              </property>
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
              <property name="toolTip">
               <string>Acknowledge that the soft interlock tripped. The LED stays latched until this is pressed.</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: #b0b0b0; color: #eeeeee;</string>
              </property>
              <property name="text">
               <string>Acknowledge Trip</string>
