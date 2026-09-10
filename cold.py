@@ -10,7 +10,7 @@ from PyQt5.QtCore import Qt, QTimer
 from coldroom.system import System
 from coldroom.thermal_camera_gui import ThermalCameraTab
 from coldroom.modules_list_gui import ModulesListTab
-from coldroom.alarm_log import AlarmLog
+from coldroom.alarm_log import AlarmLog, resolve_mirror_dir
 from coldroom.module_temperatures_gui import ModuleTemperaturesTAB
 from coldroom.safety import (
     check_door_safe_to_open,
@@ -112,14 +112,30 @@ class MainApp(QtWidgets.QMainWindow):
         # Alarm journal + cross-instance trip latch. Several cold.py instances
         # may run at once; they share these files so a trip raised in one is
         # visible in all of them, and one acknowledgement clears it everywhere.
+        # A second, easy-to-find copy of the journal next to cold.py, because the
+        # canonical one lives under ~/.local/state and is invisible when you are
+        # working in the repo. Set alarm_log_mirror_dir to "none" to turn it off.
+        # Only the JOURNAL is mirrored: the trip latch stays in alarm_log_dir so
+        # every instance on the machine still resolves it to the same file.
+        mirror_dir = resolve_mirror_dir(
+            interlock_cfg.get("alarm_log_mirror_dir"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"),
+        )
+
         self.alarm_log = AlarmLog(
             log_dir=interlock_cfg.get("alarm_log_dir") or None,
             heartbeat_every=int(interlock_cfg.get("journal_heartbeat_cycles", 60) or 0),
+            mirror_dir=mirror_dir,
         )
         logger.info(
             f"Alarm journal: {self.alarm_log.journal_path} "
             f"(latch: {self.alarm_log.latch_path}, instance {self.alarm_log.instance_id})"
         )
+        if self.alarm_log.mirror_text_path:
+            logger.info(
+                f"Readable alarm log mirrored to: {self.alarm_log.mirror_text_path} "
+                f"(and {self.alarm_log.mirror_json_path})"
+            )
         self.alarm_log.log(
             "startup",
             "cold.py soft interlock started",

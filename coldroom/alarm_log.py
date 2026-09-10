@@ -77,6 +77,43 @@ WATCHED_FIELDS = (
 )
 
 
+# Values that explicitly switch the mirror OFF in settings_coldroom.yaml.
+_MIRROR_OFF_VALUES = {"none", "false", "off", "no", "0"}
+
+
+def resolve_mirror_dir(value, default_dir):
+    """Turn the settings value for alarm_log_mirror_dir into a path or None.
+
+    A key present with no value parses as ``None`` in YAML, which must mean
+    "use the default" -- NOT "disabled". Only an explicit string like "none"
+    turns the mirror off. (Getting this backwards silently disabled the mirror:
+    ``str(None).lower()`` is the string "none".)
+    """
+    if value is None:
+        return default_dir
+    text = str(value).strip()
+    if not text:
+        return default_dir
+    if text.lower() in _MIRROR_OFF_VALUES:
+        return None
+    return os.path.expanduser(text)
+
+
+def format_record(record):
+    """One readable line for a journal record, for the plain-text mirror."""
+    conditions = record.get("conditions") or {}
+    bits = []
+    for key in ("fsm_state", "marta_msg_age_s", "ot_valve", "it_valve", "lv_on", "hv_on"):
+        if key in conditions:
+            bits.append(f"{key}={conditions[key]}")
+    detail = f"  [{', '.join(bits)}]" if bits else ""
+    message = (record.get("message") or "").replace("\n", " ")
+    return (
+        f"{record.get('ts', '')}  pid={record.get('pid', '?')}  "
+        f"{str(record.get('event', '')).upper():<18}{message}{detail}"
+    )
+
+
 def default_log_dir():
     """Directory holding the journal + latch, honouring XDG_STATE_HOME."""
     base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
@@ -94,10 +131,32 @@ class AlarmLog:
             0 disables heartbeats.
     """
 
-    def __init__(self, log_dir=None, max_bytes=DEFAULT_MAX_BYTES, heartbeat_every=60):
+    def __init__(
+        self,
+        log_dir=None,
+        max_bytes=DEFAULT_MAX_BYTES,
+        heartbeat_every=60,
+        mirror_dir=None,
+    ):
         self.log_dir = log_dir or default_log_dir()
         self.journal_path = os.path.join(self.log_dir, "alarm_journal.jsonl")
         self.latch_path = os.path.join(self.log_dir, "interlock_latch.json")
+
+        # Optional second copy of the journal somewhere easy to find (in
+        # practice: a logs/ folder beside cold.py). It is a CONVENIENCE MIRROR,
+        # never the source of truth -- the canonical journal and, crucially, the
+        # shared trip latch stay in `log_dir`, which every instance on the
+        # machine resolves to identically. Putting the latch in a per-checkout
+        # folder would silently break cross-instance acknowledgement.
+        self.mirror_dir = mirror_dir
+        self.mirror_json_path = (
+            os.path.join(mirror_dir, "alarm_journal.jsonl") if mirror_dir else None
+        )
+        # Same events, one readable line each, for when you just want to look.
+        self.mirror_text_path = (
+            os.path.join(mirror_dir, "alarm_log.txt") if mirror_dir else None
+        )
+
         self.max_bytes = max_bytes
         self.heartbeat_every = heartbeat_every
         self.host = socket.gethostname()
@@ -108,12 +167,20 @@ class AlarmLog:
         self._cycles_since_log = 0
         self._last_watched = None
         self._degraded = False  # set once if the journal proves unwritable
+        self._mirror_degraded = False  # mirror failing must not stop the journal
 
         try:
             os.makedirs(self.log_dir, exist_ok=True)
         except OSError as e:
             logger.error(f"Cannot create alarm log dir {self.log_dir}: {e}")
             self._degraded = True
+
+        if self.mirror_dir:
+            try:
+                os.makedirs(self.mirror_dir, exist_ok=True)
+            except OSError as e:
+                logger.error(f"Cannot create alarm mirror dir {self.mirror_dir}: {e}")
+                self._mirror_degraded = True
 
     # -- journal --------------------------------------------------------------
 
@@ -182,15 +249,48 @@ class AlarmLog:
             logger.error(f"Alarm journal write failed, disabling journal: {e}")
             self._degraded = True
 
-    def _rotate_if_needed(self):
+        self._append_mirror(record)
+
+    def _append_mirror(self, record):
+        """Copy the record to the easy-to-find mirror. Failures are swallowed.
+
+        Deliberately independent of the canonical write above: a full disk or a
+        read-only checkout must cost you the convenience copy, never the real
+        journal and never the interlock.
+        """
+        if not self.mirror_dir or self._mirror_degraded:
+            return
         try:
-            if os.path.getsize(self.journal_path) < self.max_bytes:
+            self._rotate_path_if_needed(self.mirror_json_path)
+            self._rotate_path_if_needed(self.mirror_text_path)
+            with open(self.mirror_json_path, "a", encoding="utf-8") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    f.write(json.dumps(record, default=str) + "\n")
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            with open(self.mirror_text_path, "a", encoding="utf-8") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    f.write(format_record(record) + "\n")
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except Exception as e:
+            logger.error(f"Alarm mirror write failed, disabling mirror: {e}")
+            self._mirror_degraded = True
+
+    def _rotate_if_needed(self):
+        self._rotate_path_if_needed(self.journal_path)
+
+    def _rotate_path_if_needed(self, path):
+        try:
+            if os.path.getsize(path) < self.max_bytes:
                 return
         except OSError as e:
             if e.errno == errno.ENOENT:
                 return  # not created yet
             raise
-        os.replace(self.journal_path, self.journal_path + ".1")
+        os.replace(path, path + ".1")
 
     # -- shared trip latch ----------------------------------------------------
 

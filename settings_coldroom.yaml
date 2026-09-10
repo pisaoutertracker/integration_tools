@@ -30,6 +30,12 @@ SoftInterlock:
   # whose safety-relevant values changed are always journalled regardless.
   # 0 disables heartbeats (only changes and alarms are recorded).
   journal_heartbeat_cycles: 60
+  # Where to ALSO drop an easy-to-find copy of the journal, since alarm_log_dir
+  # lives under ~/.local/state and is invisible while you work in the repo.
+  # Blank = a logs/ folder next to cold.py (gitignored); "none" disables it.
+  # Only the journal is mirrored -- the shared trip latch stays in
+  # alarm_log_dir, so all instances keep resolving it to the same file.
+  alarm_log_mirror_dir:
   # --- Cooling / valve policy ---------------------------------------------
   # How OT/IT cooling is judged. Cooling counts as ON only when MARTA's FSM
   # state is CO2_RUNNING, its CO2 flow status is 2, AND the circuit's valve is
@@ -41,7 +47,7 @@ SoftInterlock:
   # Leave false until serviceroom valve data is known to arrive reliably --
   # with true and no valve data, the interlock trips whenever power is on.
   require_valve_open: false
-  # Whether a closed IT (pixel) valve trips the interlock. OFF by default: the
+  # Whether a closed IT (pixel) valve trips the interlock. OFF by default: theclear
   # channel scope is cable-I1 (OT) only, so enabling this would cut OT channels
   # in response to an IT fault. Needs an IT channel scope before turning on.
   enforce_it_valve: false
@@ -53,6 +59,8 @@ ThermalCamera:
   mqtt_topic: /thermalcamera/#
   stitch_camera: camera0
 mqtt:
-  broker: 192.168.0.45
+  # pccmslab1 resolves both on the lab LAN and from outside; 192.168.0.45 is
+  # the internal address and only routes when you are on the lab network.
   # broker: pccmslab1
+  broker: 192.168.0.45
   port: 1883

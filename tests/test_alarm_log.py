@@ -15,7 +15,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from coldroom.alarm_log import AlarmLog, default_log_dir
+from coldroom.alarm_log import AlarmLog, default_log_dir, resolve_mirror_dir
 
 
 def _read_journal(path):
@@ -193,6 +193,98 @@ class TestSeparateProcesses(_TmpDirCase):
         self.assertEqual(latch["message"], "trip from a separate process")
         # Raised by a different OS process, which is what the UI reports.
         self.assertNotEqual(latch["pid"], os.getpid())
+
+
+class TestMirror(_TmpDirCase):
+    """The repo-local mirror: same journal, somewhere you can actually find it."""
+
+    def setUp(self):
+        super().setUp()
+        self.mirror = tempfile.mkdtemp(prefix="alarmlog_mirror_")
+        self.addCleanup(shutil.rmtree, self.mirror, ignore_errors=True)
+
+    def make_mirrored(self, **kw):
+        kw.setdefault("heartbeat_every", 0)
+        return AlarmLog(log_dir=self.dir, mirror_dir=self.mirror, **kw)
+
+    def test_mirror_json_matches_the_canonical_journal(self):
+        log = self.make_mirrored()
+        log.log("trip", "cut power", conditions={"fsm_state": "DISCONNECTED"})
+        log.log("ack", "acknowledged")
+
+        canonical = _read_journal(log.journal_path)
+        mirrored = _read_journal(log.mirror_json_path)
+        self.assertEqual(canonical, mirrored)
+
+    def test_mirror_writes_a_readable_text_line(self):
+        log = self.make_mirrored()
+        log.log("trip", "SAFETY INTERLOCK: cooling lost",
+                conditions={"fsm_state": "DISCONNECTED", "ot_valve": False})
+
+        with open(log.mirror_text_path, encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("TRIP", text)
+        self.assertIn("SAFETY INTERLOCK: cooling lost", text)
+        self.assertIn("fsm_state=DISCONNECTED", text)
+        self.assertIn("ot_valve=False", text)
+        self.assertEqual(len(text.strip().split("\n")), 1)
+
+    def test_latch_is_NOT_mirrored(self):
+        """The latch must stay single-source, or instances stop sharing it."""
+        log = self.make_mirrored()
+        log.record_trip("SAFETY INTERLOCK: cut power")
+
+        self.assertTrue(os.path.exists(log.latch_path))
+        self.assertFalse(os.path.exists(os.path.join(self.mirror, "interlock_latch.json")))
+
+    def test_broken_mirror_does_not_stop_the_journal(self):
+        """A read-only checkout must cost the copy, never the real journal."""
+        log = AlarmLog(log_dir=self.dir, mirror_dir="/proc/nope/cannot/create",
+                       heartbeat_every=0)
+        log.log("trip", "still recorded")
+
+        records = _read_journal(log.journal_path)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["message"], "still recorded")
+
+    def test_no_mirror_dir_means_no_mirror(self):
+        log = AlarmLog(log_dir=self.dir, heartbeat_every=0)
+        log.log("trip", "x")
+        self.assertIsNone(log.mirror_json_path)
+        self.assertEqual(os.listdir(self.mirror), [])
+
+    def test_mirror_rotates_independently(self):
+        log = self.make_mirrored(max_bytes=500)
+        for i in range(60):
+            log.log("alarm_published", f"padding message number {i} " + "x" * 40)
+        self.assertTrue(os.path.exists(log.mirror_json_path + ".1"))
+        self.assertTrue(os.path.exists(log.mirror_text_path + ".1"))
+
+
+class TestResolveMirrorDir(unittest.TestCase):
+    """Settings -> mirror path. A blank YAML key must mean 'default', not 'off'."""
+
+    DEFAULT = "/repo/logs"
+
+    def test_yaml_key_with_no_value_uses_the_default(self):
+        # `alarm_log_mirror_dir:` with nothing after it parses as None. Treating
+        # that as the string "none" silently disabled the mirror.
+        self.assertEqual(resolve_mirror_dir(None, self.DEFAULT), self.DEFAULT)
+
+    def test_blank_string_uses_the_default(self):
+        self.assertEqual(resolve_mirror_dir("", self.DEFAULT), self.DEFAULT)
+        self.assertEqual(resolve_mirror_dir("   ", self.DEFAULT), self.DEFAULT)
+
+    def test_explicit_off_values_disable_the_mirror(self):
+        for value in ("none", "None", "NONE", "false", "off", "no", "0", " none "):
+            with self.subTest(value=value):
+                self.assertIsNone(resolve_mirror_dir(value, self.DEFAULT))
+
+    def test_explicit_path_is_used_and_expanded(self):
+        self.assertEqual(resolve_mirror_dir("/var/log/coldroom", self.DEFAULT),
+                         "/var/log/coldroom")
+        self.assertEqual(resolve_mirror_dir("~/mylogs", self.DEFAULT),
+                         os.path.expanduser("~/mylogs"))
 
 
 class TestRobustness(_TmpDirCase):
