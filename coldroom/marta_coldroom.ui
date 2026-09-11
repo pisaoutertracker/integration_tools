@@ -107,7 +107,7 @@ QCheckBox {
       </property>
       <layout class="QGridLayout" name="gridLayout_2">
        <item row="0" column="0">
-        <layout class="QHBoxLayout" name="horizontalLayout">
+        <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,0,1">
          <item>
           <layout class="QVBoxLayout" name="verticalLayout">
            <item alignment="Qt::AlignHCenter">
@@ -137,6 +137,12 @@ QCheckBox {
            </item>
            <item>
             <widget class="QLabel" name="coldroom_runlabel_2">
+             <property name="minimumSize">
+              <size>
+               <width>160</width>
+               <height>60</height>
+              </size>
+             </property>
              <property name="maximumSize">
               <size>
                <width>160</width>
@@ -177,12 +183,21 @@ QCheckBox {
            <property name="text">
             <string>-</string>
            </property>
+           <property name="textFormat">
+            <enum>Qt::RichText</enum>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
           </widget>
          </item>
         </layout>
        </item>
        <item row="1" column="0">
-        <layout class="QHBoxLayout" name="horizontalLayout_2">
+        <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="0,0,1">
          <item>
           <layout class="QVBoxLayout" name="verticalLayout_2">
            <item alignment="Qt::AlignHCenter">
@@ -212,6 +227,12 @@ QCheckBox {
            </item>
            <item>
             <widget class="QLabel" name="soft_interlock_label">
+             <property name="minimumSize">
+              <size>
+               <width>160</width>
+               <height>60</height>
+              </size>
+             </property>
              <property name="maximumSize">
               <size>
                <width>160</width>
@@ -279,6 +300,15 @@ QCheckBox {
            </property>
            <property name="text">
             <string>-</string>
+           </property>
+           <property name="textFormat">
+            <enum>Qt::RichText</enum>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
            </property>
           </widget>
          </item>

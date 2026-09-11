@@ -14,6 +14,7 @@ from coldroom.alarm_log import AlarmLog, resolve_mirror_dir
 from coldroom.module_temperatures_gui import ModuleTemperaturesTAB
 from coldroom.safety import (
     check_door_safe_to_open,
+    check_co2_safe,
     check_dew_point,
     # check_hv_safe,
     check_light_status,
@@ -27,6 +28,13 @@ from coldroom.safety import (
     is_trip_unacknowledged,
     describe_trip,
     acknowledge_trip,
+)
+from coldroom.safety_view import (
+    co2_row,
+    interlock_notes,
+    interlock_rows,
+    render_door_safety,
+    render_soft_interlock,
 )
 from caen.caenGUIall import caenGUIall
 from Inner_tracker_GUI.caenGUIall_v2 import caenGUI8LV
@@ -1053,13 +1061,28 @@ class MainApp(QtWidgets.QMainWindow):
             QtWidgets.QLabel, "soft_interlock_msg"
         )
         if soft_interlock_msg_label:
-            text = f"{verdict}\n{msg}"
-            if trip_pending:
-                text = (
-                    f"{describe_trip(self.interlock_state)}"
-                    f"{self.describe_latch_origin()}\n\n{text}"
-                )
-            soft_interlock_msg_label.setText(text)
+            # One row per monitored condition, built from the same snapshot the
+            # alarm journal records, instead of the multi-line prose `msg`.
+            conditions = self.interlock_state.get("last_conditions")
+            rows = interlock_rows(conditions)
+            # `msg` is only worth showing when it is NOT already in the table:
+            # on a trip/warning it is the one-line alarm text, and with no
+            # snapshot yet (first cycle, or the loop raised early) it is all
+            # there is.
+            alarm = (msg or "").strip() if (not rows or not is_safe) else ""
+            notes = interlock_notes(
+                conditions,
+                trip_description=(
+                    describe_trip(self.interlock_state) if trip_pending else ""
+                ),
+                latch_origin=self.describe_latch_origin() if trip_pending else "",
+                alarm=alarm,
+            )
+            soft_interlock_msg_label.setTextFormat(Qt.RichText)
+            soft_interlock_msg_label.setWordWrap(True)
+            soft_interlock_msg_label.setText(
+                render_soft_interlock(is_safe, trip_pending, verdict, rows, notes)
+            )
             logger.info(f"Updated soft interlock message: {verdict} | {msg}")
 
         # The button only does something while a trip is latched.
@@ -1437,27 +1460,24 @@ class MainApp(QtWidgets.QMainWindow):
                 )
                 if safe_to_open_led:
                     used_caen_channels = self.modules_list_tab.get_used_channels()
+                    # checks_out collects one row per condition for the table
+                    # shown next to the LED; door_msg stays the prose log line.
+                    door_checks = []
                     is_safe, door_msg = check_door_safe_to_open(
                         self.system.status,
                         self.caen_tab.last_response,
                         used_caen_channels,
+                        checks_out=door_checks,
                     )
-                    # Check co2 values
-                    if "co2_sensor" in self.system.status:
-                        co2_data = self.system.status["co2_sensor"]
-                        if "CO2" in co2_data:
-                            ppm = co2_data["CO2"]
-                            if ppm > 800:
-                                is_safe = False
-                                door_msg += f"CO2 levels safe: NO (current {ppm:.0f} ppm > 800 ppm threshold — risk of oxygen depletion)\n"
-                            else:
-                                door_msg += f"CO2 levels safe: YES (current {ppm:.0f} ppm < 800 ppm threshold)\n"
-                        else:
-                            door_msg += "CO2 levels safe: UNKNOWN (sensor present but no CO2 reading)\n"
-                    else:
-                        door_msg += (
-                            "CO2 levels safe: UNKNOWN (CO2 sensor data not available)\n"
-                        )
+                    # CO2: only a reading ABOVE the threshold blocks the door;
+                    # an unknown level is reported but does not veto (as before).
+                    co2_safe, co2_detail = check_co2_safe(self.system.status)
+                    if co2_safe is False:
+                        is_safe = False
+                    door_checks.append(co2_row(co2_safe, co2_detail))
+                    logger.debug(
+                        f"Door safety: {door_msg.strip()} | CO2: {co2_detail}"
+                    )
                     safe_to_open_led.setStyleSheet(
                         "background-color: green;"
                         if is_safe
@@ -1483,9 +1503,15 @@ class MainApp(QtWidgets.QMainWindow):
                             "color: #1a7f37;" if is_safe else "color: #c0362c;"
                         )
 
-                    self.marta_coldroom_tab.findChild(
+                    door_msg_label = self.marta_coldroom_tab.findChild(
                         QtWidgets.QLabel, "door_safety_msg"
-                    ).setText(f"{verdict}\n\n{door_msg}")
+                    )
+                    if door_msg_label:
+                        door_msg_label.setTextFormat(Qt.RichText)
+                        door_msg_label.setWordWrap(True)
+                        door_msg_label.setText(
+                            render_door_safety(is_safe, verdict, door_checks)
+                        )
 
                 # =========================================================================================== COLDROOM RUN PROCESS ===========================================================================================
                 # Run status

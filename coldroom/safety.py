@@ -3,6 +3,10 @@ import datetime
 import yaml
 import logging
 
+# Pure-formatting helper (no Qt): lets the checks below hand the GUI one row per
+# condition instead of a paragraph the operator has to re-read every cycle.
+from coldroom.safety_view import make_row
+
 logger = logging.getLogger(__name__)
 
 safety_settings = {
@@ -323,15 +327,27 @@ def acknowledge_trip(interlock_state):
     return description
 
 
-def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
+def check_door_safe_to_open(
+    system_status, caen_ch_status, used_channels, checks_out=None
+):
     """
     Check if it's safe to open the door based on multiple safety conditions.
     Returns True if it's safe to open the door, False otherwise.
+
+    ``checks_out``: optional list that collects one make_row() entry per check
+    (dew point, HV), for the table the GUI shows next to the LED. The returned
+    prose message is unchanged — it still goes to the log and the alarm journal.
     """
     log_msg = ""
+    rows = checks_out if checks_out is not None else []
     try:
         # Check if we have all necessary data
         if "coldroom" not in system_status:
+            rows.append(
+                make_row(
+                    "Coldroom data", "MISSING", "bad", "no coldroom status — assuming unsafe"
+                )
+            )
             return False, "coldroom data not available — assuming unsafe"
 
         # 1. Check if dew point conditions are safe.
@@ -382,6 +398,14 @@ def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
                 )
                 log_msg += "!!! Warning: Dew point conditions are not safe for opening door !!!\n"
         log_msg += f"Dew point safe: {'YES' if dew_point_safe else 'NO'} ({dew_reason})\n"
+        rows.append(
+            make_row(
+                "Dew point",
+                "YES" if dew_point_safe else "NO",
+                "ok" if dew_point_safe else "bad",
+                dew_reason,
+            )
+        )
 
         # 2. Check if high voltage is off
         hv_on   = check_any_hv_on(caen_ch_status, used_channels)
@@ -396,6 +420,14 @@ def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
         else:
             hv_reason = "all HV channels are off"
         log_msg += f"High voltage safe: {'YES' if hv_safe else 'NO'} ({hv_reason})\n"
+        rows.append(
+            make_row(
+                "High voltage off",
+                "YES" if hv_safe else "NO",
+                "ok" if hv_safe else "bad",
+                hv_reason,
+            )
+        )
 
         # 3. Check if light is off (light should be off when opening door)
         # light_off = not check_light_status(system_status)
@@ -404,6 +436,9 @@ def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
         door_closed = not check_door_status(system_status)
         if not door_closed and not (hv_safe or dew_point_safe):
             log_msg += f"!!! Warning: Door open when conditions are unsafe !!!\n"
+            rows.append(
+                make_row("Door", "OPEN", "bad", "door is open while conditions are unsafe")
+            )
 
         # It's safe to open the door if:
         # - Dew point conditions are safe
@@ -415,7 +450,33 @@ def check_door_safe_to_open(system_status, caen_ch_status, used_channels):
 
     except Exception as e:
         logger.debug(f"Error in check_door_safe_to_open: {str(e)}")
+        rows.append(make_row("Door safety check", "ERROR", "bad", str(e)))
         return False, "Error checking door safety"
+
+
+def check_co2_safe(system_status, threshold=800):
+    """Is the coldroom CO2 level low enough to open the door?
+
+    Returns ``(safe, detail)`` where safe is tri-state: ``True`` below the
+    threshold, ``False`` above it (risk of oxygen depletion), ``None`` when
+    there is no reading — unknown must not read as either. Only a hard False
+    blocks the door; see how the caller combines it.
+    """
+    co2_data = system_status.get("co2_sensor")
+    if not co2_data:
+        return None, "CO2 sensor data not available"
+    if "CO2" not in co2_data:
+        return None, "sensor present but no CO2 reading"
+    ppm = co2_data["CO2"]
+    try:
+        ppm = float(ppm)
+    except (TypeError, ValueError):
+        return None, f"unreadable CO2 value {ppm!r}"
+    if ppm > threshold:
+        return False, (
+            f"{ppm:.0f} ppm > {threshold:.0f} ppm threshold — risk of oxygen depletion"
+        )
+    return True, f"{ppm:.0f} ppm < {threshold:.0f} ppm threshold"
 
 
 def check_light_safe_to_turn_on(system_status, caen_ch_status, used_channels):
@@ -805,6 +866,11 @@ def build_condition_snapshot(
     marta_it_reason="",
     ot_valve=None,
     it_valve=None,
+    ot_valve_reason="",
+    it_valve_reason="",
+    lv_safe_to_on=None,
+    lv_safe_reason="",
+    enforce_it_valve=False,
 ):
     """Flat, JSON-serialisable record of everything the trip decision used.
 
@@ -836,6 +902,13 @@ def build_condition_snapshot(
         # value until the serviceroom publisher is reachable.
         "ot_valve": ot_valve,
         "it_valve": it_valve,
+        "ot_valve_reason": ot_valve_reason,
+        "it_valve_reason": it_valve_reason,
+        # Whether MARTA is in a state where LV may be energized at all, and
+        # whether a stopped IT circuit is allowed to trip (OT always is).
+        "lv_safe_to_on": None if lv_safe_to_on is None else bool(lv_safe_to_on),
+        "lv_safe_reason": lv_safe_reason,
+        "enforce_it_valve": bool(enforce_it_valve),
         "lv_on": bool(lv_on),
         "hv_on": bool(hv_on),
         "power_on": bool(lv_on or hv_on),
@@ -992,10 +1065,10 @@ def soft_interlock_loop(
             require_valve_open=require_valve_open,
             valve_max_age_seconds=valve_max_age_seconds,
         )
-        ot_valve, _ = get_valve_state(
+        ot_valve, ot_valve_reason = get_valve_state(
             system_status, "OT", max_age_seconds=valve_max_age_seconds
         )
-        it_valve, _ = get_valve_state(
+        it_valve, it_valve_reason = get_valve_state(
             system_status, "IT", max_age_seconds=valve_max_age_seconds
         )
 
@@ -1060,6 +1133,11 @@ def soft_interlock_loop(
             marta_it_reason=marta_it_reason,
             ot_valve=ot_valve,
             it_valve=it_valve,
+            ot_valve_reason=ot_valve_reason,
+            it_valve_reason=it_valve_reason,
+            lv_safe_to_on=lv_safe_to_on,
+            lv_safe_reason=lv_safe_msg,
+            enforce_it_valve=enforce_it_valve,
         )
         if interlock_state is not None:
             interlock_state["last_conditions"] = conditions
